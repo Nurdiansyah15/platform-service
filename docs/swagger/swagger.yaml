@@ -1,0 +1,61 @@
+basePath: /
+definitions:
+  dto.HealthResponse:
+    properties:
+      database:
+        type: string
+      deployment_mode:
+        type: string
+      status:
+        type: string
+    type: object
+  respond.SuccessBody:
+    properties:
+      data: {}
+      message:
+        type: string
+      meta: {}
+      status:
+        type: string
+      status_code:
+        type: integer
+    type: object
+info:
+  contact: {}
+  description: Identity, tenant, catalog, subscription, entitlement, authorization,
+    dan licensing untuk solution.
+  title: Central SaaS Platform API
+  version: "1.0"
+paths:
+  /healthz:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.HealthResponse'
+              type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.HealthResponse'
+              type: object
+      summary: Health check
+      tags:
+      - System
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

@@ -1,0 +1,7 @@
+.git
+bin
+.env
+docs
+graphify-out
+*.md
+!locales
