@@ -201,7 +201,7 @@ Keputusan desain di luar spec:
   - [x] `GET /benefits/{benefitId}` (enabler)
 - Test: `benefit_handler_test.go`, `benefit_test.go` (matriks kombinasi & ValidateValue), repository
 - Test infra: `mustCreateBenefit`
-- Belum: representasi "unlimited" untuk limit angka (mis. `-1` / `null`) — diputuskan saat EntitlementCalculator (Fase 12)
+- Unlimited untuk benefit angka = `-1` (diputuskan Fase 12)
 
 ### Fase 8 — Plans & Plan Benefits ✅
 - Tabel: `plans` (soft delete, partial unique `(solution_id, code)`, `UNIQUE (id, solution_id)`, CHECK billing_cycle & `price >= 0`), `plan_benefits` (PK `(plan_id, benefit_id)`, composite FK ke `plans(id, solution_id)` & `benefits(id, solution_id)`, index `benefit_id`)
@@ -271,19 +271,25 @@ Keputusan desain di luar spec:
   - [x] `POST /tenants/{tenantId}/solutions/{solutionId}/usage` (MVP) — delta / counter, 201 diterapkan / 200 replay
   - [x] `PUT /tenants/{tenantId}/solutions/{solutionId}/usage/{benefitCode}` (MVP) — absolute / gauge, laporan lebih lama dari `last_occurred_at` diabaikan
 - Test: `usage_handler_test.go` (termasuk 20 laporan paralel → total tepat), entity & quantity, `ResolvePeriod`, repository (gauge basi, duplikat key)
-- Belum: `limit` / `remaining` di respons & event `usage.limit_reached` (Fase 12, butuh EntitlementCalculator); delta negatif untuk koreksi tidak didukung
+- `limit` / `remaining` & event `usage.limit_reached` ditambahkan di Fase 12; delta negatif untuk koreksi tidak didukung
 
-### Fase 12 — Effective Entitlements
-- Domain service `EntitlementCalculator`:
-  - aggregation `sum` / `max` / `min` / `override` / `any_true`
-  - nilai add-on × `quantity` bila relevan
-  - `limit`, `used`, `remaining` untuk benefit yang di-meter
-  - **unit test domain** table-driven
-- Outbox `usage.limit_reached` saat `used >= limit` (dipicu dari usecase usage Fase 11)
-- Endpoint (user tenant aktif atau service `entitlements:read`):
-  - [ ] `GET /tenants/{tenantId}/solutions/{solutionId}/entitlements` (MVP)
-  - [ ] `GET /tenants/{tenantId}/solutions/{solutionId}/entitlements/{benefitCode}` (MVP)
-- Test: `entitlement_handler_test.go`
+### Fase 12 — Effective Entitlements ✅
+- Keputusan user:
+  - **Unlimited = `-1`** pada benefit angka; respons `unlimited: true`, `limit: null`. Nilai benefit angka lain wajib ≥ 0 (validasi diperketat)
+  - **`override`**: add-on aktif yang paling akhir dipasang menang; tanpa add-on → plan
+- Domain `entitlement`:
+  - `Calculate` (domain service murni, aritmetika `big.Rat`): `sum` = plan + Σ(add-on × quantity); `max` / `min` (quantity tidak dikalikan; `-1` menang di max, diabaikan di min kecuali semua unlimited); `any_true` = OR; `override` = add-on terbaru
+  - `Resolver`: subscription usable + snapshot efektif (snapshot plan + snapshot add-on yang masih `active`) via port `SnapshotReader`
+  - `Remaining` = max(limit − used, 0) + `limit_reached`
+  - Event `usage.limit_reached`
+- Endpoint:
+  - [x] `GET /tenants/{tenantId}/solutions/{solutionId}/entitlements` (MVP) — seluruh benefit solution; tanpa subscription → `subscription: null`, semua `granted: false`
+  - [x] `GET /tenants/{tenantId}/solutions/{solutionId}/entitlements/{benefitCode}` (MVP)
+  - Akses: user (AccessPolicy) atau service `entitlements:read` khusus solution miliknya
+- Benefit di-meter memuat `limit`, `used`, `remaining`, `limit_reached`, `period_start/end` (periode dihitung seperti Fase 11)
+- Usage (lanjutan Fase 11): respons laporan memuat `limit` / `remaining` / `limit_reached`; `usage.limit_reached` ditulis di transaksi laporan **hanya saat melewati limit** (sebelumnya < limit, sekarang ≥ limit)
+- Test: `entitlement_handler_test.go` (tanpa subscription, plan + add-on × qty, add-on dibatalkan, unlimited, subscription dibatalkan, akses member & service, limit_reached sekali), `calculator_test.go` (matriks 17 kasus + `Remaining`), validasi nilai negatif benefit
+- Belum: entitlement mode on_prem dari license (Fase 17); endpoint `POST .../entitlements/check` (L5)
 
 ### Fase 13 — Permissions & Catalog Sync
 - Tabel: `permissions`

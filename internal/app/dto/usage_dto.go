@@ -41,6 +41,10 @@ type UsageReportResponse struct {
 	PeriodEnd   *time.Time `json:"period_end"`
 	// Used — pemakaian terkini pada periode tersebut (string presisi 4 desimal).
 	Used string `json:"used" example:"15.0000"`
+	// Limit / Remaining — dari entitlement efektif; null bila unlimited / tidak granted.
+	Limit        *string `json:"limit"`
+	Remaining    *string `json:"remaining"`
+	LimitReached bool    `json:"limit_reached"`
 	// Replayed — true bila idempotency_key sudah pernah diterima (tidak diterapkan ulang).
 	Replayed   bool      `json:"replayed"`
 	OccurredAt time.Time `json:"occurred_at"`

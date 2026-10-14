@@ -222,6 +222,8 @@ Tabel `plans`, `addons`, `benefits`, `subscriptions`, `permissions`, `roles` pun
 ### 8.3 Snapshot benefit
 Entitlement **selalu** dihitung dari `subscription_benefit_snapshots`, bukan dari `plan_benefits` / `addon_benefits` langsung. Perubahan plan/add-on master tidak memengaruhi subscription berjalan.
 
+Perhitungan memakai `entitlement/service.Calculate` + `Resolver` — jangan menghitung ulang di usecase lain. Nilai benefit angka `-1` = unlimited; aritmetika angka pakai `big.Rat` (tanpa float).
+
 ### 8.4 Outbox
 Setiap perubahan yang ada di katalog event (spec §2.9) menulis baris `events` di transaksi yang sama dengan perubahan data, lewat `port.EventOutbox.Append`. Implementasinya menolak (`ErrOutboxRequiresTx`) bila dipanggil di luar `Transactor.WithTx`. Jangan kirim webhook langsung dari usecase.
 

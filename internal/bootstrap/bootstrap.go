@@ -18,6 +18,7 @@ import (
 	"platform-service/internal/app/usecase/addon"
 	"platform-service/internal/app/usecase/auth"
 	"platform-service/internal/app/usecase/benefit"
+	"platform-service/internal/app/usecase/entitlement"
 	"platform-service/internal/app/usecase/organization"
 	"platform-service/internal/app/usecase/plan"
 	"platform-service/internal/app/usecase/signingkey"
@@ -29,6 +30,7 @@ import (
 	"platform-service/internal/app/usecase/usage"
 	"platform-service/internal/app/usecase/user"
 	"platform-service/internal/config"
+	entservice "platform-service/internal/domain/entitlement/service"
 	"platform-service/internal/infrastructure/crypto"
 	i18n "platform-service/internal/infrastructure/i18n"
 	"platform-service/internal/infrastructure/jwttoken"
@@ -121,6 +123,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	subscriptionQuery := persistence.NewPostgresSubscriptionQuery(opts.DB)
 	usageRecordRepo := persistence.NewPostgresUsageRecordRepository(opts.DB)
 	tenantUsageRepo := persistence.NewPostgresTenantUsageRepository(opts.DB)
+	snapshotReader := persistence.NewPostgresSnapshotReader(opts.DB)
 	transactor := persistence.NewPostgresTransactor(opts.DB)
 	outbox := persistence.NewPostgresEventOutbox()
 
@@ -220,8 +223,20 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Solutions:          solutionRepo,
 		Query:              subscriptionQuery,
 	})
+	entitlementResolver := entservice.NewResolver(subscriptionRepo, snapshotReader)
+	entitlementUC := entitlement.NewEntitlementUseCase(entitlement.EntitlementDeps{
+		Benefits:      benefitRepo,
+		Solutions:     solutionRepo,
+		Tenants:       tenantRepo,
+		Members:       memberRepo,
+		Subscriptions: subscriptionRepo,
+		Resolver:      entitlementResolver,
+		TenantUsage:   tenantUsageRepo,
+	})
 	usageUC := usage.NewUsageUseCase(usage.UsageDeps{
 		Tx:            transactor,
+		Outbox:        outbox,
+		Resolver:      entitlementResolver,
 		Records:       usageRecordRepo,
 		TenantUsage:   tenantUsageRepo,
 		Benefits:      benefitRepo,
@@ -268,6 +283,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 			Addon:    api.NewAddonHandler(addonUC),
 			Sub:      api.NewSubscriptionHandler(subscriptionUC),
 			Usage:    api.NewUsageHandler(usageUC),
+			Ent:      api.NewEntitlementHandler(entitlementUC),
 		},
 	})
 

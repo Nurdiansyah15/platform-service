@@ -375,6 +375,70 @@ definitions:
     - email
     - name
     type: object
+  dto.EntitlementResponse:
+    properties:
+      aggregation_strategy:
+        type: string
+      benefit_code:
+        type: string
+      granted:
+        description: Granted — benefit diberikan plan / add-on aktif.
+        type: boolean
+      limit:
+        description: Limit / Used / Remaining hanya untuk benefit angka yang di-meter
+          (counter / gauge).
+        type: string
+      limit_reached:
+        type: boolean
+      metering:
+        type: string
+      name:
+        type: string
+      period_end:
+        type: string
+      period_start:
+        type: string
+      remaining:
+        type: string
+      unit:
+        type: string
+      unlimited:
+        type: boolean
+      used:
+        type: string
+      value:
+        description: Value — nilai efektif; -1 = unlimited; null bila tidak granted.
+        type: object
+      value_type:
+        type: string
+    type: object
+  dto.EntitlementSubscription:
+    properties:
+      current_period_end:
+        type: string
+      id:
+        type: string
+      plan_id:
+        type: string
+      status:
+        type: string
+    type: object
+  dto.EntitlementsResponse:
+    properties:
+      entitlements:
+        items:
+          $ref: '#/definitions/dto.EntitlementResponse'
+        type: array
+      solution_id:
+        type: string
+      subscription:
+        allOf:
+        - $ref: '#/definitions/dto.EntitlementSubscription'
+        description: Subscription — null bila tenant tidak berlangganan (semua benefit
+          granted=false).
+      tenant_id:
+        type: string
+    type: object
   dto.HealthResponse:
     properties:
       database:
@@ -721,6 +785,12 @@ definitions:
     properties:
       benefit_code:
         type: string
+      limit:
+        description: Limit / Remaining — dari entitlement efektif; null bila unlimited
+          / tidak granted.
+        type: string
+      limit_reached:
+        type: boolean
       mode:
         type: string
       occurred_at:
@@ -728,6 +798,8 @@ definitions:
       period_end:
         type: string
       period_start:
+        type: string
+      remaining:
         type: string
       replayed:
         description: Replayed — true bila idempotency_key sudah pernah diterima (tidak
@@ -2573,6 +2645,106 @@ paths:
       summary: Add tenant member
       tags:
       - Tenants
+  /api/v1/tenants/{tenantId}/solutions/{solutionId}/entitlements:
+    get:
+      description: 'Dihitung dari snapshot subscription (sum: plan + add-on × quantity;
+        max/min; any_true; override: add-on terbaru). -1 = unlimited. Benefit di-meter
+        memuat limit, used, remaining.'
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenantId
+        required: true
+        type: string
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.EntitlementsResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Effective entitlements
+      tags:
+      - Entitlements
+  /api/v1/tenants/{tenantId}/solutions/{solutionId}/entitlements/{benefitCode}:
+    get:
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenantId
+        required: true
+        type: string
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Benefit code
+        in: path
+        name: benefitCode
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.EntitlementResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Effective entitlement of one benefit
+      tags:
+      - Entitlements
   /api/v1/tenants/{tenantId}/solutions/{solutionId}/usage:
     post:
       consumes:

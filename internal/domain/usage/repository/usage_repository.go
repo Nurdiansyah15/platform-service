@@ -19,5 +19,6 @@ type TenantUsageRepository interface {
 	AddDelta(ctx context.Context, r *entity.UsageRecord, period entity.Period) (*entity.TenantUsage, error)
 	// SetAbsolute menimpa used, kecuali laporan lebih lama dari last_occurred_at.
 	SetAbsolute(ctx context.Context, r *entity.UsageRecord, period entity.Period) (*entity.TenantUsage, error)
+	// Get mengembalikan (nil, nil) bila belum ada pemakaian pada periode tersebut.
 	Get(ctx context.Context, tenantID, benefitID string, periodStart time.Time) (*entity.TenantUsage, error)
 }

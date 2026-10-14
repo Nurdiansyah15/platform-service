@@ -14,6 +14,10 @@ import (
 	domainerr "platform-service/internal/domain/errors"
 )
 
+// UnlimitedValue — nilai benefit angka yang berarti tanpa batas (keputusan Fase 12).
+// Nilai angka lain harus >= 0.
+const UnlimitedValue = -1
+
 // Benefit adalah fitur / limit yang bisa diberikan plan atau add-on (spec §2.4).
 type Benefit struct {
 	ID                  string
@@ -130,7 +134,8 @@ func (b *Benefit) ValidateValue(raw json.RawMessage) error {
 		if !ok {
 			return invalid
 		}
-		if _, err := n.Int64(); err != nil {
+		i, err := n.Int64()
+		if err != nil || (i < 0 && i != UnlimitedValue) {
 			return invalid
 		}
 	case valueobject.ValueTypeDecimal:
@@ -138,7 +143,8 @@ func (b *Benefit) ValidateValue(raw json.RawMessage) error {
 		if !ok {
 			return invalid
 		}
-		if _, err := n.Float64(); err != nil {
+		f, err := n.Float64()
+		if err != nil || (f < 0 && f != UnlimitedValue) {
 			return invalid
 		}
 	case valueobject.ValueTypeString:

@@ -110,10 +110,15 @@ func (r *PostgresTenantUsageRepository) SetAbsolute(ctx context.Context, u *enti
 	return r.Get(ctx, u.TenantID, u.BenefitID, p.Start)
 }
 
+// Get mengembalikan (nil, nil) bila belum ada pemakaian pada periode tersebut.
 func (r *PostgresTenantUsageRepository) Get(ctx context.Context, tenantID, benefitID string, periodStart time.Time) (*entity.TenantUsage, error) {
-	return r.scan(execFromContext(ctx, r.db).QueryRowContext(ctx, `
+	tu, err := r.scan(execFromContext(ctx, r.db).QueryRowContext(ctx, `
 		SELECT tenant_id, solution_id, benefit_id, period_start, period_end, used::text, last_occurred_at, updated_at
 		FROM tenant_usage WHERE tenant_id = $1 AND benefit_id = $2 AND period_start = $3`, tenantID, benefitID, periodStart))
+	if err != nil && errors.Is(errors.Unwrap(err), sql.ErrNoRows) {
+		return nil, nil
+	}
+	return tu, err
 }
 
 func (r *PostgresTenantUsageRepository) scan(row *sql.Row) (*entity.TenantUsage, error) {

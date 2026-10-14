@@ -135,5 +135,6 @@
   "DOMAIN_USAGE_IDEMPOTENCY_CONFLICT": "idempotency_key sudah dipakai dengan payload berbeda.",
   "DOMAIN_USAGE_RECORD_NOT_FOUND": "Catatan usage tidak ditemukan.",
   "DOMAIN_USAGE_PERSISTENCE_FAILED": "Gagal menyimpan usage.",
-  "DOMAIN_USAGE_QUERY_FAILED": "Gagal memuat usage."
+  "DOMAIN_USAGE_QUERY_FAILED": "Gagal memuat usage.",
+  "DOMAIN_ENTITLEMENT_QUERY_FAILED": "Gagal menghitung entitlement."
 }

@@ -27,6 +27,7 @@ type Handlers struct {
 	Addon    *api.AddonHandler
 	Sub      *api.SubscriptionHandler
 	Usage    *api.UsageHandler
+	Ent      *api.EntitlementHandler
 }
 
 type Deps struct {
@@ -86,4 +87,5 @@ func registerDomainRoutes(r Routes, h Handlers) {
 	RegisterAddonRoutes(r, h.Addon)
 	RegisterSubscriptionRoutes(r, h.Sub)
 	RegisterUsageRoutes(r, h.Usage)
+	RegisterEntitlementRoutes(r, h.Ent)
 }

@@ -3,6 +3,7 @@ package usage
 import (
 	"context"
 	"encoding/json"
+	"math/big"
 	"time"
 
 	"platform-service/internal/app/dto"
@@ -11,6 +12,8 @@ import (
 	benefitentity "platform-service/internal/domain/benefit/entity"
 	benefitrepo "platform-service/internal/domain/benefit/repository"
 	benefitvo "platform-service/internal/domain/benefit/valueobject"
+	entevent "platform-service/internal/domain/entitlement/event"
+	entservice "platform-service/internal/domain/entitlement/service"
 	domainerr "platform-service/internal/domain/errors"
 	clientrepo "platform-service/internal/domain/solutionclient/repository"
 	subrepo "platform-service/internal/domain/subscription/repository"
@@ -25,6 +28,8 @@ import (
 
 type UsageDeps struct {
 	Tx            port.Transactor
+	Outbox        port.EventOutbox
+	Resolver      *entservice.Resolver
 	Records       usagerepo.UsageRecordRepository
 	TenantUsage   usagerepo.TenantUsageRepository
 	Benefits      benefitrepo.BenefitRepository
@@ -102,10 +107,20 @@ func (uc *UsageUseCase) report(ctx context.Context, actor *principal.Principal, 
 	if err != nil {
 		return nil, mapUsageDomainError(err)
 	}
+	// Limit efektif benefit ini (untuk event usage.limit_reached).
+	src, err := uc.deps.Resolver.Resolve(ctx, tenantID, solutionID)
+	if err != nil {
+		return nil, mapUsageDomainError(err)
+	}
+	limit := entservice.Calculate(b, src.ByBenefit[b.ID]).Limit
 
 	var current *entity.TenantUsage
 	err = uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
 		if err := uc.deps.Records.Insert(ctx, record); err != nil {
+			return err
+		}
+		previous, err := uc.previousUsed(ctx, record, period)
+		if err != nil {
 			return err
 		}
 		if mode == valueobject.ModeDelta {
@@ -113,20 +128,23 @@ func (uc *UsageUseCase) report(ctx context.Context, actor *principal.Principal, 
 		} else {
 			current, err = uc.deps.TenantUsage.SetAbsolute(ctx, record, period)
 		}
-		return err
+		if err != nil {
+			return err
+		}
+		return uc.emitLimitReached(ctx, b, record, current, previous, limit)
 	})
 	if err != nil {
 		if isDomainCode(err, constant.CodeUsageDuplicateKey) {
-			return uc.replay(ctx, record, b)
+			return uc.replay(ctx, record, b, limit)
 		}
 		return nil, mapUsageDomainError(err)
 	}
-	return toResponse(b, record, current, false), nil
+	return toResponse(b, record, current, limit, false), nil
 }
 
 // replay menangani idempotency_key yang sudah dipakai: payload identik → kembalikan
 // pemakaian terkini tanpa menerapkan ulang; payload berbeda → konflik.
-func (uc *UsageUseCase) replay(ctx context.Context, attempted *entity.UsageRecord, b *benefitentity.Benefit) (*dto.UsageReportResponse, error) {
+func (uc *UsageUseCase) replay(ctx context.Context, attempted *entity.UsageRecord, b *benefitentity.Benefit, limit *big.Rat) (*dto.UsageReportResponse, error) {
 	original, err := uc.deps.Records.FindByIdempotencyKey(ctx, attempted.SolutionID, attempted.IdempotencyKey.Value())
 	if err != nil {
 		return nil, mapUsageDomainError(err)
@@ -142,7 +160,45 @@ func (uc *UsageUseCase) replay(ctx context.Context, attempted *entity.UsageRecor
 	if err != nil {
 		return nil, mapUsageDomainError(err)
 	}
-	return toResponse(b, original, current, true), nil
+	if current == nil {
+		current = &entity.TenantUsage{Period: period, Used: "0.0000"}
+	}
+	return toResponse(b, original, current, limit, true), nil
+}
+
+// previousUsed membaca pemakaian sebelum laporan diterapkan (di dalam transaksi).
+func (uc *UsageUseCase) previousUsed(ctx context.Context, r *entity.UsageRecord, period entity.Period) (*big.Rat, error) {
+	prev := new(big.Rat)
+	tu, err := uc.deps.TenantUsage.Get(ctx, r.TenantID, r.BenefitID, period.Start)
+	if err != nil {
+		return nil, err
+	}
+	if tu != nil {
+		prev.SetString(tu.Used)
+	}
+	return prev, nil
+}
+
+// emitLimitReached menulis usage.limit_reached hanya saat pemakaian melewati limit
+// (sebelumnya < limit, sekarang >= limit), agar tidak dikirim berulang setiap laporan.
+func (uc *UsageUseCase) emitLimitReached(ctx context.Context, b *benefitentity.Benefit, r *entity.UsageRecord, current *entity.TenantUsage, previous, limit *big.Rat) error {
+	if limit == nil {
+		return nil
+	}
+	used, ok := new(big.Rat).SetString(current.Used)
+	if !ok || previous.Cmp(limit) >= 0 || used.Cmp(limit) < 0 {
+		return nil
+	}
+	return uc.deps.Outbox.Append(ctx, port.OutboxEvent{
+		EventType:  entevent.TypeUsageLimitReached,
+		TenantID:   &r.TenantID,
+		SolutionID: &r.SolutionID,
+		Payload: entevent.UsageLimitReachedPayload{
+			TenantID: r.TenantID, SolutionID: r.SolutionID, BenefitCode: b.Code.Value(),
+			Limit: entservice.FormatRat(limit), Used: entservice.FormatRat(used),
+			PeriodStart: current.Period.Start, PeriodEnd: current.Period.End, OccurredAt: r.OccurredAt,
+		},
+	})
 }
 
 func (uc *UsageUseCase) period(ctx context.Context, b *benefitentity.Benefit, tenantID string, occurredAt time.Time) (entity.Period, error) {

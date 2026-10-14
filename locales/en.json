@@ -135,5 +135,6 @@
   "DOMAIN_USAGE_IDEMPOTENCY_CONFLICT": "idempotency_key was already used with a different payload.",
   "DOMAIN_USAGE_RECORD_NOT_FOUND": "Usage record not found.",
   "DOMAIN_USAGE_PERSISTENCE_FAILED": "Failed to save usage.",
-  "DOMAIN_USAGE_QUERY_FAILED": "Failed to load usage."
+  "DOMAIN_USAGE_QUERY_FAILED": "Failed to load usage.",
+  "DOMAIN_ENTITLEMENT_QUERY_FAILED": "Failed to calculate entitlements."
 }
