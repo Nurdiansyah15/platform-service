@@ -44,6 +44,9 @@ func (r *fakeSolutionRepo) FindByID(_ context.Context, id string) (*solentity.So
 	}
 	return nil, domainerr.New(solconstant.CodeSolutionNotFound)
 }
+func (r *fakeSolutionRepo) FindByIDForUpdate(ctx context.Context, id string) (*solentity.Solution, error) {
+	return r.FindByID(ctx, id)
+}
 func (r *fakeSolutionRepo) FindByCode(context.Context, string) (*solentity.Solution, error) {
 	return nil, domainerr.New(solconstant.CodeSolutionNotFound)
 }

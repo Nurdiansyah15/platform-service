@@ -53,6 +53,10 @@ func (r *PostgresSolutionRepository) FindByCode(ctx context.Context, code string
 	return r.findOne(ctx, `SELECT `+solutionColumns+` FROM solutions WHERE code = $1`, code)
 }
 
+func (r *PostgresSolutionRepository) FindByIDForUpdate(ctx context.Context, id string) (*entity.Solution, error) {
+	return r.findOne(ctx, `SELECT `+solutionColumns+` FROM solutions WHERE id = $1 FOR UPDATE`, id)
+}
+
 func (r *PostgresSolutionRepository) findOne(ctx context.Context, q string, args ...any) (*entity.Solution, error) {
 	s, err := scanSolution(execFromContext(ctx, r.db).QueryRowContext(ctx, q, args...))
 	if err != nil {

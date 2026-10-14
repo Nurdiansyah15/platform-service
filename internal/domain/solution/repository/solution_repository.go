@@ -10,4 +10,7 @@ type SolutionRepository interface {
 	Save(ctx context.Context, s *entity.Solution) error
 	FindByID(ctx context.Context, id string) (*entity.Solution, error)
 	FindByCode(ctx context.Context, code string) (*entity.Solution, error)
+	// FindByIDForUpdate mengunci baris solution sampai transaksi selesai
+	// (panggil di dalam Transactor.WithTx), mis. untuk serialisasi catalog sync.
+	FindByIDForUpdate(ctx context.Context, id string) (*entity.Solution, error)
 }

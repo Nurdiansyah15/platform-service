@@ -523,6 +523,39 @@ definitions:
       token_type:
         type: string
     type: object
+  dto.PermissionDefinition:
+    properties:
+      code:
+        maxLength: 150
+        type: string
+      description:
+        type: string
+      name:
+        maxLength: 255
+        type: string
+    required:
+    - code
+    - name
+    type: object
+  dto.PermissionResponse:
+    properties:
+      code:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      solution_id:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+    type: object
   dto.PlanResponse:
     properties:
       billing_cycle:
@@ -750,6 +783,40 @@ definitions:
         type: string
     required:
     - tenant_id
+    type: object
+  dto.SyncPermissionsRequest:
+    properties:
+      permissions:
+        items:
+          $ref: '#/definitions/dto.PermissionDefinition'
+        type: array
+      version:
+        description: Version — versi katalog; sama dengan versi tersimpan → tidak
+          ada perubahan.
+        maxLength: 50
+        type: string
+    required:
+    - permissions
+    - version
+    type: object
+  dto.SyncPermissionsResponse:
+    properties:
+      changed:
+        description: Changed — false bila versi sama dengan versi tersimpan (sync
+          dilewati).
+        type: boolean
+      created:
+        type: integer
+      deprecated:
+        type: integer
+      reactivated:
+        type: integer
+      unchanged:
+        type: integer
+      updated:
+        type: integer
+      version:
+        type: string
     type: object
   dto.TenantMemberResponse:
     properties:
@@ -1931,6 +1998,123 @@ paths:
       summary: Create solution client
       tags:
       - Solution Clients
+  /api/v1/solutions/{solutionId}/permissions:
+    get:
+      parameters:
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: active | deprecated
+        in: query
+        name: status
+        type: string
+      - description: Cari di code / name
+        in: query
+        name: search
+        type: string
+      - description: Halaman
+        in: query
+        name: page
+        type: integer
+      - description: Jumlah per halaman (default 50, maks 200)
+        in: query
+        name: limit
+        type: integer
+      - description: code | name | created_at
+        in: query
+        name: sort_by
+        type: string
+      - description: asc | desc
+        in: query
+        name: sort_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.PermissionResponse'
+                  type: array
+                meta:
+                  $ref: '#/definitions/dto.Meta'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List permissions of a solution
+      tags:
+      - Permissions
+  /api/v1/solutions/{solutionId}/permissions/sync:
+    put:
+      consumes:
+      - application/json
+      description: 'Dipanggil solution saat deploy. Idempotent per version: permission
+        baru dibuat, yang ada diperbarui / diaktifkan ulang, yang hilang menjadi deprecated
+        (tidak dihapus).'
+      parameters:
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Katalog lengkap
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.SyncPermissionsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.SyncPermissionsResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Sync permission catalog
+      tags:
+      - Permissions
   /api/v1/solutions/{solutionId}/plans:
     get:
       description: Non-admin hanya melihat plan aktif dari solution aktif.

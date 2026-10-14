@@ -136,5 +136,13 @@
   "DOMAIN_USAGE_RECORD_NOT_FOUND": "Usage record not found.",
   "DOMAIN_USAGE_PERSISTENCE_FAILED": "Failed to save usage.",
   "DOMAIN_USAGE_QUERY_FAILED": "Failed to load usage.",
-  "DOMAIN_ENTITLEMENT_QUERY_FAILED": "Failed to calculate entitlements."
+  "DOMAIN_ENTITLEMENT_QUERY_FAILED": "Failed to calculate entitlements.",
+  "DOMAIN_PERMISSION_NOT_FOUND": "Permission not found.",
+  "DOMAIN_PERMISSION_CODE_INVALID": "Permission code must be lowercase segments separated by '.' or ':' (e.g. employee.read), max 150 characters.",
+  "DOMAIN_PERMISSION_NAME_INVALID": "Permission name is required (max 255 characters).",
+  "DOMAIN_PERMISSION_CODE_DUPLICATE": "The same permission code appears more than once in the catalog.",
+  "DOMAIN_PERMISSION_CATALOG_VERSION_INVALID": "version is required (max 50 characters).",
+  "DOMAIN_PERMISSION_CATALOG_SYNC_FORBIDDEN": "Only the solution's own client or a platform administrator may sync this catalog.",
+  "DOMAIN_PERMISSION_PERSISTENCE_FAILED": "Failed to save permission.",
+  "DOMAIN_PERMISSION_QUERY_FAILED": "Failed to load permissions."
 }

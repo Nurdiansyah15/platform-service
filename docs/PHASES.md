@@ -291,15 +291,15 @@ Keputusan desain di luar spec:
 - Test: `entitlement_handler_test.go` (tanpa subscription, plan + add-on × qty, add-on dibatalkan, unlimited, subscription dibatalkan, akses member & service, limit_reached sekali), `calculator_test.go` (matriks 17 kasus + `Remaining`), validasi nilai negatif benefit
 - Belum: entitlement mode on_prem dari license (Fase 17); endpoint `POST .../entitlements/check` (L5)
 
-### Fase 13 — Permissions & Catalog Sync
-- Tabel: `permissions`
+### Fase 13 — Permissions & Catalog Sync ✅
+- Tabel: `permissions` (unique `(solution_id, code)`, `UNIQUE (id, solution_id)`, CHECK status)
+- Domain `permission`: VO `PermissionCode` (segmen huruf kecil dipisah `.` / `:`), `CatalogVersion`; entity `Permission` (`Apply`, `Deprecate`); domain service murni `PlanCatalogSync` (created / updated / reactivated / deprecated / unchanged)
 - Endpoint:
-  - [ ] `PUT /solutions/{solutionId}/permissions/sync` (MVP, service `catalog:sync`)
-    - idempotent: `version` sama dengan `permission_catalog_version` → no-op
-    - permission yang tidak ada di daftar → `deprecated`
-  - [ ] `GET /solutions/{solutionId}/permissions` (enabler)
-- Test: `catalog_sync_handler_test.go`
-  - version sama = tidak ada perubahan, permission deprecated tidak terhapus
+  - [x] `PUT /solutions/{solutionId}/permissions/sync` (MVP) — token service `catalog:sync` milik solution tersebut **atau** platform admin; idempotent per `version` (versi sama → `changed: false`); permission yang hilang → `deprecated` (tidak dihapus); baris solution dikunci `FOR UPDATE` selama sync
+  - [x] `GET /solutions/{solutionId}/permissions` (enabler) — token valid apa pun, filter status/search, solution inactive disembunyikan dari non-admin
+- Tidak ada event outbox (katalog event spec tidak memuat event permission)
+- Test: `catalog_sync_handler_test.go` (siklus create → no-op → update/deprecate → reactivate, 5 sync paralel versi sama = diterapkan sekali), `catalog_sync_test.go` (planner), validasi code
+- Belum: `roles/sync` (system role, L6), `catalog-version` (L6), CRUD permission manual (L6)
 
 ### Fase 14 — Roles (Global & Tenant Custom)
 - Tabel: `roles`, `role_permissions` (CHECK, partial unique, composite FK sesuai spec)

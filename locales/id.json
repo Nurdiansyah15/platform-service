@@ -136,5 +136,13 @@
   "DOMAIN_USAGE_RECORD_NOT_FOUND": "Catatan usage tidak ditemukan.",
   "DOMAIN_USAGE_PERSISTENCE_FAILED": "Gagal menyimpan usage.",
   "DOMAIN_USAGE_QUERY_FAILED": "Gagal memuat usage.",
-  "DOMAIN_ENTITLEMENT_QUERY_FAILED": "Gagal menghitung entitlement."
+  "DOMAIN_ENTITLEMENT_QUERY_FAILED": "Gagal menghitung entitlement.",
+  "DOMAIN_PERMISSION_NOT_FOUND": "Permission tidak ditemukan.",
+  "DOMAIN_PERMISSION_CODE_INVALID": "Code permission harus segmen huruf kecil dipisah '.' atau ':' (mis. employee.read), maks 150 karakter.",
+  "DOMAIN_PERMISSION_NAME_INVALID": "Nama permission wajib diisi (maks 255 karakter).",
+  "DOMAIN_PERMISSION_CODE_DUPLICATE": "Code permission yang sama muncul lebih dari sekali di katalog.",
+  "DOMAIN_PERMISSION_CATALOG_VERSION_INVALID": "version wajib diisi (maks 50 karakter).",
+  "DOMAIN_PERMISSION_CATALOG_SYNC_FORBIDDEN": "Hanya client milik solution ini atau administrator platform yang boleh melakukan sync katalog.",
+  "DOMAIN_PERMISSION_PERSISTENCE_FAILED": "Gagal menyimpan permission.",
+  "DOMAIN_PERMISSION_QUERY_FAILED": "Gagal memuat permission."
 }

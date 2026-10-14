@@ -65,6 +65,17 @@ func (s *Solution) IsActive() bool {
 	return s.Status == valueobject.SolutionStatusActive
 }
 
+// SetPermissionCatalogVersion mencatat versi katalog permission yang terakhir di-sync.
+func (s *Solution) SetPermissionCatalogVersion(version string, now time.Time) {
+	s.PermissionCatalogVersion = &version
+	s.UpdatedAt = now.UTC()
+}
+
+// HasPermissionCatalogVersion — katalog versi ini sudah pernah di-sync (sync idempotent).
+func (s *Solution) HasPermissionCatalogVersion(version string) bool {
+	return s.PermissionCatalogVersion != nil && *s.PermissionCatalogVersion == version
+}
+
 func normalizeOptional(v *string) *string {
 	if v == nil {
 		return nil

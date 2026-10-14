@@ -20,6 +20,7 @@ import (
 	"platform-service/internal/app/usecase/benefit"
 	"platform-service/internal/app/usecase/entitlement"
 	"platform-service/internal/app/usecase/organization"
+	"platform-service/internal/app/usecase/permission"
 	"platform-service/internal/app/usecase/plan"
 	"platform-service/internal/app/usecase/signingkey"
 	"platform-service/internal/app/usecase/solution"
@@ -124,6 +125,8 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	usageRecordRepo := persistence.NewPostgresUsageRecordRepository(opts.DB)
 	tenantUsageRepo := persistence.NewPostgresTenantUsageRepository(opts.DB)
 	snapshotReader := persistence.NewPostgresSnapshotReader(opts.DB)
+	permissionRepo := persistence.NewPostgresPermissionRepository(opts.DB)
+	permissionQuery := persistence.NewPostgresPermissionQuery(opts.DB)
 	transactor := persistence.NewPostgresTransactor(opts.DB)
 	outbox := persistence.NewPostgresEventOutbox()
 
@@ -223,6 +226,9 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Solutions:          solutionRepo,
 		Query:              subscriptionQuery,
 	})
+	permissionUC := permission.NewPermissionUseCase(permission.PermissionDeps{
+		Tx: transactor, Permissions: permissionRepo, Solutions: solutionRepo, Query: permissionQuery,
+	})
 	entitlementResolver := entservice.NewResolver(subscriptionRepo, snapshotReader)
 	entitlementUC := entitlement.NewEntitlementUseCase(entitlement.EntitlementDeps{
 		Benefits:      benefitRepo,
@@ -284,6 +290,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 			Sub:      api.NewSubscriptionHandler(subscriptionUC),
 			Usage:    api.NewUsageHandler(usageUC),
 			Ent:      api.NewEntitlementHandler(entitlementUC),
+			Perm:     api.NewPermissionHandler(permissionUC),
 		},
 	})
 
