@@ -13,7 +13,6 @@
   "validation.oneof": "Harus salah satu dari [%s].",
   "validation.url": "URL tidak valid.",
   "validation.default": "Nilai tidak valid.",
-
   "ERR_BAD_REQUEST": "Permintaan tidak valid.",
   "ERR_UNPROCESSABLE_ENTITY": "Data yang dikirim tidak valid.",
   "ERR_UNAUTHORIZED": "Autentikasi diperlukan.",
@@ -25,12 +24,18 @@
   "ERR_SERVICE_UNAVAILABLE": "Layanan sedang tidak tersedia.",
   "ERR_UPSTREAM_UNAVAILABLE": "Layanan eksternal sedang tidak tersedia.",
   "LICENSE_MANAGED": "Data ini dikelola oleh license yang terpasang dan tidak dapat diubah lewat API.",
-
   "AUTH_TOKEN_MISSING": "Bearer token wajib disertakan.",
   "AUTH_TOKEN_INVALID": "Token tidak valid atau sudah kedaluwarsa.",
   "AUTH_USER_TOKEN_REQUIRED": "Endpoint ini memerlukan token user.",
   "AUTH_SERVICE_TOKEN_REQUIRED": "Endpoint ini memerlukan token service.",
   "AUTH_INSUFFICIENT_SCOPE": "Token service tidak memiliki scope yang dibutuhkan.",
   "AUTH_PLATFORM_ADMIN_REQUIRED": "Memerlukan akses administrator platform.",
-  "AUTH_TENANT_NOT_SELECTED": "Pilih tenant aktif terlebih dahulu."
+  "AUTH_TENANT_NOT_SELECTED": "Pilih tenant aktif terlebih dahulu.",
+  "DOMAIN_SOLUTION_NOT_FOUND": "Solution tidak ditemukan.",
+  "DOMAIN_SOLUTION_CODE_DUPLICATE": "Code solution sudah dipakai.",
+  "DOMAIN_SOLUTION_CODE_INVALID": "Code solution hanya boleh huruf kecil, angka, dan tanda hubung (maks 100 karakter).",
+  "DOMAIN_SOLUTION_NAME_INVALID": "Nama solution wajib diisi (maks 255 karakter).",
+  "DOMAIN_SOLUTION_STATUS_INVALID": "Status solution harus active atau inactive.",
+  "DOMAIN_SOLUTION_PERSISTENCE_FAILED": "Gagal menyimpan solution.",
+  "DOMAIN_SOLUTION_QUERY_FAILED": "Gagal memuat solution."
 }

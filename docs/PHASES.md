@@ -76,7 +76,7 @@ Keputusan desain di luar spec:
 - [x] `testhelper/txhelper.go`, `assert.go`
 - [x] `handler/api/main_test.go`, `system_handler_test.go`
 - [x] Test lain: config, system usecase, middleware auth & deployment guard, httperror, persistence (transactor, outbox, pagination, pg errors)
-- Ditunda ke fase yang membutuhkan: `testhelper/seed.go` (Fase 1), `fixtures.go` (Fase 17), `noop.go` (Fase 2), `handler/api/testutil_test.go` (Fase 1)
+- Ditunda ke fase yang membutuhkan: `fixtures.go` (Fase 17), `noop.go` (Fase 2)
 
 **Verifikasi (2026-10-14):** `make dev-up && make migrate-up/down/up` bersih, `GET /healthz` 200, `go test ./... -count=1` hijau, `make lint` 0 issue, `make swagger` & `docker build --target app` berhasil.
 
@@ -84,15 +84,17 @@ Keputusan desain di luar spec:
 
 ## Fase Domain (MVP)
 
-### Fase 1 — Solution Catalog
+### Fase 1 — Solution Catalog ✅
 - Tabel: `solutions`
 - Endpoint:
-  - [ ] `GET /solutions` (MVP)
-  - [ ] `POST /solutions` (enabler, admin)
-  - [ ] `GET /solutions/{solutionId}` (enabler)
-- Test: `solution_handler_test.go`
-  - 401, 403 non-admin, 422, 409 code duplikat, 404, 200 list + meta
-- Seed: `MustSeedSolution`
+  - [x] `GET /solutions` (MVP) — token valid apa pun; non-admin hanya melihat `active`; filter `status` (admin), `search`, pagination & sort
+  - [x] `POST /solutions` (enabler) — platform admin; `LICENSE_MANAGED` di on_prem
+  - [x] `GET /solutions/{solutionId}` (enabler) — solution `inactive` hanya terlihat oleh platform admin (lainnya 404)
+- Test: `solution_handler_test.go` (21 skenario), `solution_test.go` (entity), `postgres_solution_repository_test.go`
+- Seed: `testhelper.MustSeedSolution`, `testhelper.UniqueCode`
+- Test infra tambahan:
+  - `testhelper.FakeAuthenticator` (`UserToken`, `PlatformAdminToken`, `ServiceToken`) — dipakai default oleh `MustStartTestServer` sampai login nyata ada
+  - `TestServer.MustDerive(opts...)` → `testOnPremSrv` (mode on_prem, DB sama) untuk skenario `LICENSE_MANAGED`
 
 ### Fase 2 — Signing Keys & JWKS
 - Tabel: `signing_keys` (partial unique `status = 'active'`)
@@ -120,6 +122,7 @@ Keputusan desain di luar spec:
   - [ ] `GET /auth/me` (MVP)
   - [ ] `POST /users` (enabler, admin)
 - Lainnya: middleware user token aktif (cek signature + sesi tidak revoked), seeder platform admin
+- Test: `testAdminTok` di `main_test.go` diganti hasil login platform admin sungguhan. `FakeAuthenticator` tetap boleh dipakai untuk principal yang sulit dibuat lewat API, dengan menggabungkannya (fake dicek dulu, lalu verifier JWT)
 - Test: `auth_handler_test.go`, `user_handler_test.go`
   - password salah 401, user suspended 403, solution tidak ada 422/404
   - refresh rotate → refresh token lama ditolak

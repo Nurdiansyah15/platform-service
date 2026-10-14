@@ -14,7 +14,8 @@ import (
 
 // Handlers berisi semua handler HTTP. Tambah field per domain baru.
 type Handlers struct {
-	System *api.SystemHandler
+	System   *api.SystemHandler
+	Solution *api.SolutionHandler
 }
 
 type Deps struct {
@@ -60,5 +61,7 @@ func Setup(d Deps) *gin.Engine {
 	return r
 }
 
-// registerDomainRoutes memanggil RegisterXxxRoutes tiap domain (diisi mulai Fase 1).
-func registerDomainRoutes(_ Routes, _ Handlers) {}
+// registerDomainRoutes memanggil RegisterXxxRoutes tiap domain.
+func registerDomainRoutes(r Routes, h Handlers) {
+	RegisterSolutionRoutes(r, h.Solution)
+}

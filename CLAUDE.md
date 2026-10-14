@@ -98,9 +98,9 @@ Langkah membuat endpoint baru:
   func NewTenantUseCase(deps TenantDeps) *TenantUseCase { return &TenantUseCase{deps: deps} }
 
   // Required — auth: user | scope: -
-  func (uc *TenantUseCase) Create(ctx context.Context, actor dto.Actor, req dto.CreateTenantRequest) (*dto.TenantResponse, error)
+  func (uc *TenantUseCase) Create(ctx context.Context, actor *principal.Principal, req dto.CreateTenantRequest) (*dto.TenantResponse, error)
   // Required — auth: user (member / platform admin) | scope: -
-  func (uc *TenantUseCase) List(ctx context.Context, actor dto.Actor, q dto.ListTenantQuery) ([]dto.TenantItem, dto.Meta, error)
+  func (uc *TenantUseCase) List(ctx context.Context, actor *principal.Principal, q dto.ListTenantQuery) ([]dto.TenantItem, dto.Meta, error)
   ```
 - Bila satu file domain terlalu besar (> ~500 baris) atau domain punya beberapa aggregate, boleh dipecah per sub-domain dalam paket yang sama, mis. `tenant_usecase.go` + `member_usecase.go` (`TenantUseCase`, `MemberUseCase`). Jangan kembali ke satu file per operasi.
 - Helper bersama paket (`mapXxxDomainError`, mapper domain → DTO) di `helpers.go`.
@@ -297,16 +297,18 @@ internal/testhelper/
   testserver.go   → MustStartTestServer(opts...) [WithDeploymentMode, WithAuthenticator], TestConfig,
                     GET/POST/PUT/PATCH/DELETE/DELETEBody, BearerHeader, DecodeBody, DecodeError
                     memakai internal/bootstrap + router.Setup yang sama dengan cmd/app (jangan duplikasi route)
+                    TestServer.MustDerive(opts...) → engine lain di DB yang sama (mis. mode on_prem)
+  fake_auth.go    → FakeAuthenticator: UserToken, PlatformAdminToken, ServiceToken, Issue(principal)
+  seed.go         → UniqueCode, MustSeedSolution, ... (insert langsung ke DB)
   txhelper.go     → WithTestTx (selalu rollback)
   assert.go       → AssertDomainError
   (ditambah saat dibutuhkan fase domain)
-  seed.go         → MustSeedSolution, MustSeedPlatformAdmin, MustSeedSolutionClient, ...
   fixtures.go     → data statis (mis. license test yang ditandatangani test key)
   noop.go         → fake KeyStore, fake clock, fake webhook sender
 
 internal/interfaces/http/handler/api/
-  main_test.go      → TestMain, var testSrv (+ testOnPremSrv mulai Fase 17, platform admin mulai Fase 3)
-  testutil_test.go  → uniqueEmail, uniqueSlug, mustLogin, mustCreateTenant, mustSubscribe, ... (dibuat saat helper pertama dibutuhkan)
+  main_test.go      → TestMain, var testSrv, testOnPremSrv, testAdminTok
+  testutil_test.go  → adminHeader, userHeader, mustCreateSolution, ... (helper lewat API, prefix must)
 ```
 
 ### Test lain

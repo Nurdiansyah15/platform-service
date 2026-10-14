@@ -12,6 +12,7 @@ import (
 
 	"platform-service/internal/app/port"
 	"platform-service/internal/app/principal"
+	"platform-service/internal/app/usecase/solution"
 	"platform-service/internal/app/usecase/system"
 	"platform-service/internal/config"
 	i18n "platform-service/internal/infrastructure/i18n"
@@ -53,6 +54,8 @@ func NewEngine(opts Options) (*gin.Engine, error) {
 
 	// ── Persistence ─────────────────────────────────────────────────────────
 	healthProbe := persistence.NewPostgresHealthProbe(opts.DB)
+	solutionRepo := persistence.NewPostgresSolutionRepository(opts.DB)
+	solutionQuery := persistence.NewPostgresSolutionQuery(opts.DB)
 
 	// ── Usecases ────────────────────────────────────────────────────────────
 	systemUC := system.NewSystemUseCase(system.SystemDeps{
@@ -60,6 +63,7 @@ func NewEngine(opts Options) (*gin.Engine, error) {
 		DeploymentMode: string(opts.Config.App.DeploymentMode),
 		Logger:         opts.Logger,
 	})
+	solutionUC := solution.NewSolutionUseCase(solution.SolutionDeps{Repo: solutionRepo, Query: solutionQuery})
 
 	// ── Handlers & router ───────────────────────────────────────────────────
 	return router.Setup(router.Deps{
@@ -67,7 +71,8 @@ func NewEngine(opts Options) (*gin.Engine, error) {
 		Logger:        opts.Logger,
 		Authenticator: authn,
 		Handlers: router.Handlers{
-			System: api.NewSystemHandler(systemUC),
+			System:   api.NewSystemHandler(systemUC),
+			Solution: api.NewSolutionHandler(solutionUC),
 		},
 	}), nil
 }

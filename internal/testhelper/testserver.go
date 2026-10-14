@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"log/slog"
@@ -27,6 +28,9 @@ type TestServer struct {
 	DB     *sql.DB
 	Engine *gin.Engine
 	Config *config.Config
+	// Auth terisi bila server memakai FakeAuthenticator (default saat
+	// WithAuthenticator tidak diberikan).
+	Auth *FakeAuthenticator
 }
 
 type serverOptions struct {
@@ -49,6 +53,27 @@ func WithAuthenticator(a port.TokenAuthenticator) Option {
 // MustStartTestServer menyalakan DB test + engine. Panggil sekali dari TestMain
 // dan jalankan cleanup setelah m.Run().
 func MustStartTestServer(opts ...Option) (*TestServer, func()) {
+	db, cleanup := MustStartTestDB()
+	srv, err := newTestServer(db, NewFakeAuthenticator(), opts)
+	if err != nil {
+		cleanup()
+		log.Fatalf("testhelper: %v", err)
+	}
+	return srv, cleanup
+}
+
+// MustDerive membangun engine baru di atas DB yang sama dengan opsi berbeda,
+// mis. server mode on_prem untuk menguji LICENSE_MANAGED. FakeAuthenticator
+// ikut dipakai bersama sehingga token dari server asal tetap berlaku.
+func (s *TestServer) MustDerive(opts ...Option) *TestServer {
+	srv, err := newTestServer(s.DB, s.Auth, opts)
+	if err != nil {
+		log.Fatalf("testhelper: %v", err)
+	}
+	return srv
+}
+
+func newTestServer(db *sql.DB, fake *FakeAuthenticator, opts []Option) (*TestServer, error) {
 	gin.SetMode(gin.TestMode)
 
 	o := serverOptions{deploymentMode: config.DeploymentCloud}
@@ -56,21 +81,24 @@ func MustStartTestServer(opts ...Option) (*TestServer, func()) {
 		opt(&o)
 	}
 
-	db, cleanup := MustStartTestDB()
-	cfg := TestConfig(o.deploymentMode)
+	authn := o.authenticator
+	if authn == nil {
+		authn = fake
+	} else {
+		fake = nil
+	}
 
+	cfg := TestConfig(o.deploymentMode)
 	engine, err := bootstrap.NewEngine(bootstrap.Options{
 		Config:        cfg,
 		DB:            db,
 		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Authenticator: o.authenticator,
+		Authenticator: authn,
 	})
 	if err != nil {
-		cleanup()
-		log.Fatalf("testhelper: bootstrap engine: %v", err)
+		return nil, fmt.Errorf("bootstrap engine: %w", err)
 	}
-
-	return &TestServer{DB: db, Engine: engine, Config: cfg}, cleanup
+	return &TestServer{DB: db, Engine: engine, Config: cfg, Auth: fake}, nil
 }
 
 // TestConfig mengembalikan config untuk test. Database diabaikan karena DB

@@ -13,7 +13,6 @@
   "validation.oneof": "Must be one of [%s].",
   "validation.url": "Invalid URL.",
   "validation.default": "Invalid value.",
-
   "ERR_BAD_REQUEST": "Invalid request.",
   "ERR_UNPROCESSABLE_ENTITY": "The submitted data is invalid.",
   "ERR_UNAUTHORIZED": "Authentication required.",
@@ -25,12 +24,18 @@
   "ERR_SERVICE_UNAVAILABLE": "Service is temporarily unavailable.",
   "ERR_UPSTREAM_UNAVAILABLE": "An upstream service is unavailable.",
   "LICENSE_MANAGED": "This data is managed by the installed license and cannot be changed through the API.",
-
   "AUTH_TOKEN_MISSING": "Bearer token is required.",
   "AUTH_TOKEN_INVALID": "Token is invalid or expired.",
   "AUTH_USER_TOKEN_REQUIRED": "This endpoint requires a user token.",
   "AUTH_SERVICE_TOKEN_REQUIRED": "This endpoint requires a service token.",
   "AUTH_INSUFFICIENT_SCOPE": "The service token does not have the required scope.",
   "AUTH_PLATFORM_ADMIN_REQUIRED": "Platform administrator access is required.",
-  "AUTH_TENANT_NOT_SELECTED": "Select an active tenant first."
+  "AUTH_TENANT_NOT_SELECTED": "Select an active tenant first.",
+  "DOMAIN_SOLUTION_NOT_FOUND": "Solution not found.",
+  "DOMAIN_SOLUTION_CODE_DUPLICATE": "Solution code is already in use.",
+  "DOMAIN_SOLUTION_CODE_INVALID": "Solution code may only contain lowercase letters, numbers, and hyphens (max 100 characters).",
+  "DOMAIN_SOLUTION_NAME_INVALID": "Solution name is required (max 255 characters).",
+  "DOMAIN_SOLUTION_STATUS_INVALID": "Solution status must be active or inactive.",
+  "DOMAIN_SOLUTION_PERSISTENCE_FAILED": "Failed to save solution.",
+  "DOMAIN_SOLUTION_QUERY_FAILED": "Failed to load solution."
 }
