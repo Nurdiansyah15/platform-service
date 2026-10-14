@@ -171,16 +171,20 @@ Keputusan desain di luar spec:
 - Test infra: `tenantToken(userID, tenantID)` (FakeAuthenticator, sementara), `mustCreateTenant`, `mustTenantOwner`, `countEvents`
 - Lainnya: pencarian `ILIKE` di query model kini meng-escape `%` / `_` (`likePattern`)
 
-### Fase 6 — Company & Branch
-- Tabel: `companies`, `branches` (soft delete, partial unique code)
-- Outbox: `company.created`, `branch.created`
+### Fase 6 — Company & Branch ✅
+- Tabel: `companies`, `branches` (soft delete `deleted_at`, partial unique `(tenant_id, code)` / `(company_id, code)` `WHERE deleted_at IS NULL`, index FK, CHECK status)
+- Domain `organization`: `Company`, `Branch`, VO `OrgCode` (huruf/angka/`.`/`_`/`-`, dinormalisasi UPPERCASE), `OrgStatus`; event `company.created`, `branch.created` (payload memuat `tenant_id` & `updated_at`)
+- Akses:
+  - `/tenants/{tenantId}/companies` → `AccessPolicy` tenant
+  - `/companies/{companyId}/branches` → company dimuat lalu `AccessPolicy` terhadap tenant pemiliknya; company tenant lain / sudah dihapus → **404** (tidak membocorkan keberadaan). `tid` kosong tetap 403
+  - Khusus token user; akses token service (`org:read` / `org:write`) menyusul Fase 10
 - Endpoint:
-  - [ ] `GET /tenants/{tenantId}/companies` (MVP)
-  - [ ] `POST /tenants/{tenantId}/companies` (MVP)
-  - [ ] `GET /companies/{companyId}/branches` (MVP)
-  - [ ] `POST /companies/{companyId}/branches` (MVP)
-- Test: `company_handler_test.go`, `branch_handler_test.go`
-  - 403 tenant lain, 409 code duplikat, 404 company tidak ada / soft-deleted
+  - [x] `GET /tenants/{tenantId}/companies` (MVP) — tanpa yang terhapus, filter status/search, pagination
+  - [x] `POST /tenants/{tenantId}/companies` (MVP)
+  - [x] `GET /companies/{companyId}/branches` (MVP)
+  - [x] `POST /companies/{companyId}/branches` (MVP)
+- Test: `company_handler_test.go`, `branch_handler_test.go`, entity, repository (duplikat, soft delete, reuse code)
+- Test infra: `mustCreateCompany`, `principalUser`
 
 ### Fase 7 — Benefits (enabler)
 - Tabel: `benefits` (+ `UNIQUE (id, solution_id)`)
@@ -228,7 +232,7 @@ Keputusan desain di luar spec:
   - [ ] `GET /auth/tenants` (MVP)
   - [ ] `POST /auth/switch-tenant` (MVP)
 - Lainnya: login auto-mengisi `tid` bila user hanya punya 1 tenant yang subscribe solution sesi
-- Buka akses token service ke endpoint tenant & member (`users:read` / `users:write`) untuk tenant yang subscribe solution client (perluas `AccessPolicy`)
+- Buka akses token service ke endpoint tenant & member (`users:read` / `users:write`) serta company & branch (`org:read` / `org:write`) untuk tenant yang subscribe solution client (perluas `AccessPolicy`)
 - Ganti helper test `tenantToken` (FakeAuthenticator) dengan token hasil `POST /auth/switch-tenant`
 - Test: `subscription_handler_test.go`, `subscription_addon_handler_test.go`, `auth_tenant_handler_test.go`
   - plan dari solution lain 422

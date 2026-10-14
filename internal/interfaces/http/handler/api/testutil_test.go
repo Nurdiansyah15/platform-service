@@ -143,9 +143,7 @@ func mustServiceToken(t *testing.T, c clientCredentials, scope string) string {
 // tenantToken menerbitkan token user dengan tenant aktif (claim tid) untuk user nyata.
 // Sementara memakai FakeAuthenticator; diganti POST /auth/switch-tenant di Fase 10.
 func tenantToken(userID, tenantID string) map[string]string {
-	return testhelper.BearerHeader(testSrv.Auth.Issue(principal.Principal{
-		Kind: principal.KindUser, UserID: userID, SessionID: uuid.NewString(), TenantID: tenantID,
-	}))
+	return testhelper.BearerHeader(testSrv.Auth.Issue(principalUser(userID, tenantID)))
 }
 
 // mustCreateTenant membuat tenant via API dengan token pemanggil dan mengembalikan ID-nya.
@@ -176,4 +174,20 @@ func countEvents(t *testing.T, eventType, tenantID string) int {
 	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
 		`SELECT COUNT(*) FROM events WHERE event_type = $1 AND tenant_id = $2`, eventType, tenantID).Scan(&n))
 	return n
+}
+
+// mustCreateCompany membuat company via API dan mengembalikan ID-nya.
+func mustCreateCompany(t *testing.T, headers map[string]string, tenantID, code string) string {
+	t.Helper()
+	w := testSrv.POST("/api/v1/tenants/"+tenantID+"/companies", map[string]any{"name": "Company " + code, "code": code}, headers)
+	require.Equal(t, 201, w.Code, "mustCreateCompany body=%s", w.Body.String())
+	var got struct {
+		ID string `json:"id"`
+	}
+	testhelper.DecodeBody(t, w, &got)
+	return got.ID
+}
+
+func principalUser(userID, tenantID string) principal.Principal {
+	return principal.Principal{Kind: principal.KindUser, UserID: userID, SessionID: uuid.NewString(), TenantID: tenantID}
 }

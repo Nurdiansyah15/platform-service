@@ -71,5 +71,14 @@
   "DOMAIN_TENANT_MEMBER_ALREADY_EXISTS": "User is already a member of this tenant.",
   "DOMAIN_TENANT_MEMBER_STATUS_INVALID": "Member status must be active or invited.",
   "DOMAIN_TENANT_MEMBER_USER_NOT_FOUND": "User to add was not found.",
-  "DOMAIN_TENANT_MEMBER_IDENTITY_REQUIRED": "Provide exactly one of user_id or email."
+  "DOMAIN_TENANT_MEMBER_IDENTITY_REQUIRED": "Provide exactly one of user_id or email.",
+  "DOMAIN_COMPANY_NOT_FOUND": "Company not found.",
+  "DOMAIN_COMPANY_CODE_DUPLICATE": "Company code is already used in this tenant.",
+  "DOMAIN_BRANCH_NOT_FOUND": "Branch not found.",
+  "DOMAIN_BRANCH_CODE_DUPLICATE": "Branch code is already used in this company.",
+  "DOMAIN_ORG_CODE_INVALID": "Code may only contain letters, numbers, '.', '_' and '-', starting with a letter or number (max 100 characters).",
+  "DOMAIN_ORG_NAME_INVALID": "Name is required (max 255 characters).",
+  "DOMAIN_ORG_STATUS_INVALID": "Status must be active or inactive.",
+  "DOMAIN_ORG_PERSISTENCE_FAILED": "Failed to save organization data.",
+  "DOMAIN_ORG_QUERY_FAILED": "Failed to load organization data."
 }

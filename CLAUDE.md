@@ -228,6 +228,7 @@ Setiap perubahan yang ada di katalog event (spec §2.9) menulis baris `events` d
 ### 8.5 Autentikasi & otorisasi
 - Token user: `typ=user`, `aud = solutions.code`, `tid` boleh kosong. Token service: `typ=service`, `aud=platform`, `sol`, `scope`.
 - Endpoint per-tenant (path `/tenants/{tenantId}/...`) wajib lewat domain service `tenant/service.AccessPolicy.EnsureCanAccess` di usecase: platform admin bebas; user lain wajib `tid` = tenantId dan member `active`. Endpoint identitas & pemilihan tenant (`/auth/*`, `GET/POST /tenants`) boleh tanpa `tid`.
+- Resource anak tenant yang diakses lewat ID-nya sendiri (mis. `/companies/{companyId}`): muat resource, cek `AccessPolicy` terhadap tenant pemiliknya, dan laporkan **404** bila akses ditolak (jangan bocorkan keberadaan data tenant lain). `tid` kosong tetap 403.
 - Service client hanya boleh akses data `solution_id`-nya dan tenant yang subscribe solution tersebut.
 - Platform admin = `users.is_platform_admin` → `RequirePlatformAdmin`.
 - Middleware (`interfaces/http/middleware/auth.go`): `Authenticate(port.TokenAuthenticator)` menyimpan `*principal.Principal` di gin context (ambil dengan `middleware.PrincipalFrom(c)`), lalu guard `RequireUser`, `RequireService(scope)`, `RequireUserOrService(scope)`, `RequirePlatformAdmin`, `RequireActiveTenant`. Handler meneruskan principal ke usecase; usecase tidak membaca gin context.
@@ -318,7 +319,8 @@ internal/interfaces/http/handler/api/
   main_test.go      → TestMain, var testSrv, testOnPremSrv, testAdminTok (login admin sungguhan via seeder)
   testutil_test.go  → adminHeader, userHeader (fake), mustCreateSolution, mustCreateUser, mustLogin,
                       mustLoginNewUser, mustCreateClient, mustServiceToken, mustCreateTenant,
-                      mustTenantOwner, tenantToken, countEvents, ... (helper lewat API, prefix must)
+                      mustTenantOwner, tenantToken, principalUser, mustCreateCompany, countEvents, ...
+                      (helper lewat API, prefix must)
   Catatan: FakeAuthenticator.ServiceToken tidak melewati validasi client di DB — untuk skenario
   yang bergantung pada status/scope client, pakai mustServiceToken (token asli).
 ```

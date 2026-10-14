@@ -71,5 +71,14 @@
   "DOMAIN_TENANT_MEMBER_ALREADY_EXISTS": "User sudah menjadi member tenant ini.",
   "DOMAIN_TENANT_MEMBER_STATUS_INVALID": "Status member harus active atau invited.",
   "DOMAIN_TENANT_MEMBER_USER_NOT_FOUND": "User yang akan ditambahkan tidak ditemukan.",
-  "DOMAIN_TENANT_MEMBER_IDENTITY_REQUIRED": "Isi salah satu: user_id atau email."
+  "DOMAIN_TENANT_MEMBER_IDENTITY_REQUIRED": "Isi salah satu: user_id atau email.",
+  "DOMAIN_COMPANY_NOT_FOUND": "Company tidak ditemukan.",
+  "DOMAIN_COMPANY_CODE_DUPLICATE": "Code company sudah dipakai di tenant ini.",
+  "DOMAIN_BRANCH_NOT_FOUND": "Branch tidak ditemukan.",
+  "DOMAIN_BRANCH_CODE_DUPLICATE": "Code branch sudah dipakai di company ini.",
+  "DOMAIN_ORG_CODE_INVALID": "Code hanya boleh huruf, angka, '.', '_' dan '-', diawali huruf atau angka (maks 100 karakter).",
+  "DOMAIN_ORG_NAME_INVALID": "Nama wajib diisi (maks 255 karakter).",
+  "DOMAIN_ORG_STATUS_INVALID": "Status harus active atau inactive.",
+  "DOMAIN_ORG_PERSISTENCE_FAILED": "Gagal menyimpan data organisasi.",
+  "DOMAIN_ORG_QUERY_FAILED": "Gagal memuat data organisasi."
 }
