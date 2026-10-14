@@ -21,6 +21,18 @@ definitions:
       token_type:
         type: string
     type: object
+  dto.CreateSolutionClientRequest:
+    properties:
+      name:
+        maxLength: 255
+        type: string
+      scopes:
+        items:
+          type: string
+        type: array
+    required:
+    - name
+    type: object
   dto.CreateSolutionRequest:
     properties:
       code:
@@ -132,6 +144,24 @@ definitions:
       total_pages:
         type: integer
     type: object
+  dto.OAuthError:
+    properties:
+      error:
+        type: string
+      error_description:
+        type: string
+    type: object
+  dto.OAuthTokenResponse:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        type: integer
+      scope:
+        type: string
+      token_type:
+        type: string
+    type: object
   dto.RefreshTokenRequest:
     properties:
       refresh_token:
@@ -151,6 +181,33 @@ definitions:
       solution:
         $ref: '#/definitions/dto.SolutionSummary'
       tenant_id:
+        type: string
+    type: object
+  dto.SolutionClientWithSecretResponse:
+    properties:
+      client_id:
+        type: string
+      client_secret:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      last_used_at:
+        type: string
+      name:
+        type: string
+      revoked_at:
+        type: string
+      scopes:
+        items:
+          type: string
+        type: array
+      solution_id:
+        type: string
+      status:
+        type: string
+      updated_at:
         type: string
     type: object
   dto.SolutionResponse:
@@ -363,6 +420,95 @@ paths:
       summary: Refresh token
       tags:
       - Auth
+  /api/v1/oauth/token:
+    post:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: RFC 6749 §4.4. Kredensial via HTTP Basic atau field body. Respons
+        & error format OAuth2 standar (tanpa envelope).
+      parameters:
+      - description: client_credentials
+        in: formData
+        name: grant_type
+        required: true
+        type: string
+      - description: Client ID (bila tidak memakai Basic)
+        in: formData
+        name: client_id
+        type: string
+      - description: Client secret (bila tidak memakai Basic)
+        in: formData
+        name: client_secret
+        type: string
+      - description: Subset scope, dipisah spasi
+        in: formData
+        name: scope
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.OAuthTokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.OAuthError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.OAuthError'
+      summary: OAuth2 token (client credentials)
+      tags:
+      - Service Auth
+  /api/v1/solution-clients/{clientId}/rotate-secret:
+    post:
+      description: Secret lama langsung tidak berlaku; secret baru hanya ditampilkan
+        sekali.
+      parameters:
+      - description: Solution client ID (UUID)
+        in: path
+        name: clientId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.SolutionClientWithSecretResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Rotate client secret
+      tags:
+      - Solution Clients
   /api/v1/solutions:
     get:
       parameters:
@@ -499,6 +645,56 @@ paths:
       summary: Get solution
       tags:
       - Solution Catalog
+  /api/v1/solutions/{solutionId}/clients:
+    post:
+      consumes:
+      - application/json
+      description: client_secret hanya ditampilkan sekali di respons ini.
+      parameters:
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Client
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateSolutionClientRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.SolutionClientWithSecretResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Create solution client
+      tags:
+      - Solution Clients
   /api/v1/users:
     post:
       consumes:

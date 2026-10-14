@@ -138,19 +138,17 @@ Keputusan desain di luar spec:
   - `ResolveUserPrincipal` = 3 query per request; digabung jadi 1 query bila perlu optimasi
   - Belum ada deteksi pemakaian ulang refresh token lama (reuse detection → revoke sesi) — kandidat L1
 
-### Fase 4 — Solution Clients & Service Auth
-- Tabel: `solution_clients`
-- Domain:
-  - `SolutionClient` (secret hash, VO `Scopes` tervalidasi ke daftar scope spec §2.8)
-  - Claim service token: `iss, sub, aud=platform, sol, scope, typ=service, iat, exp, jti`
+### Fase 4 — Solution Clients & Service Auth ✅
+- Tabel: `solution_clients` (unique `client_id`, `scopes TEXT[]`, CHECK status, index `solution_id`)
+- Domain: `SolutionClient` (`SecretMatches` constant-time, `RotateSecret`, `Revoke`, `GrantableScopes`), VO `Scopes` (whitelist 11 scope spec §2.8)
+- Kredensial: `client_id` = `cli_` + 24 hex; secret 256 bit base64url, disimpan SHA-256, tampil sekali
 - Endpoint:
-  - [ ] `POST /solutions/{solutionId}/clients` (MVP, admin; secret tampil sekali)
-  - [ ] `POST /solution-clients/{clientId}/rotate-secret` (MVP, admin)
-  - [ ] `POST /oauth/token` (MVP, `grant_type=client_credentials`)
-- Lainnya: aktifkan `RequireService(scope)`
-- Test: `solution_client_handler_test.go`, `oauth_handler_test.go`
-  - secret salah 401, client revoked 401, scope tidak dikenal 422, token memuat claim yang benar
-- Seed: `MustSeedSolutionClient` (return token service siap pakai)
+  - [x] `POST /solutions/{solutionId}/clients` (MVP, platform admin)
+  - [x] `POST /solution-clients/{clientId}/rotate-secret` (MVP, platform admin; `{clientId}` = UUID `id`; client revoked → 409)
+  - [x] `POST /oauth/token` (MVP) — RFC 6749 §4.4: form-urlencoded, kredensial via HTTP Basic **atau** body (tidak boleh keduanya), parameter `scope` opsional (subset), respons/error format OAuth2 tanpa envelope, `Cache-Control: no-store`, `WWW-Authenticate` saat Basic gagal
+- Authenticator: token service divalidasi ke DB tiap request (`ResolveServicePrincipal`): client `active`, solution `active`, claim `sol` cocok, scope di-intersect dengan scope client terkini (revoke/pengurangan scope langsung berlaku)
+- Test: `solution_client_handler_test.go`, `oauth_handler_test.go`, entity, usecase (`ResolveServicePrincipal` dengan repo fake), repository (`TEXT[]` round trip)
+- Test infra: `TestServer.POSTForm`, helper `mustCreateClient`, `mustServiceToken`
 
 ### Fase 5 — Tenant & Membership
 - Tabel: `tenants`, `tenant_members` (+ FK `auth_sessions.tenant_id` → `tenants(id)`)

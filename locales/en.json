@@ -51,5 +51,12 @@
   "DOMAIN_AUTH_SOLUTION_UNAVAILABLE": "The requested solution is not available.",
   "DOMAIN_AUTH_REFRESH_TOKEN_INVALID": "Refresh token is invalid or expired.",
   "DOMAIN_AUTH_SESSION_PERSISTENCE_FAILED": "Failed to save session.",
-  "DOMAIN_AUTH_SESSION_QUERY_FAILED": "Failed to load session."
+  "DOMAIN_AUTH_SESSION_QUERY_FAILED": "Failed to load session.",
+  "DOMAIN_SOLUTION_CLIENT_NOT_FOUND": "Solution client not found.",
+  "DOMAIN_SOLUTION_CLIENT_NAME_INVALID": "Client name is required (max 255 characters).",
+  "DOMAIN_SOLUTION_CLIENT_SCOPE_INVALID": "One or more scopes are not recognized.",
+  "DOMAIN_SOLUTION_CLIENT_REVOKED": "Solution client has been revoked.",
+  "DOMAIN_SOLUTION_CLIENT_INVALID": "Solution client is invalid.",
+  "DOMAIN_SOLUTION_CLIENT_PERSISTENCE_FAILED": "Failed to save solution client.",
+  "DOMAIN_SOLUTION_CLIENT_QUERY_FAILED": "Failed to load solution client."
 }

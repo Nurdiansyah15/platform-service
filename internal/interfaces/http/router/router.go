@@ -19,6 +19,7 @@ type Handlers struct {
 	JWKS     *api.JWKSHandler
 	Auth     *api.AuthHandler
 	User     *api.UserHandler
+	Client   *api.SolutionClientHandler
 }
 
 type Deps struct {
@@ -70,4 +71,5 @@ func registerDomainRoutes(r Routes, h Handlers) {
 	RegisterJWKSRoutes(r, h.JWKS)
 	RegisterAuthRoutes(r, h.Auth)
 	RegisterUserRoutes(r, h.User)
+	RegisterSolutionClientRoutes(r, h.Client)
 }

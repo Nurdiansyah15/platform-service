@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -98,3 +99,40 @@ func mustLoginNewUser(t *testing.T) (tokenPair, string, string) {
 
 func upper(s string) string { return strings.ToUpper(s) }
 func lower(s string) string { return strings.ToLower(s) }
+
+type clientCredentials struct {
+	ID           string   `json:"id"`
+	SolutionID   string   `json:"solution_id"`
+	ClientID     string   `json:"client_id"`
+	ClientSecret string   `json:"client_secret"`
+	Scopes       []string `json:"scopes"`
+	Status       string   `json:"status"`
+}
+
+// mustCreateClient membuat solution client via API (admin) dan mengembalikan kredensialnya.
+func mustCreateClient(t *testing.T, solutionID string, scopes ...string) clientCredentials {
+	t.Helper()
+	w := testSrv.POST("/api/v1/solutions/"+solutionID+"/clients", map[string]any{
+		"name": "Backend " + testhelper.UniqueCode("c"), "scopes": scopes,
+	}, adminHeader())
+	require.Equal(t, 201, w.Code, "mustCreateClient body=%s", w.Body.String())
+	var got clientCredentials
+	testhelper.DecodeBody(t, w, &got)
+	return got
+}
+
+// mustServiceToken menukar kredensial client menjadi access token service (OAuth2).
+func mustServiceToken(t *testing.T, c clientCredentials, scope string) string {
+	t.Helper()
+	form := url.Values{"grant_type": {"client_credentials"}, "client_id": {c.ClientID}, "client_secret": {c.ClientSecret}}
+	if scope != "" {
+		form.Set("scope", scope)
+	}
+	w := testSrv.POSTForm("/api/v1/oauth/token", form)
+	require.Equal(t, 200, w.Code, "mustServiceToken body=%s", w.Body.String())
+	var resp struct {
+		AccessToken string `json:"access_token"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	return resp.AccessToken
+}

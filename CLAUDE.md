@@ -176,7 +176,7 @@ Persistence tidak pernah mengembalikan AppError.
 
 Envelope respons:
 - Sukses: `{status: "success", status_code, message, data, meta}`
-  - Pengecualian: dokumen standar yang dibaca library pihak ketiga (JWKS, openid-configuration) dikirim tanpa envelope.
+  - Pengecualian: dokumen standar yang dibaca library pihak ketiga dikirim tanpa envelope — JWKS, openid-configuration, dan `POST /oauth/token` (respons & error RFC 6749 via `dto.OAuthError`).
 - Error: `{status: "error", status_code, error_code, errors}` — `errors` berisi pesan terjemahan dari message key (string) atau map field → pesan untuk validasi.
 
 Message key lintas domain (auth, dsb.) ada di `apperror` (`MsgTokenMissing`, `MsgInsufficientScope`, ...). Setiap key baru wajib ditambahkan ke **kedua** `locales/en.json` dan `locales/id.json`.
@@ -234,7 +234,8 @@ Setiap perubahan yang ada di katalog event (spec §2.9) menulis baris `events` d
 - Route terproteksi didaftarkan di `Routes.Authenticated` (sudah memasang `Authenticate`); route publik di `Routes.V1`.
 - Token JWT RS256 diterbitkan lewat `port.TokenIssuer` dan diverifikasi `jwttoken.Authenticator` (key dari `signing_keys` + `port.KeyStore`). Private key tidak pernah disimpan di DB maupun di-log.
 - Token user selalu divalidasi ulang ke DB oleh `AuthUseCase.ResolveUserPrincipal` (dirangkai di `bootstrap`): sesi aktif, user & solution `active`, `tid` sama dengan sesi. Jangan mempercayai `IsPlatformAdmin` dari sumber lain.
-- Pesan error login tidak boleh membedakan "email tidak terdaftar" dan "password salah".
+- Token service juga divalidasi ulang ke DB oleh `SolutionClientUseCase.ResolveServicePrincipal`: client & solution `active`, `sol` cocok, scope di-intersect dengan scope client terkini. Guard `RequireService(scope)` karenanya selalu memakai scope terbaru.
+- Pesan error login / token endpoint tidak boleh membedakan "akun/client tidak ada" dan "password/secret salah".
 - Secret (client secret, refresh token) hanya disimpan sebagai hash; webhook secret dienkripsi. Secret mentah hanya ditampilkan sekali di respons create/rotate.
 
 ### 8.6 Deployment mode
@@ -299,7 +300,7 @@ func TestTenant_Create_Success(t *testing.T) {
 internal/testhelper/
   testdb.go       → MustStartTestDB (postgres:16-alpine + semua migrasi)
   testserver.go   → MustStartTestServer(opts...) [WithDeploymentMode, WithAuthenticator], TestConfig,
-                    GET/POST/PUT/PATCH/DELETE/DELETEBody, BearerHeader, DecodeBody, DecodeError
+                    GET/POST/PUT/PATCH/DELETE/DELETEBody, POSTForm, BearerHeader, DecodeBody, DecodeError
                     memakai internal/bootstrap + router.Setup yang sama dengan cmd/app (jangan duplikasi route)
                     TestServer.MustDerive(opts...) → engine lain di DB yang sama (mis. mode on_prem)
                     TestServer.Issuer → menerbitkan JWT asli; TestServer.KeyStore (memory)
@@ -316,7 +317,9 @@ internal/testhelper/
 internal/interfaces/http/handler/api/
   main_test.go      → TestMain, var testSrv, testOnPremSrv, testAdminTok (login admin sungguhan via seeder)
   testutil_test.go  → adminHeader, userHeader (fake), mustCreateSolution, mustCreateUser, mustLogin,
-                      mustLoginNewUser, ... (helper lewat API, prefix must)
+                      mustLoginNewUser, mustCreateClient, mustServiceToken, ... (helper lewat API, prefix must)
+  Catatan: FakeAuthenticator.ServiceToken tidak melewati validasi client di DB — untuk skenario
+  yang bergantung pada status/scope client, pakai mustServiceToken (token asli).
 ```
 
 ### Test lain

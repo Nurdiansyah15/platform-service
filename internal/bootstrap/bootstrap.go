@@ -18,6 +18,7 @@ import (
 	"platform-service/internal/app/usecase/auth"
 	"platform-service/internal/app/usecase/signingkey"
 	"platform-service/internal/app/usecase/solution"
+	"platform-service/internal/app/usecase/solutionclient"
 	"platform-service/internal/app/usecase/system"
 	"platform-service/internal/app/usecase/user"
 	"platform-service/internal/config"
@@ -91,6 +92,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	signingKeyRepo := persistence.NewPostgresSigningKeyRepository(opts.DB)
 	userRepo := persistence.NewPostgresUserRepository(opts.DB)
 	sessionRepo := persistence.NewPostgresAuthSessionRepository(opts.DB)
+	clientRepo := persistence.NewPostgresSolutionClientRepository(opts.DB)
 
 	// ── Token ───────────────────────────────────────────────────────────────
 	keyRing := jwttoken.NewKeyRing(signingKeyRepo, keyStore)
@@ -121,11 +123,20 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		return nil, fmt.Errorf("bootstrap: auth usecase: %w", err)
 	}
 
+	clientUC := solutionclient.NewSolutionClientUseCase(solutionclient.SolutionClientDeps{
+		Repo:      clientRepo,
+		Solutions: solutionRepo,
+		Tokens:    tokenIssuer,
+		Logger:    opts.Logger,
+	})
+
 	// ── Authenticator ───────────────────────────────────────────────────────
-	// JWT diverifikasi dulu, lalu token user dicek ke sesi & user di DB.
-	var authn port.TokenAuthenticator = sessionAwareAuthenticator{
-		token:       jwttoken.NewAuthenticator(keyRing, cfg.App.IssuerURL),
-		resolveUser: authUC.ResolveUserPrincipal,
+	// JWT diverifikasi dulu, lalu principal divalidasi ulang ke DB
+	// (user: sesi & status user; service: status client & scope terkini).
+	var authn port.TokenAuthenticator = dbValidatedAuthenticator{
+		token:          jwttoken.NewAuthenticator(keyRing, cfg.App.IssuerURL),
+		resolveUser:    authUC.ResolveUserPrincipal,
+		resolveService: clientUC.ResolveServicePrincipal,
 	}
 	if opts.ExtraAuthenticator != nil {
 		authn = chainAuthenticator{opts.ExtraAuthenticator, authn}
@@ -149,29 +160,34 @@ func New(ctx context.Context, opts Options) (*App, error) {
 			JWKS:     api.NewJWKSHandler(signingKeyUC),
 			Auth:     api.NewAuthHandler(authUC),
 			User:     api.NewUserHandler(userUC),
+			Client:   api.NewSolutionClientHandler(clientUC),
 		},
 	})
 
 	return &App{Engine: engine, TokenIssuer: tokenIssuer, Users: userUC}, nil
 }
 
-// sessionAwareAuthenticator memverifikasi JWT lalu memvalidasi token user ke DB
-// (sesi aktif, user active, IsPlatformAdmin). Token service diteruskan apa adanya
-// sampai validasi solution client tersedia (Fase 4).
-type sessionAwareAuthenticator struct {
-	token       port.TokenAuthenticator
-	resolveUser func(ctx context.Context, p *principal.Principal) (*principal.Principal, error)
+// dbValidatedAuthenticator memverifikasi JWT lalu memvalidasi principal ke DB,
+// sehingga logout, suspend user, dan revoke client langsung berlaku di platform.
+type dbValidatedAuthenticator struct {
+	token          port.TokenAuthenticator
+	resolveUser    func(ctx context.Context, p *principal.Principal) (*principal.Principal, error)
+	resolveService func(ctx context.Context, p *principal.Principal) (*principal.Principal, error)
 }
 
-func (a sessionAwareAuthenticator) Authenticate(ctx context.Context, token string) (*principal.Principal, error) {
+func (a dbValidatedAuthenticator) Authenticate(ctx context.Context, token string) (*principal.Principal, error) {
 	p, err := a.token.Authenticate(ctx, token)
 	if err != nil {
 		return nil, err
 	}
-	if p.IsUser() {
+	switch {
+	case p.IsUser():
 		return a.resolveUser(ctx, p)
+	case p.IsService():
+		return a.resolveService(ctx, p)
+	default:
+		return nil, errors.New("authenticator: jenis principal tidak dikenal")
 	}
-	return p, nil
 }
 
 // chainAuthenticator mencoba authenticator berurutan; yang pertama berhasil dipakai.

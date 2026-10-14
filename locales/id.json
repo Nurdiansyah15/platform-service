@@ -51,5 +51,12 @@
   "DOMAIN_AUTH_SOLUTION_UNAVAILABLE": "Solution yang diminta tidak tersedia.",
   "DOMAIN_AUTH_REFRESH_TOKEN_INVALID": "Refresh token tidak valid atau sudah kedaluwarsa.",
   "DOMAIN_AUTH_SESSION_PERSISTENCE_FAILED": "Gagal menyimpan sesi.",
-  "DOMAIN_AUTH_SESSION_QUERY_FAILED": "Gagal memuat sesi."
+  "DOMAIN_AUTH_SESSION_QUERY_FAILED": "Gagal memuat sesi.",
+  "DOMAIN_SOLUTION_CLIENT_NOT_FOUND": "Solution client tidak ditemukan.",
+  "DOMAIN_SOLUTION_CLIENT_NAME_INVALID": "Nama client wajib diisi (maks 255 karakter).",
+  "DOMAIN_SOLUTION_CLIENT_SCOPE_INVALID": "Satu atau lebih scope tidak dikenal.",
+  "DOMAIN_SOLUTION_CLIENT_REVOKED": "Solution client sudah dicabut.",
+  "DOMAIN_SOLUTION_CLIENT_INVALID": "Solution client tidak valid.",
+  "DOMAIN_SOLUTION_CLIENT_PERSISTENCE_FAILED": "Gagal menyimpan solution client.",
+  "DOMAIN_SOLUTION_CLIENT_QUERY_FAILED": "Gagal memuat solution client."
 }

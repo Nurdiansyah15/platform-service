@@ -11,8 +11,10 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -195,6 +197,21 @@ func (s *TestServer) DELETE(path string, headers ...map[string]string) *httptest
 // DELETEBody untuk endpoint DELETE yang membutuhkan request body.
 func (s *TestServer) DELETEBody(path string, body any, headers ...map[string]string) *httptest.ResponseRecorder {
 	return s.do(http.MethodDelete, path, body, mergeHeaders(headers))
+}
+
+// POSTForm mengirim body application/x-www-form-urlencoded (mis. OAuth2 token endpoint).
+func (s *TestServer) POSTForm(path string, form url.Values, headers ...map[string]string) *httptest.ResponseRecorder {
+	req, err := http.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+	if err != nil {
+		panic("testhelper: new request: " + err.Error())
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for k, v := range mergeHeaders(headers) {
+		req.Header.Set(k, v)
+	}
+	w := httptest.NewRecorder()
+	s.Engine.ServeHTTP(w, req)
+	return w
 }
 
 func BearerHeader(token string) map[string]string {

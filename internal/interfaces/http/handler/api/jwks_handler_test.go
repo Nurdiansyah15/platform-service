@@ -122,14 +122,16 @@ func TestSigningKey_StartupKeepsSingleActiveKey(t *testing.T) {
 
 // ── JWT pada endpoint terproteksi ────────────────────────────────────────────
 
-func TestAuth_RealJWTAcceptedOnProtectedRoute(t *testing.T) {
+func TestAuth_ValidJWTForUnknownClientRejected(t *testing.T) {
+	// Tanda tangan sah, tapi client tidak terdaftar → ditolak oleh validasi DB.
+	// JWT service yang sah (hasil /oauth/token) diuji di oauth_handler_test.go.
 	issued, err := testSrv.Issuer.IssueServiceToken(context.Background(), port.ServiceTokenClaims{
-		ClientID: "client-1", SolutionID: "00000000-0000-0000-0000-000000000001", Scopes: []string{"catalog:sync"},
+		ClientID: "cli_tidak_ada", SolutionID: "00000000-0000-0000-0000-000000000001", Scopes: []string{"catalog:sync"},
 	})
 	require.NoError(t, err)
 
 	w := testSrv.GET("/api/v1/solutions", testhelper.BearerHeader(issued.Token))
-	assert.Equal(t, 200, w.Code, w.Body.String())
+	assert.Equal(t, 401, w.Code, w.Body.String())
 }
 
 func TestAuth_InvalidJWTRejected(t *testing.T) {
