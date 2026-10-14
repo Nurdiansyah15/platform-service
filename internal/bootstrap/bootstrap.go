@@ -26,6 +26,7 @@ import (
 	"platform-service/internal/app/usecase/subscription"
 	"platform-service/internal/app/usecase/system"
 	"platform-service/internal/app/usecase/tenant"
+	"platform-service/internal/app/usecase/usage"
 	"platform-service/internal/app/usecase/user"
 	"platform-service/internal/config"
 	"platform-service/internal/infrastructure/crypto"
@@ -118,6 +119,8 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	snapshotRepo := persistence.NewPostgresSnapshotRepository(opts.DB)
 	benefitValueSource := persistence.NewPostgresBenefitValueSource(opts.DB)
 	subscriptionQuery := persistence.NewPostgresSubscriptionQuery(opts.DB)
+	usageRecordRepo := persistence.NewPostgresUsageRecordRepository(opts.DB)
+	tenantUsageRepo := persistence.NewPostgresTenantUsageRepository(opts.DB)
 	transactor := persistence.NewPostgresTransactor(opts.DB)
 	outbox := persistence.NewPostgresEventOutbox()
 
@@ -217,6 +220,15 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Solutions:          solutionRepo,
 		Query:              subscriptionQuery,
 	})
+	usageUC := usage.NewUsageUseCase(usage.UsageDeps{
+		Tx:            transactor,
+		Records:       usageRecordRepo,
+		TenantUsage:   tenantUsageRepo,
+		Benefits:      benefitRepo,
+		Clients:       clientRepo,
+		Subscriptions: subscriptionRepo,
+		Members:       memberRepo,
+	})
 
 	// ── Authenticator ───────────────────────────────────────────────────────
 	// JWT diverifikasi dulu, lalu principal divalidasi ulang ke DB
@@ -255,6 +267,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 			Plan:     api.NewPlanHandler(planUC),
 			Addon:    api.NewAddonHandler(addonUC),
 			Sub:      api.NewSubscriptionHandler(subscriptionUC),
+			Usage:    api.NewUsageHandler(usageUC),
 		},
 	})
 

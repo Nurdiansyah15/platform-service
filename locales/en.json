@@ -124,5 +124,16 @@
   "DOMAIN_SUBSCRIPTION_ADDON_ALREADY_ACTIVE": "This add-on is already active on the subscription.",
   "DOMAIN_SUBSCRIPTION_ADDON_UNAVAILABLE": "The add-on is not available (not found, inactive, or from another solution).",
   "DOMAIN_SUBSCRIPTION_ADDON_QUANTITY_INVALID": "Quantity must be at least 1.",
-  "DOMAIN_AUTH_TENANT_NOT_SELECTABLE": "This tenant cannot be selected: you must be an active member, the tenant must be active, and it must subscribe to this solution."
+  "DOMAIN_AUTH_TENANT_NOT_SELECTABLE": "This tenant cannot be selected: you must be an active member, the tenant must be active, and it must subscribe to this solution.",
+  "DOMAIN_USAGE_QUANTITY_INVALID": "quantity must be a non-negative number with at most 4 decimals (greater than 0 for delta reports).",
+  "DOMAIN_USAGE_IDEMPOTENCY_KEY_INVALID": "idempotency_key is required (max 150 characters).",
+  "DOMAIN_USAGE_NOT_METERED": "This benefit is not metered (metering = none).",
+  "DOMAIN_USAGE_WRONG_MODE": "Counter benefits are reported with POST (delta); gauge benefits with PUT (absolute).",
+  "DOMAIN_USAGE_SOLUTION_MISMATCH": "The client may only report usage for its own solution.",
+  "DOMAIN_USAGE_NO_SUBSCRIPTION": "The tenant does not have an active subscription to this solution.",
+  "DOMAIN_USAGE_DUPLICATE_KEY": "idempotency_key has already been used.",
+  "DOMAIN_USAGE_IDEMPOTENCY_CONFLICT": "idempotency_key was already used with a different payload.",
+  "DOMAIN_USAGE_RECORD_NOT_FOUND": "Usage record not found.",
+  "DOMAIN_USAGE_PERSISTENCE_FAILED": "Failed to save usage.",
+  "DOMAIN_USAGE_QUERY_FAILED": "Failed to load usage."
 }

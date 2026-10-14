@@ -262,18 +262,16 @@ Keputusan desain di luar spec:
 - Test infra: `mustTenantOwner` kini memakai alur nyata (login → tenant → subscribe → switch-tenant); helper `mustSubscribe`, `mustSwitchTenant`, `mustSolutionID`, `newSubFixture`, `snapshotValues`, `eventTypesFor`. `tenantToken` (fake) hanya untuk tid tenant tempat user bukan member
 - Belum: event `entitlement.changed` belum memuat nilai entitlement (dihitung Fase 12); `past_due`/`expired` belum ada job otomatis (perlu scheduler billing)
 
-### Fase 11 — Usage & Metering
-- Tabel: `usage_records`, `tenant_usage`
-- Domain:
-  - Resolver periode (`never` / `billing_period` / `monthly`)
-  - counter = delta (`used += quantity`), gauge = absolute (`used = quantity`)
-  - `metering = none` ditolak
-  - Idempotent per `(solution_id, idempotency_key)`
-- Endpoint (service token, scope `usage:write`):
-  - [ ] `POST /tenants/{tenantId}/solutions/{solutionId}/usage` (MVP)
-  - [ ] `PUT /tenants/{tenantId}/solutions/{solutionId}/usage/{benefitCode}` (MVP)
-- Test: `usage_handler_test.go`
-  - scope kurang 403, client dari solution lain 403, idempotency key berulang tidak menambah, benefit `none` 422
+### Fase 11 — Usage & Metering ✅
+- Tabel: `usage_records` (composite FK benefit, unique `(solution_id, idempotency_key)`, CHECK mode, index spec), `tenant_usage` (PK `(tenant_id, benefit_id, period_start)`, composite FK benefit; **tambahan** `last_occurred_at` agar laporan gauge basi tidak menimpa)
+- Domain `usage`: VO `Quantity` (NUMERIC(18,4), angka/string), `Mode`, `IdempotencyKey`; entity `UsageRecord` (counter ← delta > 0, gauge ← absolute ≥ 0, none ditolak), `TenantUsage`; `ResolvePeriod` (never = periode tetap 1970-01-01 tanpa akhir; monthly = bulan kalender UTC; billing_period = periode subscription usable)
+- Akses: khusus token service `usage:write`; `solutionId` path harus milik client (403); tenant wajib subscribe usable (403)
+- Idempotensi: key sama + payload sama → 200 `replayed: true` (tidak diterapkan ulang); payload beda → 409. Insert record + update usage dalam satu transaksi; counter = upsert atomik `used = used + delta`
+- Endpoint:
+  - [x] `POST /tenants/{tenantId}/solutions/{solutionId}/usage` (MVP) — delta / counter, 201 diterapkan / 200 replay
+  - [x] `PUT /tenants/{tenantId}/solutions/{solutionId}/usage/{benefitCode}` (MVP) — absolute / gauge, laporan lebih lama dari `last_occurred_at` diabaikan
+- Test: `usage_handler_test.go` (termasuk 20 laporan paralel → total tepat), entity & quantity, `ResolvePeriod`, repository (gauge basi, duplikat key)
+- Belum: `limit` / `remaining` di respons & event `usage.limit_reached` (Fase 12, butuh EntitlementCalculator); delta negatif untuk koreksi tidak didukung
 
 ### Fase 12 — Effective Entitlements
 - Domain service `EntitlementCalculator`:

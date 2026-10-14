@@ -124,5 +124,16 @@
   "DOMAIN_SUBSCRIPTION_ADDON_ALREADY_ACTIVE": "Add-on ini sudah aktif di subscription.",
   "DOMAIN_SUBSCRIPTION_ADDON_UNAVAILABLE": "Add-on tidak tersedia (tidak ada, tidak aktif, atau milik solution lain).",
   "DOMAIN_SUBSCRIPTION_ADDON_QUANTITY_INVALID": "Quantity minimal 1.",
-  "DOMAIN_AUTH_TENANT_NOT_SELECTABLE": "Tenant ini tidak bisa dipilih: Anda harus member aktif, tenant harus aktif, dan tenant harus berlangganan solution ini."
+  "DOMAIN_AUTH_TENANT_NOT_SELECTABLE": "Tenant ini tidak bisa dipilih: Anda harus member aktif, tenant harus aktif, dan tenant harus berlangganan solution ini.",
+  "DOMAIN_USAGE_QUANTITY_INVALID": "quantity harus angka tidak negatif dengan maksimal 4 desimal (lebih dari 0 untuk laporan delta).",
+  "DOMAIN_USAGE_IDEMPOTENCY_KEY_INVALID": "idempotency_key wajib diisi (maks 150 karakter).",
+  "DOMAIN_USAGE_NOT_METERED": "Benefit ini tidak di-meter (metering = none).",
+  "DOMAIN_USAGE_WRONG_MODE": "Benefit counter dilaporkan lewat POST (delta); benefit gauge lewat PUT (absolute).",
+  "DOMAIN_USAGE_SOLUTION_MISMATCH": "Client hanya boleh melaporkan usage untuk solution miliknya.",
+  "DOMAIN_USAGE_NO_SUBSCRIPTION": "Tenant tidak memiliki subscription aktif untuk solution ini.",
+  "DOMAIN_USAGE_DUPLICATE_KEY": "idempotency_key sudah pernah dipakai.",
+  "DOMAIN_USAGE_IDEMPOTENCY_CONFLICT": "idempotency_key sudah dipakai dengan payload berbeda.",
+  "DOMAIN_USAGE_RECORD_NOT_FOUND": "Catatan usage tidak ditemukan.",
+  "DOMAIN_USAGE_PERSISTENCE_FAILED": "Gagal menyimpan usage.",
+  "DOMAIN_USAGE_QUERY_FAILED": "Gagal memuat usage."
 }

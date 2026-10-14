@@ -25,6 +25,9 @@ func (f fakeBenefits) FindByID(_ context.Context, id string) (*entity.Benefit, e
 	}
 	return nil, domainerr.New(constant.CodeBenefitNotFound)
 }
+func (f fakeBenefits) FindByCode(context.Context, string, string) (*entity.Benefit, error) {
+	return nil, domainerr.New(constant.CodeBenefitNotFound)
+}
 func (f fakeBenefits) FindByIDs(_ context.Context, ids []string) ([]*entity.Benefit, error) {
 	var out []*entity.Benefit
 	for _, id := range ids {

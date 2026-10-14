@@ -56,6 +56,15 @@ func (r *PostgresSubscriptionRepository) Save(ctx context.Context, s *entity.Sub
 }
 
 func (r *PostgresSubscriptionRepository) FindByID(ctx context.Context, id string) (*entity.Subscription, error) {
+	return r.findOne(ctx, `WHERE id = $1`, id)
+}
+
+func (r *PostgresSubscriptionRepository) FindUsable(ctx context.Context, tenantID, solutionID string) (*entity.Subscription, error) {
+	return r.findOne(ctx, `WHERE tenant_id = $1 AND solution_id = $2 AND status = ANY($3::text[])`,
+		tenantID, solutionID, valueobject.UsableStatuses)
+}
+
+func (r *PostgresSubscriptionRepository) findOne(ctx context.Context, where string, args ...any) (*entity.Subscription, error) {
 	var (
 		s                              entity.Subscription
 		status, cycle, price, currency string
@@ -63,7 +72,7 @@ func (r *PostgresSubscriptionRepository) FindByID(ctx context.Context, id string
 	err := execFromContext(ctx, r.db).QueryRowContext(ctx, `
 		SELECT id, tenant_id, solution_id, plan_id, status, billing_cycle, current_period_start, current_period_end,
 			price_at_purchase::text, currency, created_at, updated_at
-		FROM subscriptions WHERE id = $1`, id,
+		FROM subscriptions `+where, args...,
 	).Scan(&s.ID, &s.TenantID, &s.SolutionID, &s.PlanID, &status, &cycle, &s.CurrentPeriodStart, &s.CurrentPeriodEnd,
 		&price, &currency, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {

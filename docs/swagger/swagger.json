@@ -2908,6 +2908,221 @@
                 }
             }
         },
+        "/api/v1/tenants/{tenantId}/solutions/{solutionId}/usage": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "used = used + quantity untuk benefit metering counter. Idempotent per idempotency_key: 201 = diterapkan, 200 = replay (tidak diterapkan ulang).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Usage"
+                ],
+                "summary": "Report counter usage (delta)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Solution ID (harus solution client)",
+                        "name": "solutionId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Laporan",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.ReportUsageDeltaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.UsageReportResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.UsageReportResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/tenants/{tenantId}/solutions/{solutionId}/usage/{benefitCode}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "used = quantity untuk benefit metering gauge. Laporan dengan occurred_at lebih lama dari yang sudah diterapkan diabaikan. Idempotent per idempotency_key.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Usage"
+                ],
+                "summary": "Report gauge usage (absolute)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Solution ID (harus solution client)",
+                        "name": "solutionId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Benefit code",
+                        "name": "benefitCode",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Laporan",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.ReportUsageAbsoluteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.UsageReportResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/tenants/{tenantId}/subscriptions": {
             "get": {
                 "security": [
@@ -3951,6 +4166,54 @@
                 }
             }
         },
+        "dto.ReportUsageAbsoluteRequest": {
+            "type": "object",
+            "required": [
+                "idempotency_key",
+                "quantity"
+            ],
+            "properties": {
+                "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 150
+                },
+                "occurred_at": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "description": "Quantity — nilai absolut terkini (angka atau string angka ≥ 0, maks 4 desimal).",
+                    "type": "string",
+                    "example": "120"
+                }
+            }
+        },
+        "dto.ReportUsageDeltaRequest": {
+            "type": "object",
+            "required": [
+                "benefit_code",
+                "idempotency_key",
+                "quantity"
+            ],
+            "properties": {
+                "benefit_code": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 150
+                },
+                "occurred_at": {
+                    "description": "OccurredAt — default waktu server.",
+                    "type": "string"
+                },
+                "quantity": {
+                    "description": "Quantity — angka atau string angka \u003e 0, maks 4 desimal.",
+                    "type": "string",
+                    "example": "1"
+                }
+            }
+        },
         "dto.SelectableTenantResponse": {
             "type": "object",
             "properties": {
@@ -4220,6 +4483,35 @@
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "dto.UsageReportResponse": {
+            "type": "object",
+            "properties": {
+                "benefit_code": {
+                    "type": "string"
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "occurred_at": {
+                    "type": "string"
+                },
+                "period_end": {
+                    "type": "string"
+                },
+                "period_start": {
+                    "type": "string"
+                },
+                "replayed": {
+                    "description": "Replayed — true bila idempotency_key sudah pernah diterima (tidak diterapkan ulang).",
+                    "type": "boolean"
+                },
+                "used": {
+                    "description": "Used — pemakaian terkini pada periode tersebut (string presisi 4 desimal).",
+                    "type": "string",
+                    "example": "15.0000"
                 }
             }
         },
