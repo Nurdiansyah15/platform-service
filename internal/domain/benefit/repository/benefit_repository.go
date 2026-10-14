@@ -10,4 +10,6 @@ type BenefitRepository interface {
 	// Save insert/update. Code bentrok dalam solution → CodeBenefitCodeDuplicate.
 	Save(ctx context.Context, b *entity.Benefit) error
 	FindByID(ctx context.Context, id string) (*entity.Benefit, error)
+	// FindByIDs mengembalikan benefit yang ditemukan (urutan tidak dijamin; ID tak dikenal diabaikan).
+	FindByIDs(ctx context.Context, ids []string) ([]*entity.Benefit, error)
 }

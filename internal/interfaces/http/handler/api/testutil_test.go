@@ -208,3 +208,19 @@ func mustCreateBenefit(t *testing.T, solutionID, code, valueType, aggregation st
 	testhelper.DecodeBody(t, w, &got)
 	return got.ID
 }
+
+// mustCreatePlan membuat plan via API (admin) dan mengembalikan ID-nya. extra menimpa field default.
+func mustCreatePlan(t *testing.T, solutionID, code string, extra map[string]any) string {
+	t.Helper()
+	body := map[string]any{"code": code, "name": "Plan " + code, "price": "100000"}
+	for k, v := range extra {
+		body[k] = v
+	}
+	w := testSrv.POST("/api/v1/solutions/"+solutionID+"/plans", body, adminHeader())
+	require.Equal(t, 201, w.Code, "mustCreatePlan body=%s", w.Body.String())
+	var got struct {
+		ID string `json:"id"`
+	}
+	testhelper.DecodeBody(t, w, &got)
+	return got.ID
+}

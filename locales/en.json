@@ -92,5 +92,17 @@
   "DOMAIN_BENEFIT_USAGE_RESET_INVALID": "usage_reset other than never is only allowed for counter metering.",
   "DOMAIN_BENEFIT_VALUE_INVALID": "Benefit value does not match the benefit's value_type.",
   "DOMAIN_BENEFIT_PERSISTENCE_FAILED": "Failed to save benefit.",
-  "DOMAIN_BENEFIT_QUERY_FAILED": "Failed to load benefit."
+  "DOMAIN_BENEFIT_QUERY_FAILED": "Failed to load benefit.",
+  "DOMAIN_PLAN_NOT_FOUND": "Plan not found.",
+  "DOMAIN_PLAN_CODE_DUPLICATE": "Plan code is already used in this solution.",
+  "DOMAIN_PLAN_CODE_INVALID": "Plan code may only contain lowercase letters, numbers, and hyphens (max 100 characters).",
+  "DOMAIN_PLAN_NAME_INVALID": "Plan name is required (max 255 characters).",
+  "DOMAIN_PLAN_PERSISTENCE_FAILED": "Failed to save plan.",
+  "DOMAIN_PLAN_QUERY_FAILED": "Failed to load plan.",
+  "DOMAIN_PRICING_PRICE_INVALID": "Price must be a non-negative number with at most 2 decimals.",
+  "DOMAIN_PRICING_CURRENCY_INVALID": "Currency must be a 3-letter ISO 4217 code.",
+  "DOMAIN_PRICING_BILLING_CYCLE_INVALID": "billing_cycle must be monthly or yearly.",
+  "DOMAIN_BENEFIT_ASSIGNMENT_DUPLICATE": "The same benefit is listed more than once.",
+  "DOMAIN_BENEFIT_ASSIGNMENT_UNKNOWN": "One or more benefits were not found.",
+  "DOMAIN_BENEFIT_SOLUTION_MISMATCH": "Benefit belongs to a different solution."
 }

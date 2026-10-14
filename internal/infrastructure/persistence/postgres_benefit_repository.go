@@ -62,6 +62,31 @@ func (r *PostgresBenefitRepository) FindByID(ctx context.Context, id string) (*e
 	return b, nil
 }
 
+func (r *PostgresBenefitRepository) FindByIDs(ctx context.Context, ids []string) ([]*entity.Benefit, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := execFromContext(ctx, r.db).QueryContext(ctx,
+		`SELECT `+benefitColumns+` FROM benefits WHERE id = ANY($1::uuid[])`, ids)
+	if err != nil {
+		return nil, domainerr.Wrap(constant.CodeBenefitQueryFailed, err)
+	}
+	defer rows.Close()
+
+	out := make([]*entity.Benefit, 0, len(ids))
+	for rows.Next() {
+		b, err := scanBenefit(rows)
+		if err != nil {
+			return nil, domainerr.Wrap(constant.CodeBenefitQueryFailed, err)
+		}
+		out = append(out, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, domainerr.Wrap(constant.CodeBenefitQueryFailed, err)
+	}
+	return out, nil
+}
+
 func scanBenefit(row interface{ Scan(dest ...any) error }) (*entity.Benefit, error) {
 	var (
 		b                                             entity.Benefit

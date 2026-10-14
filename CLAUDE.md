@@ -319,7 +319,7 @@ internal/interfaces/http/handler/api/
   main_test.go      → TestMain, var testSrv, testOnPremSrv, testAdminTok (login admin sungguhan via seeder)
   testutil_test.go  → adminHeader, userHeader (fake), mustCreateSolution, mustCreateUser, mustLogin,
                       mustLoginNewUser, mustCreateClient, mustServiceToken, mustCreateTenant,
-                      mustTenantOwner, tenantToken, principalUser, mustCreateCompany, mustCreateBenefit,
+                      mustTenantOwner, tenantToken, principalUser, mustCreateCompany, mustCreateBenefit, mustCreatePlan,
                       countEvents, ...
                       (helper lewat API, prefix must)
   Catatan: FakeAuthenticator.ServiceToken tidak melewati validasi client di DB — untuk skenario
@@ -344,6 +344,7 @@ make lint            # golangci-lint v2 via Docker
 Docker harus jalan (testcontainers).
 
 ### Nuance
+- Jangan menamai kolom output sama dengan kolom yang dipakai `ORDER BY` bila tipenya berubah (mis. `price::text`): PostgreSQL mengutamakan nama kolom output → urutan jadi teks. Qualify kolom sort dengan nama/alias tabel (`plans.price`).
 - Test repository di dalam `WithTestTx` yang sengaja memicu error SQL (mis. unique violation) wajib dibungkus `SAVEPOINT` / `ROLLBACK TO SAVEPOINT` bila masih ada statement setelahnya — Postgres membatalkan seluruh transaksi setelah satu error.
 - `http.NewRequest` di testserver membuat `RemoteAddr` kosong → `c.ClientIP()` = `""`. Untuk kolom `INET` gunakan `NULLIF($n, '')::inet`.
 

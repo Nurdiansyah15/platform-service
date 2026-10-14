@@ -18,6 +18,7 @@ import (
 	"platform-service/internal/app/usecase/auth"
 	"platform-service/internal/app/usecase/benefit"
 	"platform-service/internal/app/usecase/organization"
+	"platform-service/internal/app/usecase/plan"
 	"platform-service/internal/app/usecase/signingkey"
 	"platform-service/internal/app/usecase/solution"
 	"platform-service/internal/app/usecase/solutionclient"
@@ -104,6 +105,9 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	orgQuery := persistence.NewPostgresOrganizationQuery(opts.DB)
 	benefitRepo := persistence.NewPostgresBenefitRepository(opts.DB)
 	benefitQuery := persistence.NewPostgresBenefitQuery(opts.DB)
+	planRepo := persistence.NewPostgresPlanRepository(opts.DB)
+	planBenefitRepo := persistence.NewPostgresPlanBenefitRepository(opts.DB)
+	planQuery := persistence.NewPostgresPlanQuery(opts.DB)
 	transactor := persistence.NewPostgresTransactor(opts.DB)
 	outbox := persistence.NewPostgresEventOutbox()
 
@@ -165,6 +169,14 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	companyUC := organization.NewCompanyUseCase(orgDeps)
 	branchUC := organization.NewBranchUseCase(orgDeps)
 	benefitUC := benefit.NewBenefitUseCase(benefit.BenefitDeps{Repo: benefitRepo, Query: benefitQuery, Solutions: solutionRepo})
+	planUC := plan.NewPlanUseCase(plan.PlanDeps{
+		Tx:           transactor,
+		Plans:        planRepo,
+		PlanBenefits: planBenefitRepo,
+		Benefits:     benefitRepo,
+		Solutions:    solutionRepo,
+		Query:        planQuery,
+	})
 
 	// ── Authenticator ───────────────────────────────────────────────────────
 	// JWT diverifikasi dulu, lalu principal divalidasi ulang ke DB
@@ -200,6 +212,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 			Tenant:   api.NewTenantHandler(tenantUC, memberUC),
 			Org:      api.NewOrganizationHandler(companyUC, branchUC),
 			Benefit:  api.NewBenefitHandler(benefitUC),
+			Plan:     api.NewPlanHandler(planUC),
 		},
 	})
 

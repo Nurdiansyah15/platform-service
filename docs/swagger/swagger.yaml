@@ -13,6 +13,25 @@ definitions:
       user_id:
         type: string
     type: object
+  dto.AssignedBenefitResponse:
+    properties:
+      aggregation_strategy:
+        type: string
+      benefit_id:
+        type: string
+      code:
+        type: string
+      metering:
+        type: string
+      name:
+        type: string
+      unit:
+        type: string
+      value:
+        type: object
+      value_type:
+        type: string
+    type: object
   dto.AuthTokenResponse:
     properties:
       access_token:
@@ -60,6 +79,16 @@ definitions:
         type: string
       value_type:
         type: string
+    type: object
+  dto.BenefitValueInput:
+    properties:
+      benefit_id:
+        type: string
+      value:
+        type: object
+    required:
+    - benefit_id
+    - value
     type: object
   dto.BranchResponse:
     properties:
@@ -154,6 +183,34 @@ definitions:
         enum:
         - active
         - inactive
+        type: string
+    required:
+    - code
+    - name
+    type: object
+  dto.CreatePlanRequest:
+    properties:
+      billing_cycle:
+        enum:
+        - monthly
+        - yearly
+        type: string
+      code:
+        maxLength: 100
+        type: string
+      currency:
+        type: string
+      description:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        maxLength: 255
+        type: string
+      price:
+        description: Price — angka JSON atau string angka, maks 2 desimal (mis. 150000
+          atau "150000.50").
+        example: "150000.00"
         type: string
     required:
     - code
@@ -312,6 +369,32 @@ definitions:
       token_type:
         type: string
     type: object
+  dto.PlanResponse:
+    properties:
+      billing_cycle:
+        type: string
+      code:
+        type: string
+      created_at:
+        type: string
+      currency:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      price:
+        example: "150000.00"
+        type: string
+      solution_id:
+        type: string
+      updated_at:
+        type: string
+    type: object
   dto.RefreshTokenRequest:
     properties:
       refresh_token:
@@ -319,6 +402,15 @@ definitions:
         type: string
     required:
     - refresh_token
+    type: object
+  dto.ReplaceBenefitsRequest:
+    properties:
+      benefits:
+        items:
+          $ref: '#/definitions/dto.BenefitValueInput'
+        type: array
+    required:
+    - benefits
     type: object
   dto.SessionResponse:
     properties:
@@ -802,6 +894,97 @@ paths:
       summary: OAuth2 token (client credentials)
       tags:
       - Service Auth
+  /api/v1/plans/{planId}/benefits:
+    get:
+      parameters:
+      - description: Plan ID
+        in: path
+        name: planId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.AssignedBenefitResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List plan benefits
+      tags:
+      - Plans
+    put:
+      consumes:
+      - application/json
+      description: 'Replace-all: daftar ini menjadi seluruh benefit plan (array kosong
+        = hapus semua). Tidak memengaruhi subscription berjalan.'
+      parameters:
+      - description: Plan ID
+        in: path
+        name: planId
+        required: true
+        type: string
+      - description: Benefit values
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ReplaceBenefitsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.AssignedBenefitResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Replace plan benefits
+      tags:
+      - Plans
   /api/v1/solution-clients/{clientId}/rotate-secret:
     post:
       description: Secret lama langsung tidak berlaku; secret baru hanya ditampilkan
@@ -1159,6 +1342,130 @@ paths:
       summary: Create solution client
       tags:
       - Solution Clients
+  /api/v1/solutions/{solutionId}/plans:
+    get:
+      description: Non-admin hanya melihat plan aktif dari solution aktif.
+      parameters:
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Filter (platform admin saja)
+        in: query
+        name: is_active
+        type: boolean
+      - description: monthly | yearly
+        in: query
+        name: billing_cycle
+        type: string
+      - description: Cari di code / name
+        in: query
+        name: search
+        type: string
+      - description: Halaman
+        in: query
+        name: page
+        type: integer
+      - description: Jumlah per halaman (maks 100)
+        in: query
+        name: limit
+        type: integer
+      - description: price | code | name | created_at
+        in: query
+        name: sort_by
+        type: string
+      - description: asc | desc
+        in: query
+        name: sort_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.PlanResponse'
+                  type: array
+                meta:
+                  $ref: '#/definitions/dto.Meta'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List plans of a solution
+      tags:
+      - Plans
+    post:
+      consumes:
+      - application/json
+      description: price boleh angka atau string angka (maks 2 desimal); respons selalu
+        string (mis. "150000.00").
+      parameters:
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Plan
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreatePlanRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.PlanResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Create plan
+      tags:
+      - Plans
   /api/v1/tenants:
     get:
       description: Platform admin melihat semua tenant; user lain hanya tenant tempat

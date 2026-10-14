@@ -92,5 +92,17 @@
   "DOMAIN_BENEFIT_USAGE_RESET_INVALID": "usage_reset selain never hanya untuk metering counter.",
   "DOMAIN_BENEFIT_VALUE_INVALID": "Nilai benefit tidak sesuai value_type benefit.",
   "DOMAIN_BENEFIT_PERSISTENCE_FAILED": "Gagal menyimpan benefit.",
-  "DOMAIN_BENEFIT_QUERY_FAILED": "Gagal memuat benefit."
+  "DOMAIN_BENEFIT_QUERY_FAILED": "Gagal memuat benefit.",
+  "DOMAIN_PLAN_NOT_FOUND": "Plan tidak ditemukan.",
+  "DOMAIN_PLAN_CODE_DUPLICATE": "Code plan sudah dipakai di solution ini.",
+  "DOMAIN_PLAN_CODE_INVALID": "Code plan hanya boleh huruf kecil, angka, dan tanda hubung (maks 100 karakter).",
+  "DOMAIN_PLAN_NAME_INVALID": "Nama plan wajib diisi (maks 255 karakter).",
+  "DOMAIN_PLAN_PERSISTENCE_FAILED": "Gagal menyimpan plan.",
+  "DOMAIN_PLAN_QUERY_FAILED": "Gagal memuat plan.",
+  "DOMAIN_PRICING_PRICE_INVALID": "Harga harus angka tidak negatif dengan maksimal 2 desimal.",
+  "DOMAIN_PRICING_CURRENCY_INVALID": "Mata uang harus kode ISO 4217 tiga huruf.",
+  "DOMAIN_PRICING_BILLING_CYCLE_INVALID": "billing_cycle harus monthly atau yearly.",
+  "DOMAIN_BENEFIT_ASSIGNMENT_DUPLICATE": "Benefit yang sama disebutkan lebih dari sekali.",
+  "DOMAIN_BENEFIT_ASSIGNMENT_UNKNOWN": "Satu atau lebih benefit tidak ditemukan.",
+  "DOMAIN_BENEFIT_SOLUTION_MISMATCH": "Benefit milik solution lain."
 }

@@ -203,15 +203,22 @@ Keputusan desain di luar spec:
 - Test infra: `mustCreateBenefit`
 - Belum: representasi "unlimited" untuk limit angka (mis. `-1` / `null`) — diputuskan saat EntitlementCalculator (Fase 12)
 
-### Fase 8 — Plans & Plan Benefits
-- Tabel: `plans`, `plan_benefits` (composite FK)
+### Fase 8 — Plans & Plan Benefits ✅
+- Tabel: `plans` (soft delete, partial unique `(solution_id, code)`, `UNIQUE (id, solution_id)`, CHECK billing_cycle & `price >= 0`), `plan_benefits` (PK `(plan_id, benefit_id)`, composite FK ke `plans(id, solution_id)` & `benefits(id, solution_id)`, index `benefit_id`)
+- Domain:
+  - `pricing` (dipakai plan, add-on, subscription): VO `Price` (NUMERIC(18,2) sebagai string, tanpa float), `Currency` (ISO 4217, default IDR), `BillingCycle`
+  - `plan`: entity `Plan`, `PlanBenefit`, VO `PlanCode`
+  - `benefit/service.AssignmentValidator` (dipakai juga add-on): benefit unik, ada, satu solution, nilai cocok `value_type`
+- Harga: request menerima angka atau string angka (maks 2 desimal, tanpa notasi eksponen); respons selalu string (`"150000.00"`)
+- Akses: tulis = platform admin + `LICENSE_MANAGED`; baca = token valid, non-admin hanya plan `is_active` dari solution aktif (selain itu 404)
 - Endpoint:
-  - [ ] `POST /solutions/{solutionId}/plans` (MVP)
-  - [ ] `GET /solutions/{solutionId}/plans` (MVP)
-  - [ ] `GET /plans/{planId}/benefits` (MVP)
-  - [ ] `PUT /plans/{planId}/benefits` (MVP, replace-all)
-- Test: `plan_handler_test.go`
-  - benefit dari solution lain 422, value tidak cocok `value_type` 422, PUT idempotent
+  - [x] `POST /solutions/{solutionId}/plans` (MVP)
+  - [x] `GET /solutions/{solutionId}/plans` (MVP) — default urut harga termurah, filter `is_active` (admin) / `billing_cycle` / `search`
+  - [x] `GET /plans/{planId}/benefits` (MVP)
+  - [x] `PUT /plans/{planId}/benefits` (MVP) — replace-all dalam satu transaksi, idempotent, array kosong = hapus semua
+- Tidak ada event outbox (perubahan plan tidak memengaruhi subscription berjalan)
+- Test: `plan_handler_test.go`, pricing VO, plan entity, `assignment_validator_test.go`, repository (NUMERIC round trip, composite FK menolak benefit lintas solution)
+- Bug yang ditemukan test: `ORDER BY price` merujuk kolom output `price::text` → urut teks; diperbaiki dengan kolom ter-qualify (`plans.price`)
 
 ### Fase 9 — Add-ons & Add-on Benefits
 - Tabel: `addons`, `addon_benefits` (composite FK)
