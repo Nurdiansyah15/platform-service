@@ -1,11 +1,20 @@
 package api_test
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"testing"
 
 	"platform-service/internal/config"
+	"platform-service/internal/seeders"
 	"platform-service/internal/testhelper"
+)
+
+const (
+	testPassword = "Secret123!"
+	// testConsoleSolution — solution aktif yang dipakai login platform admin di test.
+	testConsoleSolution = "platform-console-test"
 )
 
 var (
@@ -13,7 +22,7 @@ var (
 	testSrv *testhelper.TestServer
 	// testOnPremSrv — server mode on_prem di atas DB yang sama, untuk skenario LICENSE_MANAGED.
 	testOnPremSrv *testhelper.TestServer
-	// testAdminTok — token platform admin (fake sampai login nyata tersedia di Fase 3).
+	// testAdminTok — access token platform admin hasil login sungguhan.
 	testAdminTok string
 )
 
@@ -21,9 +30,33 @@ func TestMain(m *testing.M) {
 	var cleanup func()
 	testSrv, cleanup = testhelper.MustStartTestServer()
 	testOnPremSrv = testSrv.MustDerive(testhelper.WithDeploymentMode(config.DeploymentOnPrem))
-	testAdminTok = testSrv.Auth.PlatformAdminToken()
+	testAdminTok = mustSetupPlatformAdmin()
 
 	code := m.Run()
 	cleanup()
 	os.Exit(code)
+}
+
+// mustSetupPlatformAdmin menjalankan seeder platform admin (sama dengan produksi),
+// lalu login lewat API untuk mendapatkan access token.
+func mustSetupPlatformAdmin() string {
+	ctx := context.Background()
+	if _, err := testSrv.DB.ExecContext(ctx,
+		`INSERT INTO solutions (code, name) VALUES ($1, 'Platform Console (test)')`, testConsoleSolution); err != nil {
+		panic(fmt.Sprintf("mustSetupPlatformAdmin: seed solution: %v", err))
+	}
+
+	email := testhelper.UniqueEmail("platform-admin")
+	seeder := seeders.PlatformAdminSeeder{Email: email, Password: testPassword, Hasher: testhelper.TestPasswordHasher()}
+	if err := seeder.Run(ctx, testSrv.DB); err != nil {
+		panic(fmt.Sprintf("mustSetupPlatformAdmin: seeder: %v", err))
+	}
+
+	w := testSrv.POST("/api/v1/auth/login", map[string]any{
+		"email": email, "password": testPassword, "solution": testConsoleSolution,
+	})
+	if w.Code != 200 {
+		panic(fmt.Sprintf("mustSetupPlatformAdmin: login gagal %d — %s", w.Code, w.Body.String()))
+	}
+	return decodeTokens(w.Body.Bytes()).AccessToken
 }

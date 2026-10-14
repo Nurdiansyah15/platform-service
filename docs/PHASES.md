@@ -112,27 +112,31 @@ Keputusan desain di luar spec:
 - Test: `jwks_handler_test.go`, `jwttoken_test.go` (round trip, rotasi, token ditolak: payload diubah / HS256 / issuer lain / kedaluwarsa / kid tak dikenal / claim kurang), `key_store_test.go`, `signing_key_test.go`, `postgres_signing_key_repository_test.go`
 - Belum: pengecekan sesi & status user pada token user (Fase 3), status solution client pada token service (Fase 4), endpoint rotasi (L7)
 
-### Fase 3 — Users & Auth Session
-- Tabel: `users` (+ `is_platform_admin`), `auth_sessions`
+### Fase 3 — Users & Auth Session ✅
+- Tabel: `users` (+ `is_platform_admin`, CHECK email lowercase), `auth_sessions` (unique `refresh_token_hash`, index sesi aktif; FK `tenant_id` menyusul Fase 5)
 - Domain:
-  - `User` (status, password bcrypt)
-  - `AuthSession` (refresh token opaque, simpan hash SHA-256, rotate, revoke)
-  - Claim user token: `iss, sub, aud, tid, sid, typ=user, iat, exp, jti`
+  - `User` (VO `Email` ter-normalisasi, `UserStatus`, `ValidatePassword` 8–72 karakter)
+  - `AuthSession` (`EnsureUsable`, `Rotate` dengan masa berlaku sliding, `Revoke` idempotent)
+- Usecase:
+  - `AuthUseCase`: `Login`, `Refresh`, `Logout`, `Me`, `ResolveUserPrincipal`
+  - `UserUseCase`: `Create`, `EnsurePlatformAdmin`
+- Keamanan:
+  - Email/password salah & email tidak terdaftar → 401 dengan pesan sama + waktu setara (dummy bcrypt)
+  - Status user dicek setelah password benar (tidak membocorkan status akun)
+  - Refresh token opaque 256 bit, disimpan sebagai SHA-256; rotasi compare-and-swap (`SaveRotation`)
+  - Setiap request token user divalidasi ke DB: sesi aktif, user `active`, solution `active`, claim cocok dengan sesi; `IsPlatformAdmin` diisi dari DB
 - Endpoint:
-  - [ ] `POST /auth/login` (MVP; wajib `solution`)
-  - [ ] `POST /auth/refresh` (MVP)
-  - [ ] `POST /auth/logout` (MVP)
-  - [ ] `GET /auth/me` (MVP)
-  - [ ] `POST /users` (enabler, admin)
-- Lainnya: middleware user token aktif (cek signature + sesi tidak revoked), seeder platform admin
-- Tambah pengecekan di atas `jwttoken.Authenticator` untuk token user: sesi tidak revoked/expired, user `active`, isi `IsPlatformAdmin` dari DB
-- Test: `testAdminTok` di `main_test.go` diganti hasil login platform admin sungguhan. `FakeAuthenticator` tetap tersedia (sudah dirantai sebelum JWT)
-- Test: `auth_handler_test.go`, `user_handler_test.go`
-  - password salah 401, user suspended 403, solution tidak ada 422/404
-  - refresh rotate → refresh token lama ditolak
-  - logout → refresh ditolak
-  - `/auth/me` 200 / 401
-- Catatan: `ip_address` pakai `NULLIF($n, '')::inet` (`RemoteAddr` kosong di test)
+  - [x] `POST /auth/login` (MVP; wajib `solution`)
+  - [x] `POST /auth/refresh` (MVP)
+  - [x] `POST /auth/logout` (MVP)
+  - [x] `GET /auth/me` (MVP)
+  - [x] `POST /users` (enabler, admin)
+- Seeder: `platform-admin` (`PLATFORM_ADMIN_EMAIL`, `PLATFORM_ADMIN_PASSWORD`, `PLATFORM_ADMIN_NAME`), idempotent, tidak menimpa password user lama
+- Test: `auth_handler_test.go`, `user_handler_test.go`, entity user & session, repository (termasuk konflik rotasi & kolom INET), seeder. `testAdminTok` kini hasil login sungguhan via seeder
+- Catatan:
+  - Platform admin login lewat solution aktif mana pun (spec tidak punya solution "console")
+  - `ResolveUserPrincipal` = 3 query per request; digabung jadi 1 query bila perlu optimasi
+  - Belum ada deteksi pemakaian ulang refresh token lama (reuse detection → revoke sesi) — kandidat L1
 
 ### Fase 4 — Solution Clients & Service Auth
 - Tabel: `solution_clients`
@@ -149,7 +153,7 @@ Keputusan desain di luar spec:
 - Seed: `MustSeedSolutionClient` (return token service siap pakai)
 
 ### Fase 5 — Tenant & Membership
-- Tabel: `tenants`, `tenant_members`
+- Tabel: `tenants`, `tenant_members` (+ FK `auth_sessions.tenant_id` → `tenants(id)`)
 - Domain:
   - `Tenant`, `TenantMember`
   - Policy akses sementara: platform admin **atau** member aktif (lihat Item Terbuka)

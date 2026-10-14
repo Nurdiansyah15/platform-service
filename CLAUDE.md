@@ -233,6 +233,8 @@ Setiap perubahan yang ada di katalog event (spec §2.9) menulis baris `events` d
 - Middleware (`interfaces/http/middleware/auth.go`): `Authenticate(port.TokenAuthenticator)` menyimpan `*principal.Principal` di gin context (ambil dengan `middleware.PrincipalFrom(c)`), lalu guard `RequireUser`, `RequireService(scope)`, `RequireUserOrService(scope)`, `RequirePlatformAdmin`, `RequireActiveTenant`. Handler meneruskan principal ke usecase; usecase tidak membaca gin context.
 - Route terproteksi didaftarkan di `Routes.Authenticated` (sudah memasang `Authenticate`); route publik di `Routes.V1`.
 - Token JWT RS256 diterbitkan lewat `port.TokenIssuer` dan diverifikasi `jwttoken.Authenticator` (key dari `signing_keys` + `port.KeyStore`). Private key tidak pernah disimpan di DB maupun di-log.
+- Token user selalu divalidasi ulang ke DB oleh `AuthUseCase.ResolveUserPrincipal` (dirangkai di `bootstrap`): sesi aktif, user & solution `active`, `tid` sama dengan sesi. Jangan mempercayai `IsPlatformAdmin` dari sumber lain.
+- Pesan error login tidak boleh membedakan "email tidak terdaftar" dan "password salah".
 - Secret (client secret, refresh token) hanya disimpan sebagai hash; webhook secret dienkripsi. Secret mentah hanya ditampilkan sekali di respons create/rotate.
 
 ### 8.6 Deployment mode
@@ -303,7 +305,8 @@ internal/testhelper/
                     TestServer.Issuer → menerbitkan JWT asli; TestServer.KeyStore (memory)
                     Authenticator test = FakeAuthenticator dulu, lalu verifier JWT
   fake_auth.go    → FakeAuthenticator: UserToken, PlatformAdminToken, ServiceToken, Issue(principal)
-  seed.go         → UniqueCode, MustSeedSolution, MustSeedSigningKey, ... (insert langsung ke DB)
+  seed.go         → UniqueCode, UniqueEmail, MustSeedSolution, MustSeedSigningKey, SetUserStatus, ... (insert langsung ke DB)
+  TestPasswordHasher() → bcrypt cost minimum (dipakai TestServer & seeder di test)
   txhelper.go     → WithTestTx (selalu rollback)
   assert.go       → AssertDomainError
   (ditambah saat dibutuhkan fase domain)
@@ -311,8 +314,9 @@ internal/testhelper/
   noop.go         → fake KeyStore, fake clock, fake webhook sender
 
 internal/interfaces/http/handler/api/
-  main_test.go      → TestMain, var testSrv, testOnPremSrv, testAdminTok
-  testutil_test.go  → adminHeader, userHeader, mustCreateSolution, ... (helper lewat API, prefix must)
+  main_test.go      → TestMain, var testSrv, testOnPremSrv, testAdminTok (login admin sungguhan via seeder)
+  testutil_test.go  → adminHeader, userHeader (fake), mustCreateSolution, mustCreateUser, mustLogin,
+                      mustLoginNewUser, ... (helper lewat API, prefix must)
 ```
 
 ### Test lain

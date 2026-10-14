@@ -39,3 +39,15 @@ func MustSeedSigningKey(t *testing.T, srv *TestServer, status string) string {
 	require.NoError(t, err, "MustSeedSigningKey")
 	return kid
 }
+
+// UniqueEmail menghasilkan email unik untuk test.
+func UniqueEmail(prefix string) string {
+	return prefix + "+" + uuid.NewString()[:8] + "@test.local"
+}
+
+// SetUserStatus mengubah status user langsung di DB (mis. untuk skenario suspended).
+func SetUserStatus(t *testing.T, db *sql.DB, userID, status string) {
+	t.Helper()
+	_, err := db.ExecContext(context.Background(), `UPDATE users SET status = $2 WHERE id = $1`, userID, status)
+	require.NoError(t, err, "SetUserStatus")
+}

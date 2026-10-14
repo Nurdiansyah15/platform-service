@@ -1,5 +1,26 @@
 basePath: /
 definitions:
+  dto.AuthTokenResponse:
+    properties:
+      access_token:
+        type: string
+      access_token_expires_at:
+        type: string
+      expires_in:
+        type: integer
+      refresh_token:
+        type: string
+      refresh_token_expires_at:
+        type: string
+      session_id:
+        type: string
+      tenant_id:
+        description: TenantID tenant aktif; null bila user belum memilih tenant (diisi
+          mulai Fase 10).
+        type: string
+      token_type:
+        type: string
+    type: object
   dto.CreateSolutionRequest:
     properties:
       code:
@@ -17,6 +38,32 @@ definitions:
         type: string
     required:
     - code
+    - name
+    type: object
+  dto.CreateUserRequest:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      is_platform_admin:
+        type: boolean
+      name:
+        maxLength: 255
+        type: string
+      password:
+        description: 'Password opsional: user tanpa password belum bisa login (mis.
+          menunggu undangan).'
+        maxLength: 72
+        minLength: 8
+        type: string
+      status:
+        enum:
+        - active
+        - inactive
+        - suspended
+        type: string
+    required:
+    - email
     - name
     type: object
   dto.HealthResponse:
@@ -50,6 +97,30 @@ definitions:
           $ref: '#/definitions/dto.JWK'
         type: array
     type: object
+  dto.LoginRequest:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      password:
+        maxLength: 72
+        type: string
+      solution:
+        description: Solution adalah solutions.code tujuan login (menjadi aud token).
+        maxLength: 100
+        type: string
+    required:
+    - email
+    - password
+    - solution
+    type: object
+  dto.MeResponse:
+    properties:
+      session:
+        $ref: '#/definitions/dto.SessionResponse'
+      user:
+        $ref: '#/definitions/dto.UserResponse'
+    type: object
   dto.Meta:
     properties:
       current_page:
@@ -60,6 +131,27 @@ definitions:
         type: integer
       total_pages:
         type: integer
+    type: object
+  dto.RefreshTokenRequest:
+    properties:
+      refresh_token:
+        maxLength: 200
+        type: string
+    required:
+    - refresh_token
+    type: object
+  dto.SessionResponse:
+    properties:
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      solution:
+        $ref: '#/definitions/dto.SolutionSummary'
+      tenant_id:
+        type: string
     type: object
   dto.SolutionResponse:
     properties:
@@ -74,6 +166,34 @@ definitions:
       name:
         type: string
       permission_catalog_version:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  dto.SolutionSummary:
+    properties:
+      code:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  dto.UserResponse:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      has_password:
+        type: boolean
+      id:
+        type: string
+      is_platform_admin:
+        type: boolean
+      name:
         type: string
       status:
         type: string
@@ -122,6 +242,127 @@ paths:
       summary: JSON Web Key Set
       tags:
       - Service Auth
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Kredensial + code solution tujuan
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.AuthTokenResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      summary: Login
+      tags:
+      - Auth
+  /api/v1/auth/logout:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/respond.SuccessBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Logout (revoke sesi saat ini)
+      tags:
+      - Auth
+  /api/v1/auth/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.MeResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: User & sesi saat ini
+      tags:
+      - Auth
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Refresh token
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.AuthTokenResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      summary: Refresh token
+      tags:
+      - Auth
   /api/v1/solutions:
     get:
       parameters:
@@ -258,6 +499,50 @@ paths:
       summary: Get solution
       tags:
       - Solution Catalog
+  /api/v1/users:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.UserResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Create user
+      tags:
+      - Users
   /healthz:
     get:
       produces:

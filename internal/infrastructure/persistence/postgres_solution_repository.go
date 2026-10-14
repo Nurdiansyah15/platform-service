@@ -46,8 +46,15 @@ func (r *PostgresSolutionRepository) Save(ctx context.Context, s *entity.Solutio
 }
 
 func (r *PostgresSolutionRepository) FindByID(ctx context.Context, id string) (*entity.Solution, error) {
-	q := `SELECT ` + solutionColumns + ` FROM solutions WHERE id = $1`
-	s, err := scanSolution(execFromContext(ctx, r.db).QueryRowContext(ctx, q, id))
+	return r.findOne(ctx, `SELECT `+solutionColumns+` FROM solutions WHERE id = $1`, id)
+}
+
+func (r *PostgresSolutionRepository) FindByCode(ctx context.Context, code string) (*entity.Solution, error) {
+	return r.findOne(ctx, `SELECT `+solutionColumns+` FROM solutions WHERE code = $1`, code)
+}
+
+func (r *PostgresSolutionRepository) findOne(ctx context.Context, q string, args ...any) (*entity.Solution, error) {
+	s, err := scanSolution(execFromContext(ctx, r.db).QueryRowContext(ctx, q, args...))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domainerr.New(constant.CodeSolutionNotFound)

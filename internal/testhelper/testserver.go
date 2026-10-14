@@ -18,10 +18,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 
 	"platform-service/internal/app/port"
 	"platform-service/internal/bootstrap"
 	"platform-service/internal/config"
+	"platform-service/internal/infrastructure/crypto"
 	"platform-service/internal/infrastructure/keystore"
 )
 
@@ -102,12 +104,18 @@ func newTestServer(db *sql.DB, fake *FakeAuthenticator, ks *keystore.MemoryKeySt
 		DB:                 db,
 		Logger:             slog.New(slog.NewTextHandler(io.Discard, nil)),
 		KeyStore:           ks,
+		PasswordHasher:     TestPasswordHasher(),
 		ExtraAuthenticator: authn,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: %w", err)
 	}
 	return &TestServer{DB: db, Engine: app.Engine, Config: cfg, Issuer: app.TokenIssuer, KeyStore: ks, Auth: fake}, nil
+}
+
+// TestPasswordHasher — bcrypt cost minimum agar test cepat.
+func TestPasswordHasher() port.PasswordHasher {
+	return crypto.NewBcryptHasher(bcrypt.MinCost)
 }
 
 // TestConfig mengembalikan config untuk test. Database diabaikan karena DB

@@ -37,5 +37,19 @@
   "DOMAIN_SOLUTION_NAME_INVALID": "Nama solution wajib diisi (maks 255 karakter).",
   "DOMAIN_SOLUTION_STATUS_INVALID": "Status solution harus active atau inactive.",
   "DOMAIN_SOLUTION_PERSISTENCE_FAILED": "Gagal menyimpan solution.",
-  "DOMAIN_SOLUTION_QUERY_FAILED": "Gagal memuat solution."
+  "DOMAIN_SOLUTION_QUERY_FAILED": "Gagal memuat solution.",
+  "DOMAIN_USER_NOT_FOUND": "User tidak ditemukan.",
+  "DOMAIN_USER_EMAIL_DUPLICATE": "Email sudah terdaftar.",
+  "DOMAIN_USER_EMAIL_INVALID": "Alamat email tidak valid.",
+  "DOMAIN_USER_NAME_INVALID": "Nama wajib diisi (maks 255 karakter).",
+  "DOMAIN_USER_PASSWORD_INVALID": "Password harus 8–72 karakter.",
+  "DOMAIN_USER_STATUS_INVALID": "Status user harus active, inactive, atau suspended.",
+  "DOMAIN_USER_PERSISTENCE_FAILED": "Gagal menyimpan user.",
+  "DOMAIN_USER_QUERY_FAILED": "Gagal memuat user.",
+  "DOMAIN_AUTH_INVALID_CREDENTIALS": "Email atau password salah.",
+  "DOMAIN_AUTH_USER_NOT_ACTIVE": "Akun Anda tidak aktif.",
+  "DOMAIN_AUTH_SOLUTION_UNAVAILABLE": "Solution yang diminta tidak tersedia.",
+  "DOMAIN_AUTH_REFRESH_TOKEN_INVALID": "Refresh token tidak valid atau sudah kedaluwarsa.",
+  "DOMAIN_AUTH_SESSION_PERSISTENCE_FAILED": "Gagal menyimpan sesi.",
+  "DOMAIN_AUTH_SESSION_QUERY_FAILED": "Gagal memuat sesi."
 }

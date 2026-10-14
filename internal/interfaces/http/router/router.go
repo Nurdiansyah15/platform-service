@@ -17,6 +17,8 @@ type Handlers struct {
 	System   *api.SystemHandler
 	Solution *api.SolutionHandler
 	JWKS     *api.JWKSHandler
+	Auth     *api.AuthHandler
+	User     *api.UserHandler
 }
 
 type Deps struct {
@@ -66,4 +68,6 @@ func Setup(d Deps) *gin.Engine {
 func registerDomainRoutes(r Routes, h Handlers) {
 	RegisterSolutionRoutes(r, h.Solution)
 	RegisterJWKSRoutes(r, h.JWKS)
+	RegisterAuthRoutes(r, h.Auth)
+	RegisterUserRoutes(r, h.User)
 }

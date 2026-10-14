@@ -15,10 +15,13 @@ import (
 
 	"platform-service/internal/app/port"
 	"platform-service/internal/app/principal"
+	"platform-service/internal/app/usecase/auth"
 	"platform-service/internal/app/usecase/signingkey"
 	"platform-service/internal/app/usecase/solution"
 	"platform-service/internal/app/usecase/system"
+	"platform-service/internal/app/usecase/user"
 	"platform-service/internal/config"
+	"platform-service/internal/infrastructure/crypto"
 	i18n "platform-service/internal/infrastructure/i18n"
 	"platform-service/internal/infrastructure/jwttoken"
 	"platform-service/internal/infrastructure/keystore"
@@ -38,6 +41,9 @@ type Options struct {
 	// KeyStore — nil berarti FileKeyStore di Config.Auth.KeyStoreDir.
 	KeyStore port.KeyStore
 
+	// PasswordHasher — nil berarti bcrypt dengan cost default. Test memakai cost minimum.
+	PasswordHasher port.PasswordHasher
+
 	// ExtraAuthenticator dicoba sebelum verifier JWT (mis. FakeAuthenticator di test).
 	// Produksi membiarkannya nil.
 	ExtraAuthenticator port.TokenAuthenticator
@@ -47,6 +53,8 @@ type Options struct {
 type App struct {
 	Engine      *gin.Engine
 	TokenIssuer port.TokenIssuer
+	// Users dipakai seeder/test untuk menyiapkan platform admin.
+	Users *user.UserUseCase
 }
 
 // New membangun aplikasi lengkap dan menjalankan tugas startup
@@ -64,6 +72,11 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	httperror.InitBundle(bundle)
 	httperror.RegisterValidatorTagNames()
 
+	hasher := opts.PasswordHasher
+	if hasher == nil {
+		hasher = crypto.NewBcryptHasher(0)
+	}
+
 	keyStore := opts.KeyStore
 	if keyStore == nil {
 		if keyStore, err = keystore.NewFileKeyStore(cfg.Auth.KeyStoreDir); err != nil {
@@ -76,14 +89,12 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	solutionRepo := persistence.NewPostgresSolutionRepository(opts.DB)
 	solutionQuery := persistence.NewPostgresSolutionQuery(opts.DB)
 	signingKeyRepo := persistence.NewPostgresSigningKeyRepository(opts.DB)
+	userRepo := persistence.NewPostgresUserRepository(opts.DB)
+	sessionRepo := persistence.NewPostgresAuthSessionRepository(opts.DB)
 
 	// ── Token ───────────────────────────────────────────────────────────────
 	keyRing := jwttoken.NewKeyRing(signingKeyRepo, keyStore)
 	tokenIssuer := jwttoken.NewIssuer(keyRing, cfg.App.IssuerURL, cfg.Auth.AccessTokenTTL)
-	var authn port.TokenAuthenticator = jwttoken.NewAuthenticator(keyRing, cfg.App.IssuerURL)
-	if opts.ExtraAuthenticator != nil {
-		authn = chainAuthenticator{opts.ExtraAuthenticator, authn}
-	}
 
 	// ── Usecases ────────────────────────────────────────────────────────────
 	systemUC := system.NewSystemUseCase(system.SystemDeps{
@@ -97,6 +108,28 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		KeyStore: keyStore,
 		Logger:   opts.Logger,
 	})
+	userUC := user.NewUserUseCase(user.UserDeps{Repo: userRepo, Hasher: hasher})
+	authUC, err := auth.NewAuthUseCase(auth.AuthDeps{
+		Users:           userRepo,
+		Solutions:       solutionRepo,
+		Sessions:        sessionRepo,
+		Hasher:          hasher,
+		Tokens:          tokenIssuer,
+		RefreshTokenTTL: cfg.Auth.RefreshTokenTTL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: auth usecase: %w", err)
+	}
+
+	// ── Authenticator ───────────────────────────────────────────────────────
+	// JWT diverifikasi dulu, lalu token user dicek ke sesi & user di DB.
+	var authn port.TokenAuthenticator = sessionAwareAuthenticator{
+		token:       jwttoken.NewAuthenticator(keyRing, cfg.App.IssuerURL),
+		resolveUser: authUC.ResolveUserPrincipal,
+	}
+	if opts.ExtraAuthenticator != nil {
+		authn = chainAuthenticator{opts.ExtraAuthenticator, authn}
+	}
 
 	// ── Startup ─────────────────────────────────────────────────────────────
 	startupCtx, cancel := context.WithTimeout(ctx, startupTimeout)
@@ -114,10 +147,31 @@ func New(ctx context.Context, opts Options) (*App, error) {
 			System:   api.NewSystemHandler(systemUC),
 			Solution: api.NewSolutionHandler(solutionUC),
 			JWKS:     api.NewJWKSHandler(signingKeyUC),
+			Auth:     api.NewAuthHandler(authUC),
+			User:     api.NewUserHandler(userUC),
 		},
 	})
 
-	return &App{Engine: engine, TokenIssuer: tokenIssuer}, nil
+	return &App{Engine: engine, TokenIssuer: tokenIssuer, Users: userUC}, nil
+}
+
+// sessionAwareAuthenticator memverifikasi JWT lalu memvalidasi token user ke DB
+// (sesi aktif, user active, IsPlatformAdmin). Token service diteruskan apa adanya
+// sampai validasi solution client tersedia (Fase 4).
+type sessionAwareAuthenticator struct {
+	token       port.TokenAuthenticator
+	resolveUser func(ctx context.Context, p *principal.Principal) (*principal.Principal, error)
+}
+
+func (a sessionAwareAuthenticator) Authenticate(ctx context.Context, token string) (*principal.Principal, error) {
+	p, err := a.token.Authenticate(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if p.IsUser() {
+		return a.resolveUser(ctx, p)
+	}
+	return p, nil
 }
 
 // chainAuthenticator mencoba authenticator berurutan; yang pertama berhasil dipakai.

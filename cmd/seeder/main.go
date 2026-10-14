@@ -30,7 +30,12 @@ func main() {
 
 	only := os.Args[1:]
 	ran := 0
-	for _, s := range seeders.All() {
+	seedCfg := seeders.Config{
+		PlatformAdminEmail:    os.Getenv("PLATFORM_ADMIN_EMAIL"),
+		PlatformAdminName:     os.Getenv("PLATFORM_ADMIN_NAME"),
+		PlatformAdminPassword: os.Getenv("PLATFORM_ADMIN_PASSWORD"),
+	}
+	for _, s := range seeders.All(seedCfg) {
 		if len(only) > 0 && !slices.Contains(only, s.Name()) {
 			continue
 		}
