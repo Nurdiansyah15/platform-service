@@ -186,14 +186,22 @@ Keputusan desain di luar spec:
 - Test: `company_handler_test.go`, `branch_handler_test.go`, entity, repository (duplikat, soft delete, reuse code)
 - Test infra: `mustCreateCompany`, `principalUser`
 
-### Fase 7 — Benefits (enabler)
-- Tabel: `benefits` (+ `UNIQUE (id, solution_id)`)
-- Domain: VO `ValueType`, `AggregationStrategy`, `Metering`, `UsageReset`; validasi nilai JSONB sesuai `value_type` (dipakai Fase 8–9)
+### Fase 7 — Benefits (enabler) ✅
+- Tabel: `benefits` (unique `(solution_id, code)`, `UNIQUE (id, solution_id)` target composite FK, CHECK 4 enum, index `solution_id`)
+- Domain `benefit`: entity `Benefit`, VO `BenefitCode` (snake_case), `ValueType`, `AggregationStrategy`, `Metering`, `UsageReset`
+- Aturan kombinasi (keputusan Fase 7, spec hanya mendaftar enum):
+  - `boolean`: `any_true` / `override`; `integer` & `decimal`: `sum` / `max` / `min` / `override`; `string` & `json`: `override`
+  - `metering` `counter` / `gauge` hanya untuk `integer` / `decimal`
+  - `usage_reset` selain `never` hanya untuk `counter` (gauge tidak di-reset)
+- `Benefit.ValidateValue(json)` — validasi nilai plan/addon benefit per `value_type` (integer harus bulat, json harus object/array); dipakai Fase 8–9
+- Akses: create = platform admin + `LICENSE_MANAGED` di on_prem; baca = token valid apa pun, solution `inactive` disembunyikan (404) dari non-admin
 - Endpoint:
-  - [ ] `POST /solutions/{solutionId}/benefits` (enabler)
-  - [ ] `GET /solutions/{solutionId}/benefits` (enabler)
-  - [ ] `GET /benefits/{benefitId}` (enabler)
-- Test: `benefit_handler_test.go`
+  - [x] `POST /solutions/{solutionId}/benefits` (enabler)
+  - [x] `GET /solutions/{solutionId}/benefits` (enabler) — filter `value_type`, `metering`, `search`; default 50/halaman
+  - [x] `GET /benefits/{benefitId}` (enabler)
+- Test: `benefit_handler_test.go`, `benefit_test.go` (matriks kombinasi & ValidateValue), repository
+- Test infra: `mustCreateBenefit`
+- Belum: representasi "unlimited" untuk limit angka (mis. `-1` / `null`) — diputuskan saat EntitlementCalculator (Fase 12)
 
 ### Fase 8 — Plans & Plan Benefits
 - Tabel: `plans`, `plan_benefits` (composite FK)

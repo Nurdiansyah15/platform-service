@@ -319,7 +319,8 @@ internal/interfaces/http/handler/api/
   main_test.go      → TestMain, var testSrv, testOnPremSrv, testAdminTok (login admin sungguhan via seeder)
   testutil_test.go  → adminHeader, userHeader (fake), mustCreateSolution, mustCreateUser, mustLogin,
                       mustLoginNewUser, mustCreateClient, mustServiceToken, mustCreateTenant,
-                      mustTenantOwner, tenantToken, principalUser, mustCreateCompany, countEvents, ...
+                      mustTenantOwner, tenantToken, principalUser, mustCreateCompany, mustCreateBenefit,
+                      countEvents, ...
                       (helper lewat API, prefix must)
   Catatan: FakeAuthenticator.ServiceToken tidak melewati validasi client di DB — untuk skenario
   yang bergantung pada status/scope client, pakai mustServiceToken (token asli).

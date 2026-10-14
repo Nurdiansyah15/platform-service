@@ -22,6 +22,7 @@ type Handlers struct {
 	Client   *api.SolutionClientHandler
 	Tenant   *api.TenantHandler
 	Org      *api.OrganizationHandler
+	Benefit  *api.BenefitHandler
 }
 
 type Deps struct {
@@ -76,4 +77,5 @@ func registerDomainRoutes(r Routes, h Handlers) {
 	RegisterSolutionClientRoutes(r, h.Client)
 	RegisterTenantRoutes(r, h.Tenant)
 	RegisterOrganizationRoutes(r, h.Org)
+	RegisterBenefitRoutes(r, h.Benefit)
 }

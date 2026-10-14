@@ -80,5 +80,17 @@
   "DOMAIN_ORG_NAME_INVALID": "Nama wajib diisi (maks 255 karakter).",
   "DOMAIN_ORG_STATUS_INVALID": "Status harus active atau inactive.",
   "DOMAIN_ORG_PERSISTENCE_FAILED": "Gagal menyimpan data organisasi.",
-  "DOMAIN_ORG_QUERY_FAILED": "Gagal memuat data organisasi."
+  "DOMAIN_ORG_QUERY_FAILED": "Gagal memuat data organisasi.",
+  "DOMAIN_BENEFIT_NOT_FOUND": "Benefit tidak ditemukan.",
+  "DOMAIN_BENEFIT_CODE_DUPLICATE": "Code benefit sudah dipakai di solution ini.",
+  "DOMAIN_BENEFIT_CODE_INVALID": "Code benefit harus snake_case huruf kecil dan diawali huruf (maks 100 karakter).",
+  "DOMAIN_BENEFIT_NAME_INVALID": "Nama benefit wajib diisi (maks 255 karakter).",
+  "DOMAIN_BENEFIT_UNIT_INVALID": "Unit maksimal 50 karakter.",
+  "DOMAIN_BENEFIT_VALUE_TYPE_INVALID": "value_type harus boolean, integer, decimal, string, atau json.",
+  "DOMAIN_BENEFIT_AGGREGATION_INVALID": "aggregation_strategy tidak valid untuk value_type ini (boolean: any_true/override; integer/decimal: sum/max/min/override; string/json: override).",
+  "DOMAIN_BENEFIT_METERING_INVALID": "Metering (counter/gauge) hanya untuk benefit integer atau decimal.",
+  "DOMAIN_BENEFIT_USAGE_RESET_INVALID": "usage_reset selain never hanya untuk metering counter.",
+  "DOMAIN_BENEFIT_VALUE_INVALID": "Nilai benefit tidak sesuai value_type benefit.",
+  "DOMAIN_BENEFIT_PERSISTENCE_FAILED": "Gagal menyimpan benefit.",
+  "DOMAIN_BENEFIT_QUERY_FAILED": "Gagal memuat benefit."
 }

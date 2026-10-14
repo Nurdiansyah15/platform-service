@@ -232,6 +232,69 @@
                 }
             }
         },
+        "/api/v1/benefits/{benefitId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Benefits"
+                ],
+                "summary": "Get benefit",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Benefit ID",
+                        "name": "benefitId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.BenefitResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/companies/{companyId}/branches": {
             "get": {
                 "security": [
@@ -781,6 +844,203 @@
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/solutions/{solutionId}/benefits": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Benefits"
+                ],
+                "summary": "List benefits of a solution",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Solution ID",
+                        "name": "solutionId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "boolean | integer | decimal | string | json",
+                        "name": "value_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "none | counter | gauge",
+                        "name": "metering",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cari di code / name",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Halaman",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Jumlah per halaman (default 50, maks 200)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "code | name | created_at",
+                        "name": "sort_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "asc | desc",
+                        "name": "sort_type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/dto.BenefitResponse"
+                                            }
+                                        },
+                                        "meta": {
+                                            "$ref": "#/definitions/dto.Meta"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Kombinasi valid — boolean: any_true/override; integer \u0026 decimal: sum/max/min/override (metering none/counter/gauge); string \u0026 json: override. usage_reset selain never hanya untuk counter.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Benefits"
+                ],
+                "summary": "Create benefit",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Solution ID",
+                        "name": "solutionId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Benefit",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateBenefitRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.BenefitResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/respond.ErrorBody"
                         }
@@ -1686,6 +1946,47 @@
                 }
             }
         },
+        "dto.BenefitResponse": {
+            "type": "object",
+            "properties": {
+                "aggregation_strategy": {
+                    "type": "string"
+                },
+                "code": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "metering": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "solution_id": {
+                    "type": "string"
+                },
+                "unit": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "usage_reset": {
+                    "type": "string"
+                },
+                "value_type": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.BranchResponse": {
             "type": "object",
             "properties": {
@@ -1735,6 +2036,68 @@
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "dto.CreateBenefitRequest": {
+            "type": "object",
+            "required": [
+                "aggregation_strategy",
+                "code",
+                "name",
+                "value_type"
+            ],
+            "properties": {
+                "aggregation_strategy": {
+                    "type": "string",
+                    "enum": [
+                        "sum",
+                        "max",
+                        "min",
+                        "override",
+                        "any_true"
+                    ]
+                },
+                "code": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "description": {
+                    "type": "string"
+                },
+                "metering": {
+                    "type": "string",
+                    "enum": [
+                        "none",
+                        "counter",
+                        "gauge"
+                    ]
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "unit": {
+                    "type": "string",
+                    "maxLength": 50
+                },
+                "usage_reset": {
+                    "type": "string",
+                    "enum": [
+                        "never",
+                        "billing_period",
+                        "monthly"
+                    ]
+                },
+                "value_type": {
+                    "type": "string",
+                    "enum": [
+                        "boolean",
+                        "integer",
+                        "decimal",
+                        "string",
+                        "json"
+                    ]
                 }
             }
         },

@@ -191,3 +191,20 @@ func mustCreateCompany(t *testing.T, headers map[string]string, tenantID, code s
 func principalUser(userID, tenantID string) principal.Principal {
 	return principal.Principal{Kind: principal.KindUser, UserID: userID, SessionID: uuid.NewString(), TenantID: tenantID}
 }
+
+// mustCreateBenefit membuat benefit via API (admin) dengan field minimal dan mengembalikan ID-nya.
+// extra boleh berisi field tambahan (metering, usage_reset, unit, ...).
+func mustCreateBenefit(t *testing.T, solutionID, code, valueType, aggregation string, extra map[string]any) string {
+	t.Helper()
+	body := map[string]any{"code": code, "name": "Benefit " + code, "value_type": valueType, "aggregation_strategy": aggregation}
+	for k, v := range extra {
+		body[k] = v
+	}
+	w := testSrv.POST("/api/v1/solutions/"+solutionID+"/benefits", body, adminHeader())
+	require.Equal(t, 201, w.Code, "mustCreateBenefit body=%s", w.Body.String())
+	var got struct {
+		ID string `json:"id"`
+	}
+	testhelper.DecodeBody(t, w, &got)
+	return got.ID
+}

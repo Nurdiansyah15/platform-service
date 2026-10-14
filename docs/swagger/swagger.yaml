@@ -34,6 +34,33 @@ definitions:
       token_type:
         type: string
     type: object
+  dto.BenefitResponse:
+    properties:
+      aggregation_strategy:
+        type: string
+      code:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      metering:
+        type: string
+      name:
+        type: string
+      solution_id:
+        type: string
+      unit:
+        type: string
+      updated_at:
+        type: string
+      usage_reset:
+        type: string
+      value_type:
+        type: string
+    type: object
   dto.BranchResponse:
     properties:
       code:
@@ -67,6 +94,53 @@ definitions:
         type: string
       updated_at:
         type: string
+    type: object
+  dto.CreateBenefitRequest:
+    properties:
+      aggregation_strategy:
+        enum:
+        - sum
+        - max
+        - min
+        - override
+        - any_true
+        type: string
+      code:
+        maxLength: 100
+        type: string
+      description:
+        type: string
+      metering:
+        enum:
+        - none
+        - counter
+        - gauge
+        type: string
+      name:
+        maxLength: 255
+        type: string
+      unit:
+        maxLength: 50
+        type: string
+      usage_reset:
+        enum:
+        - never
+        - billing_period
+        - monthly
+        type: string
+      value_type:
+        enum:
+        - boolean
+        - integer
+        - decimal
+        - string
+        - json
+        type: string
+    required:
+    - aggregation_strategy
+    - code
+    - name
+    - value_type
     type: object
   dto.CreateOrgUnitRequest:
     properties:
@@ -526,6 +600,43 @@ paths:
       summary: Refresh token
       tags:
       - Auth
+  /api/v1/benefits/{benefitId}:
+    get:
+      parameters:
+      - description: Benefit ID
+        in: path
+        name: benefitId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.BenefitResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Get benefit
+      tags:
+      - Benefits
   /api/v1/companies/{companyId}/branches:
     get:
       parameters:
@@ -874,6 +985,130 @@ paths:
       summary: Get solution
       tags:
       - Solution Catalog
+  /api/v1/solutions/{solutionId}/benefits:
+    get:
+      parameters:
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: boolean | integer | decimal | string | json
+        in: query
+        name: value_type
+        type: string
+      - description: none | counter | gauge
+        in: query
+        name: metering
+        type: string
+      - description: Cari di code / name
+        in: query
+        name: search
+        type: string
+      - description: Halaman
+        in: query
+        name: page
+        type: integer
+      - description: Jumlah per halaman (default 50, maks 200)
+        in: query
+        name: limit
+        type: integer
+      - description: code | name | created_at
+        in: query
+        name: sort_by
+        type: string
+      - description: asc | desc
+        in: query
+        name: sort_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.BenefitResponse'
+                  type: array
+                meta:
+                  $ref: '#/definitions/dto.Meta'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List benefits of a solution
+      tags:
+      - Benefits
+    post:
+      consumes:
+      - application/json
+      description: 'Kombinasi valid — boolean: any_true/override; integer & decimal:
+        sum/max/min/override (metering none/counter/gauge); string & json: override.
+        usage_reset selain never hanya untuk counter.'
+      parameters:
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Benefit
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateBenefitRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.BenefitResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Create benefit
+      tags:
+      - Benefits
   /api/v1/solutions/{solutionId}/clients:
     post:
       consumes:

@@ -80,5 +80,17 @@
   "DOMAIN_ORG_NAME_INVALID": "Name is required (max 255 characters).",
   "DOMAIN_ORG_STATUS_INVALID": "Status must be active or inactive.",
   "DOMAIN_ORG_PERSISTENCE_FAILED": "Failed to save organization data.",
-  "DOMAIN_ORG_QUERY_FAILED": "Failed to load organization data."
+  "DOMAIN_ORG_QUERY_FAILED": "Failed to load organization data.",
+  "DOMAIN_BENEFIT_NOT_FOUND": "Benefit not found.",
+  "DOMAIN_BENEFIT_CODE_DUPLICATE": "Benefit code is already used in this solution.",
+  "DOMAIN_BENEFIT_CODE_INVALID": "Benefit code must be lowercase snake_case starting with a letter (max 100 characters).",
+  "DOMAIN_BENEFIT_NAME_INVALID": "Benefit name is required (max 255 characters).",
+  "DOMAIN_BENEFIT_UNIT_INVALID": "Unit may be at most 50 characters.",
+  "DOMAIN_BENEFIT_VALUE_TYPE_INVALID": "value_type must be boolean, integer, decimal, string, or json.",
+  "DOMAIN_BENEFIT_AGGREGATION_INVALID": "aggregation_strategy is not valid for this value_type (boolean: any_true/override; integer/decimal: sum/max/min/override; string/json: override).",
+  "DOMAIN_BENEFIT_METERING_INVALID": "Metering (counter/gauge) is only allowed for integer or decimal benefits.",
+  "DOMAIN_BENEFIT_USAGE_RESET_INVALID": "usage_reset other than never is only allowed for counter metering.",
+  "DOMAIN_BENEFIT_VALUE_INVALID": "Benefit value does not match the benefit's value_type.",
+  "DOMAIN_BENEFIT_PERSISTENCE_FAILED": "Failed to save benefit.",
+  "DOMAIN_BENEFIT_QUERY_FAILED": "Failed to load benefit."
 }
