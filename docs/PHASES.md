@@ -62,7 +62,7 @@ Keputusan desain di luar spec:
 - [x] Middleware: request-id, request-logger, locale, recover, CORS
 - [x] `GET /healthz` (system usecase → ping DB; 503 bila DB tidak sehat)
 - [x] Auth middleware: `Authenticate(port.TokenAuthenticator)` + `principal.Principal` (Kind `user`/`service`) + guard `RequireUser`, `RequireService(scope)`, `RequireUserOrService(scope)`, `RequirePlatformAdmin`, `RequireActiveTenant`
-  - Sampai Fase 2–4 `bootstrap` memakai `rejectAllAuthenticator` (semua token → 401)
+  - Fase 0–1 `bootstrap` memakai `rejectAllAuthenticator`; diganti verifier JWT di Fase 2
 - [x] `DeploymentGuard`: `LicenseManaged()` (403 `LICENSE_MANAGED` di on_prem), `CloudOnly()` / `OnPremOnly()` (404)
 
 ### 0.5 Outbox dasar
@@ -76,7 +76,7 @@ Keputusan desain di luar spec:
 - [x] `testhelper/txhelper.go`, `assert.go`
 - [x] `handler/api/main_test.go`, `system_handler_test.go`
 - [x] Test lain: config, system usecase, middleware auth & deployment guard, httperror, persistence (transactor, outbox, pagination, pg errors)
-- Ditunda ke fase yang membutuhkan: `fixtures.go` (Fase 17), `noop.go` (Fase 2)
+- Ditunda ke fase yang membutuhkan: `fixtures.go` (Fase 17)
 
 **Verifikasi (2026-10-14):** `make dev-up && make migrate-up/down/up` bersih, `GET /healthz` 200, `go test ./... -count=1` hijau, `make lint` 0 issue, `make swagger` & `docker build --target app` berhasil.
 
@@ -96,18 +96,21 @@ Keputusan desain di luar spec:
   - `testhelper.FakeAuthenticator` (`UserToken`, `PlatformAdminToken`, `ServiceToken`) — dipakai default oleh `MustStartTestServer` sampai login nyata ada
   - `TestServer.MustDerive(opts...)` → `testOnPremSrv` (mode on_prem, DB sama) untuk skenario `LICENSE_MANAGED`
 
-### Fase 2 — Signing Keys & JWKS
-- Tabel: `signing_keys` (partial unique `status = 'active'`)
-- Domain:
-  - Entity `SigningKey` + aturan rotasi (active → retiring → retired)
-  - Port `KeyStore` (resolve `private_key_ref`; impl dev = file lokal)
-  - `TokenIssuer` / `TokenVerifier` (RS256, header `kid`)
-  - Bootstrap: buat key aktif saat startup bila belum ada
+### Fase 2 — Signing Keys & JWKS ✅
+- Tabel: `signing_keys` (unique `kid`, CHECK status, partial unique `uq_signing_keys_single_active`)
+- Domain: entity `SigningKey` (kid `YYYYMMDD-xxxxxxxx`, transisi active → retiring → retired), `KeyStatus.IsPublished()`
+- Port:
+  - `KeyStore` bergaya KMS: `Generate` → (`private_key_ref`, public key PEM), `Signer(ref)` → `crypto.Signer`
+  - `TokenIssuer`: `IssueUserToken`, `IssueServiceToken` (dipakai Fase 3 & 4)
+- Infrastruktur:
+  - `keystore.FileKeyStore` (`KEYSTORE_DIR`, file 0600, ref `file:<uuid>.pem`) dan `keystore.MemoryKeyStore` (test)
+  - `jwttoken.KeyRing` (cache signer & public key per kid, TTL 1 menit), `Issuer` (RS256 manual via `crypto.Signer`), `Authenticator` (golang-jwt, `alg` dikunci RS256, cek `iss`/`exp`/`iat`/`typ`/`aud`)
+- Startup: `SigningKeyUseCase.EnsureActiveKey` membuat key bila belum ada; aman untuk banyak instance
 - Endpoint:
-  - [ ] `GET /.well-known/jwks.json` (MVP, publik)
-- Mulai fase ini `TokenAuthenticator` JWT menggantikan `rejectAllAuthenticator` di `internal/bootstrap`
-- Test: `jwks_handler_test.go`
-  - 200, hanya key active + retiring, format JWK valid
+  - [x] `GET /.well-known/jwks.json` (MVP, publik) — format RFC 7517 tanpa envelope, `Cache-Control: public, max-age=300`
+- `bootstrap.New` → `App{Engine, TokenIssuer}`; authenticator produksi = JWT (menggantikan `rejectAllAuthenticator`). Test memakai rantai `FakeAuthenticator` → JWT
+- Test: `jwks_handler_test.go`, `jwttoken_test.go` (round trip, rotasi, token ditolak: payload diubah / HS256 / issuer lain / kedaluwarsa / kid tak dikenal / claim kurang), `key_store_test.go`, `signing_key_test.go`, `postgres_signing_key_repository_test.go`
+- Belum: pengecekan sesi & status user pada token user (Fase 3), status solution client pada token service (Fase 4), endpoint rotasi (L7)
 
 ### Fase 3 — Users & Auth Session
 - Tabel: `users` (+ `is_platform_admin`), `auth_sessions`
@@ -122,7 +125,8 @@ Keputusan desain di luar spec:
   - [ ] `GET /auth/me` (MVP)
   - [ ] `POST /users` (enabler, admin)
 - Lainnya: middleware user token aktif (cek signature + sesi tidak revoked), seeder platform admin
-- Test: `testAdminTok` di `main_test.go` diganti hasil login platform admin sungguhan. `FakeAuthenticator` tetap boleh dipakai untuk principal yang sulit dibuat lewat API, dengan menggabungkannya (fake dicek dulu, lalu verifier JWT)
+- Tambah pengecekan di atas `jwttoken.Authenticator` untuk token user: sesi tidak revoked/expired, user `active`, isi `IsPlatformAdmin` dari DB
+- Test: `testAdminTok` di `main_test.go` diganti hasil login platform admin sungguhan. `FakeAuthenticator` tetap tersedia (sudah dirantai sebelum JWT)
 - Test: `auth_handler_test.go`, `user_handler_test.go`
   - password salah 401, user suspended 403, solution tidak ada 422/404
   - refresh rotate → refresh token lama ditolak

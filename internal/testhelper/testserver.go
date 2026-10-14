@@ -2,6 +2,7 @@ package testhelper
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -20,6 +22,7 @@ import (
 	"platform-service/internal/app/port"
 	"platform-service/internal/bootstrap"
 	"platform-service/internal/config"
+	"platform-service/internal/infrastructure/keystore"
 )
 
 // TestServer membungkus engine Gin lengkap (wiring sama dengan cmd/app) di atas
@@ -28,6 +31,10 @@ type TestServer struct {
 	DB     *sql.DB
 	Engine *gin.Engine
 	Config *config.Config
+	// Issuer menerbitkan JWT asli (ditandatangani signing key active di DB test).
+	Issuer port.TokenIssuer
+	// KeyStore in-memory yang dipakai server ini (dibagi dengan server turunan).
+	KeyStore *keystore.MemoryKeyStore
 	// Auth terisi bila server memakai FakeAuthenticator (default saat
 	// WithAuthenticator tidak diberikan).
 	Auth *FakeAuthenticator
@@ -45,7 +52,8 @@ func WithDeploymentMode(mode config.DeploymentMode) Option {
 	return func(o *serverOptions) { o.deploymentMode = mode }
 }
 
-// WithAuthenticator mengganti verifier token (mis. fake untuk test middleware).
+// WithAuthenticator mengganti FakeAuthenticator default dengan authenticator lain
+// (dicoba sebelum verifier JWT).
 func WithAuthenticator(a port.TokenAuthenticator) Option {
 	return func(o *serverOptions) { o.authenticator = a }
 }
@@ -54,7 +62,7 @@ func WithAuthenticator(a port.TokenAuthenticator) Option {
 // dan jalankan cleanup setelah m.Run().
 func MustStartTestServer(opts ...Option) (*TestServer, func()) {
 	db, cleanup := MustStartTestDB()
-	srv, err := newTestServer(db, NewFakeAuthenticator(), opts)
+	srv, err := newTestServer(db, NewFakeAuthenticator(), keystore.NewMemoryKeyStore(), opts)
 	if err != nil {
 		cleanup()
 		log.Fatalf("testhelper: %v", err)
@@ -66,14 +74,14 @@ func MustStartTestServer(opts ...Option) (*TestServer, func()) {
 // mis. server mode on_prem untuk menguji LICENSE_MANAGED. FakeAuthenticator
 // ikut dipakai bersama sehingga token dari server asal tetap berlaku.
 func (s *TestServer) MustDerive(opts ...Option) *TestServer {
-	srv, err := newTestServer(s.DB, s.Auth, opts)
+	srv, err := newTestServer(s.DB, s.Auth, s.KeyStore, opts)
 	if err != nil {
 		log.Fatalf("testhelper: %v", err)
 	}
 	return srv
 }
 
-func newTestServer(db *sql.DB, fake *FakeAuthenticator, opts []Option) (*TestServer, error) {
+func newTestServer(db *sql.DB, fake *FakeAuthenticator, ks *keystore.MemoryKeyStore, opts []Option) (*TestServer, error) {
 	gin.SetMode(gin.TestMode)
 
 	o := serverOptions{deploymentMode: config.DeploymentCloud}
@@ -89,16 +97,17 @@ func newTestServer(db *sql.DB, fake *FakeAuthenticator, opts []Option) (*TestSer
 	}
 
 	cfg := TestConfig(o.deploymentMode)
-	engine, err := bootstrap.NewEngine(bootstrap.Options{
-		Config:        cfg,
-		DB:            db,
-		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Authenticator: authn,
+	app, err := bootstrap.New(context.Background(), bootstrap.Options{
+		Config:             cfg,
+		DB:                 db,
+		Logger:             slog.New(slog.NewTextHandler(io.Discard, nil)),
+		KeyStore:           ks,
+		ExtraAuthenticator: authn,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap engine: %w", err)
+		return nil, fmt.Errorf("bootstrap: %w", err)
 	}
-	return &TestServer{DB: db, Engine: engine, Config: cfg, Auth: fake}, nil
+	return &TestServer{DB: db, Engine: app.Engine, Config: cfg, Issuer: app.TokenIssuer, KeyStore: ks, Auth: fake}, nil
 }
 
 // TestConfig mengembalikan config untuk test. Database diabaikan karena DB
@@ -110,6 +119,10 @@ func TestConfig(mode config.DeploymentMode) *config.Config {
 			LocalesDir:     LocalesDir(),
 			DeploymentMode: mode,
 			IssuerURL:      "http://platform.test",
+		},
+		Auth: config.AuthConfig{
+			AccessTokenTTL:  15 * time.Minute,
+			RefreshTokenTTL: 720 * time.Hour,
 		},
 		CORS: config.CORSConfig{AllowOrigins: []string{"*"}},
 	}

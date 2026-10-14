@@ -8,6 +8,26 @@
     },
     "basePath": "/",
     "paths": {
+        "/api/v1/.well-known/jwks.json": {
+            "get": {
+                "description": "Public key untuk memverifikasi token platform (key active \u0026 retiring). Respons tanpa envelope (RFC 7517).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Service Auth"
+                ],
+                "summary": "JSON Web Key Set",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.JWKSResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/solutions": {
             "get": {
                 "security": [
@@ -324,6 +344,40 @@
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "dto.JWK": {
+            "type": "object",
+            "properties": {
+                "alg": {
+                    "type": "string"
+                },
+                "e": {
+                    "type": "string"
+                },
+                "kid": {
+                    "type": "string"
+                },
+                "kty": {
+                    "type": "string"
+                },
+                "n": {
+                    "type": "string"
+                },
+                "use": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.JWKSResponse": {
+            "type": "object",
+            "properties": {
+                "keys": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.JWK"
+                    }
                 }
             }
         },

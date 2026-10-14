@@ -28,6 +28,28 @@ definitions:
       status:
         type: string
     type: object
+  dto.JWK:
+    properties:
+      alg:
+        type: string
+      e:
+        type: string
+      kid:
+        type: string
+      kty:
+        type: string
+      "n":
+        type: string
+      use:
+        type: string
+    type: object
+  dto.JWKSResponse:
+    properties:
+      keys:
+        items:
+          $ref: '#/definitions/dto.JWK'
+        type: array
+    type: object
   dto.Meta:
     properties:
       current_page:
@@ -86,6 +108,20 @@ info:
   title: Central SaaS Platform API
   version: "1.0"
 paths:
+  /api/v1/.well-known/jwks.json:
+    get:
+      description: Public key untuk memverifikasi token platform (key active & retiring).
+        Respons tanpa envelope (RFC 7517).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.JWKSResponse'
+      summary: JSON Web Key Set
+      tags:
+      - Service Auth
   /api/v1/solutions:
     get:
       parameters:

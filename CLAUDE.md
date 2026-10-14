@@ -65,7 +65,7 @@ Langkah membuat endpoint baru:
 6. Handler + swag annotation (`@Router` pakai path penuh, mis. `/api/v1/tenants [post]`), lalu:
    - tambah field handler di `router.Handlers`,
    - buat `router/<ctx>_routes.go` berisi `RegisterXxxRoutes(r Routes, h *api.XxxHandler)` dan panggil dari `registerDomainRoutes`,
-   - wiring repo → usecase → handler di `internal/bootstrap/bootstrap.go`.
+   - wiring repo → usecase → handler di `internal/bootstrap/bootstrap.go` (`bootstrap.New` → `App`). Tugas startup (mis. `EnsureActiveKey`) juga dijalankan di sana.
 7. Handler test (§9). Endpoint tanpa test = belum selesai.
 8. Centang endpoint di `docs/PHASES.md`.
 
@@ -176,6 +176,7 @@ Persistence tidak pernah mengembalikan AppError.
 
 Envelope respons:
 - Sukses: `{status: "success", status_code, message, data, meta}`
+  - Pengecualian: dokumen standar yang dibaca library pihak ketiga (JWKS, openid-configuration) dikirim tanpa envelope.
 - Error: `{status: "error", status_code, error_code, errors}` — `errors` berisi pesan terjemahan dari message key (string) atau map field → pesan untuk validasi.
 
 Message key lintas domain (auth, dsb.) ada di `apperror` (`MsgTokenMissing`, `MsgInsufficientScope`, ...). Setiap key baru wajib ditambahkan ke **kedua** `locales/en.json` dan `locales/id.json`.
@@ -231,6 +232,7 @@ Setiap perubahan yang ada di katalog event (spec §2.9) menulis baris `events` d
 - Platform admin = `users.is_platform_admin` → `RequirePlatformAdmin`.
 - Middleware (`interfaces/http/middleware/auth.go`): `Authenticate(port.TokenAuthenticator)` menyimpan `*principal.Principal` di gin context (ambil dengan `middleware.PrincipalFrom(c)`), lalu guard `RequireUser`, `RequireService(scope)`, `RequireUserOrService(scope)`, `RequirePlatformAdmin`, `RequireActiveTenant`. Handler meneruskan principal ke usecase; usecase tidak membaca gin context.
 - Route terproteksi didaftarkan di `Routes.Authenticated` (sudah memasang `Authenticate`); route publik di `Routes.V1`.
+- Token JWT RS256 diterbitkan lewat `port.TokenIssuer` dan diverifikasi `jwttoken.Authenticator` (key dari `signing_keys` + `port.KeyStore`). Private key tidak pernah disimpan di DB maupun di-log.
 - Secret (client secret, refresh token) hanya disimpan sebagai hash; webhook secret dienkripsi. Secret mentah hanya ditampilkan sekali di respons create/rotate.
 
 ### 8.6 Deployment mode
@@ -298,8 +300,10 @@ internal/testhelper/
                     GET/POST/PUT/PATCH/DELETE/DELETEBody, BearerHeader, DecodeBody, DecodeError
                     memakai internal/bootstrap + router.Setup yang sama dengan cmd/app (jangan duplikasi route)
                     TestServer.MustDerive(opts...) → engine lain di DB yang sama (mis. mode on_prem)
+                    TestServer.Issuer → menerbitkan JWT asli; TestServer.KeyStore (memory)
+                    Authenticator test = FakeAuthenticator dulu, lalu verifier JWT
   fake_auth.go    → FakeAuthenticator: UserToken, PlatformAdminToken, ServiceToken, Issue(principal)
-  seed.go         → UniqueCode, MustSeedSolution, ... (insert langsung ke DB)
+  seed.go         → UniqueCode, MustSeedSolution, MustSeedSigningKey, ... (insert langsung ke DB)
   txhelper.go     → WithTestTx (selalu rollback)
   assert.go       → AssertDomainError
   (ditambah saat dibutuhkan fase domain)
@@ -329,6 +333,7 @@ make lint            # golangci-lint v2 via Docker
 Docker harus jalan (testcontainers).
 
 ### Nuance
+- Test repository di dalam `WithTestTx` yang sengaja memicu error SQL (mis. unique violation) wajib dibungkus `SAVEPOINT` / `ROLLBACK TO SAVEPOINT` bila masih ada statement setelahnya — Postgres membatalkan seluruh transaksi setelah satu error.
 - `http.NewRequest` di testserver membuat `RemoteAddr` kosong → `c.ClientIP()` = `""`. Untuk kolom `INET` gunakan `NULLIF($n, '')::inet`.
 
 ---

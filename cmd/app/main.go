@@ -51,7 +51,7 @@ func main() {
 	}
 	defer db.Close()
 
-	engine, err := bootstrap.NewEngine(bootstrap.Options{Config: cfg, DB: db, Logger: appLogger})
+	app, err := bootstrap.New(ctx, bootstrap.Options{Config: cfg, DB: db, Logger: appLogger})
 	if err != nil {
 		appLogger.Error("gagal bootstrap aplikasi", slog.Any("error", err))
 		os.Exit(1)
@@ -59,7 +59,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.App.Port,
-		Handler:           engine,
+		Handler:           app.Engine,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

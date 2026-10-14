@@ -16,6 +16,7 @@ import (
 type Handlers struct {
 	System   *api.SystemHandler
 	Solution *api.SolutionHandler
+	JWKS     *api.JWKSHandler
 }
 
 type Deps struct {
@@ -64,4 +65,5 @@ func Setup(d Deps) *gin.Engine {
 // registerDomainRoutes memanggil RegisterXxxRoutes tiap domain.
 func registerDomainRoutes(r Routes, h Handlers) {
 	RegisterSolutionRoutes(r, h.Solution)
+	RegisterJWKSRoutes(r, h.JWKS)
 }

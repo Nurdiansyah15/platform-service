@@ -67,6 +67,8 @@ func (d DatabaseConfig) DSN() string {
 type AuthConfig struct {
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
+	// KeyStoreDir — direktori private key JWT untuk FileKeyStore.
+	KeyStoreDir string
 }
 
 type CORSConfig struct {
@@ -93,6 +95,9 @@ func Load() (*Config, error) {
 			Password: getEnv("DB_PASS", "secret"),
 			Name:     getEnv("DB_NAME", "platform"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
+		},
+		Auth: AuthConfig{
+			KeyStoreDir: getEnv("KEYSTORE_DIR", "data/keys"),
 		},
 		CORS: CORSConfig{
 			AllowOrigins: splitCSV(getEnv("CORS_ALLOW_ORIGINS", "*")),
