@@ -20,6 +20,7 @@ import (
 	"platform-service/internal/app/usecase/solution"
 	"platform-service/internal/app/usecase/solutionclient"
 	"platform-service/internal/app/usecase/system"
+	"platform-service/internal/app/usecase/tenant"
 	"platform-service/internal/app/usecase/user"
 	"platform-service/internal/config"
 	"platform-service/internal/infrastructure/crypto"
@@ -93,6 +94,11 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	userRepo := persistence.NewPostgresUserRepository(opts.DB)
 	sessionRepo := persistence.NewPostgresAuthSessionRepository(opts.DB)
 	clientRepo := persistence.NewPostgresSolutionClientRepository(opts.DB)
+	tenantRepo := persistence.NewPostgresTenantRepository(opts.DB)
+	memberRepo := persistence.NewPostgresTenantMemberRepository(opts.DB)
+	tenantQuery := persistence.NewPostgresTenantQuery(opts.DB)
+	transactor := persistence.NewPostgresTransactor(opts.DB)
+	outbox := persistence.NewPostgresEventOutbox()
 
 	// ── Token ───────────────────────────────────────────────────────────────
 	keyRing := jwttoken.NewKeyRing(signingKeyRepo, keyStore)
@@ -130,6 +136,17 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Logger:    opts.Logger,
 	})
 
+	tenantDeps := tenant.TenantDeps{
+		Tx:      transactor,
+		Outbox:  outbox,
+		Tenants: tenantRepo,
+		Members: memberRepo,
+		Users:   userRepo,
+		Query:   tenantQuery,
+	}
+	tenantUC := tenant.NewTenantUseCase(tenantDeps)
+	memberUC := tenant.NewMemberUseCase(tenantDeps)
+
 	// ── Authenticator ───────────────────────────────────────────────────────
 	// JWT diverifikasi dulu, lalu principal divalidasi ulang ke DB
 	// (user: sesi & status user; service: status client & scope terkini).
@@ -161,6 +178,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 			Auth:     api.NewAuthHandler(authUC),
 			User:     api.NewUserHandler(userUC),
 			Client:   api.NewSolutionClientHandler(clientUC),
+			Tenant:   api.NewTenantHandler(tenantUC, memberUC),
 		},
 	})
 

@@ -1,13 +1,16 @@
 package api_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"platform-service/internal/app/principal"
 	"platform-service/internal/testhelper"
 )
 
@@ -135,4 +138,42 @@ func mustServiceToken(t *testing.T, c clientCredentials, scope string) string {
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	return resp.AccessToken
+}
+
+// tenantToken menerbitkan token user dengan tenant aktif (claim tid) untuk user nyata.
+// Sementara memakai FakeAuthenticator; diganti POST /auth/switch-tenant di Fase 10.
+func tenantToken(userID, tenantID string) map[string]string {
+	return testhelper.BearerHeader(testSrv.Auth.Issue(principal.Principal{
+		Kind: principal.KindUser, UserID: userID, SessionID: uuid.NewString(), TenantID: tenantID,
+	}))
+}
+
+// mustCreateTenant membuat tenant via API dengan token pemanggil dan mengembalikan ID-nya.
+func mustCreateTenant(t *testing.T, headers map[string]string) string {
+	t.Helper()
+	slug := testhelper.UniqueCode("tn")
+	w := testSrv.POST("/api/v1/tenants", map[string]any{"name": "Tenant " + slug, "slug": slug}, headers)
+	require.Equal(t, 201, w.Code, "mustCreateTenant body=%s", w.Body.String())
+	var got struct {
+		ID string `json:"id"`
+	}
+	testhelper.DecodeBody(t, w, &got)
+	return got.ID
+}
+
+// mustTenantOwner membuat user baru yang membuat tenant baru (otomatis member active).
+// Mengembalikan header token ber-tid tenant tersebut, ID user, dan ID tenant.
+func mustTenantOwner(t *testing.T) (map[string]string, string, string) {
+	t.Helper()
+	tok, userID, _ := mustLoginNewUser(t)
+	tenantID := mustCreateTenant(t, testhelper.BearerHeader(tok.AccessToken))
+	return tenantToken(userID, tenantID), userID, tenantID
+}
+
+func countEvents(t *testing.T, eventType, tenantID string) int {
+	t.Helper()
+	var n int
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM events WHERE event_type = $1 AND tenant_id = $2`, eventType, tenantID).Scan(&n))
+	return n
 }

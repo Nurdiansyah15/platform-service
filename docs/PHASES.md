@@ -150,21 +150,26 @@ Keputusan desain di luar spec:
 - Test: `solution_client_handler_test.go`, `oauth_handler_test.go`, entity, usecase (`ResolveServicePrincipal` dengan repo fake), repository (`TEXT[]` round trip)
 - Test infra: `TestServer.POSTForm`, helper `mustCreateClient`, `mustServiceToken`
 
-### Fase 5 — Tenant & Membership
-- Tabel: `tenants`, `tenant_members` (+ FK `auth_sessions.tenant_id` → `tenants(id)`)
+### Fase 5 — Tenant & Membership ✅
+- Tabel: `tenants` (unique slug, CHECK status), `tenant_members` (PK `(tenant_id, user_id)`, CHECK status, index `user_id`), FK `auth_sessions.tenant_id` → `tenants(id)`
 - Domain:
-  - `Tenant`, `TenantMember`
-  - Policy akses sementara: platform admin **atau** member aktif (lihat Item Terbuka)
-  - Pembuat tenant otomatis jadi member
-  - Outbox: `tenant.updated`, `tenant_member.added`
+  - `Tenant` (VO `Slug`), `TenantMember` (`NewTenantMember`, `Rejoin` untuk member inactive)
+  - Domain service `AccessPolicy.EnsureCanAccess`: platform admin bebas; user lain wajib `tid` = tenantId **dan** member `active` (spec §2.7). `tid` kosong → 403 `AUTH_TENANT_NOT_SELECTED`
+  - Event `tenant_member.added` (payload tenant_id, user_id, status, joined_at)
+- Keputusan:
+  - Semua user login boleh membuat tenant; pembuat non-admin otomatis member active. Platform admin tidak otomatis jadi member
+  - `POST /tenants` & `GET /tenants` boleh tanpa `tid` (onboarding / pemilihan tenant); endpoint per-tenant wajib `tid`
+  - Tambah member via `user_id` **atau** `email` (user harus sudah ada), status `active` (default) / `invited`; member inactive diaktifkan ulang; sudah active/invited → 409
+  - Endpoint khusus token user; akses token service (`users:read` / `users:write`) menyusul Fase 10 (butuh cek subscription)
 - Endpoint:
-  - [ ] `POST /tenants` (MVP)
-  - [ ] `GET /tenants` (MVP)
-  - [ ] `GET /tenants/{tenantId}` (MVP)
-  - [ ] `GET /tenants/{tenantId}/members` (MVP)
-  - [ ] `POST /tenants/{tenantId}/members` (MVP)
-- Test: `tenant_handler_test.go`, `tenant_member_handler_test.go`
-  - 403 non-member, 409 slug duplikat, list hanya tenant milik user, event outbox tertulis
+  - [x] `POST /tenants` (MVP)
+  - [x] `GET /tenants` (MVP) — admin: semua; user: tenant tempat ia member active
+  - [x] `GET /tenants/{tenantId}` (MVP)
+  - [x] `GET /tenants/{tenantId}/members` (MVP) — join data user, filter status/search, pagination
+  - [x] `POST /tenants/{tenantId}/members` (MVP)
+- Test: `tenant_handler_test.go`, `tenant_member_handler_test.go`, entity, `access_policy_test.go`, repository
+- Test infra: `tenantToken(userID, tenantID)` (FakeAuthenticator, sementara), `mustCreateTenant`, `mustTenantOwner`, `countEvents`
+- Lainnya: pencarian `ILIKE` di query model kini meng-escape `%` / `_` (`likePattern`)
 
 ### Fase 6 — Company & Branch
 - Tabel: `companies`, `branches` (soft delete, partial unique code)
@@ -223,6 +228,8 @@ Keputusan desain di luar spec:
   - [ ] `GET /auth/tenants` (MVP)
   - [ ] `POST /auth/switch-tenant` (MVP)
 - Lainnya: login auto-mengisi `tid` bila user hanya punya 1 tenant yang subscribe solution sesi
+- Buka akses token service ke endpoint tenant & member (`users:read` / `users:write`) untuk tenant yang subscribe solution client (perluas `AccessPolicy`)
+- Ganti helper test `tenantToken` (FakeAuthenticator) dengan token hasil `POST /auth/switch-tenant`
 - Test: `subscription_handler_test.go`, `subscription_addon_handler_test.go`, `auth_tenant_handler_test.go`
   - plan dari solution lain 422
   - snapshot tidak berubah saat `plan_benefits` diubah setelah subscribe

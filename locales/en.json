@@ -58,5 +58,18 @@
   "DOMAIN_SOLUTION_CLIENT_REVOKED": "Solution client has been revoked.",
   "DOMAIN_SOLUTION_CLIENT_INVALID": "Solution client is invalid.",
   "DOMAIN_SOLUTION_CLIENT_PERSISTENCE_FAILED": "Failed to save solution client.",
-  "DOMAIN_SOLUTION_CLIENT_QUERY_FAILED": "Failed to load solution client."
+  "DOMAIN_SOLUTION_CLIENT_QUERY_FAILED": "Failed to load solution client.",
+  "DOMAIN_TENANT_NOT_FOUND": "Tenant not found.",
+  "DOMAIN_TENANT_SLUG_DUPLICATE": "Tenant slug is already in use.",
+  "DOMAIN_TENANT_SLUG_INVALID": "Tenant slug may only contain lowercase letters, numbers, and hyphens (max 100 characters).",
+  "DOMAIN_TENANT_NAME_INVALID": "Tenant name is required (max 255 characters).",
+  "DOMAIN_TENANT_STATUS_INVALID": "Tenant status must be active, suspended, or closed.",
+  "DOMAIN_TENANT_ACCESS_DENIED": "You do not have access to this tenant.",
+  "DOMAIN_TENANT_PERSISTENCE_FAILED": "Failed to save tenant.",
+  "DOMAIN_TENANT_QUERY_FAILED": "Failed to load tenant.",
+  "DOMAIN_TENANT_MEMBER_NOT_FOUND": "Tenant member not found.",
+  "DOMAIN_TENANT_MEMBER_ALREADY_EXISTS": "User is already a member of this tenant.",
+  "DOMAIN_TENANT_MEMBER_STATUS_INVALID": "Member status must be active or invited.",
+  "DOMAIN_TENANT_MEMBER_USER_NOT_FOUND": "User to add was not found.",
+  "DOMAIN_TENANT_MEMBER_IDENTITY_REQUIRED": "Provide exactly one of user_id or email."
 }

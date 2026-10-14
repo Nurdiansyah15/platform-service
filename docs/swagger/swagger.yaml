@@ -1,5 +1,18 @@
 basePath: /
 definitions:
+  dto.AddTenantMemberRequest:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      status:
+        enum:
+        - active
+        - invited
+        type: string
+      user_id:
+        type: string
+    type: object
   dto.AuthTokenResponse:
     properties:
       access_token:
@@ -51,6 +64,18 @@ definitions:
     required:
     - code
     - name
+    type: object
+  dto.CreateTenantRequest:
+    properties:
+      name:
+        maxLength: 255
+        type: string
+      slug:
+        maxLength: 100
+        type: string
+    required:
+    - name
+    - slug
     type: object
   dto.CreateUserRequest:
     properties:
@@ -236,6 +261,36 @@ definitions:
       id:
         type: string
       name:
+        type: string
+    type: object
+  dto.TenantMemberResponse:
+    properties:
+      email:
+        type: string
+      joined_at:
+        type: string
+      name:
+        type: string
+      status:
+        type: string
+      tenant_id:
+        type: string
+      user_id:
+        type: string
+    type: object
+  dto.TenantResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+      status:
+        type: string
+      updated_at:
         type: string
     type: object
   dto.UserResponse:
@@ -695,6 +750,278 @@ paths:
       summary: Create solution client
       tags:
       - Solution Clients
+  /api/v1/tenants:
+    get:
+      description: Platform admin melihat semua tenant; user lain hanya tenant tempat
+        ia member active.
+      parameters:
+      - description: active | suspended | closed
+        in: query
+        name: status
+        type: string
+      - description: Cari di name / slug
+        in: query
+        name: search
+        type: string
+      - description: Halaman
+        in: query
+        name: page
+        type: integer
+      - description: Jumlah per halaman (maks 100)
+        in: query
+        name: limit
+        type: integer
+      - description: name | slug | created_at
+        in: query
+        name: sort_by
+        type: string
+      - description: asc | desc
+        in: query
+        name: sort_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.TenantResponse'
+                  type: array
+                meta:
+                  $ref: '#/definitions/dto.Meta'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List tenants
+      tags:
+      - Tenants
+    post:
+      consumes:
+      - application/json
+      description: Pembuat (non platform admin) otomatis menjadi member active.
+      parameters:
+      - description: Tenant
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateTenantRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.TenantResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Create tenant
+      tags:
+      - Tenants
+  /api/v1/tenants/{tenantId}:
+    get:
+      description: Platform admin, atau member active yang token-nya ber-tid tenant
+        ini.
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenantId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.TenantResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Get tenant
+      tags:
+      - Tenants
+  /api/v1/tenants/{tenantId}/members:
+    get:
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenantId
+        required: true
+        type: string
+      - description: invited | active | inactive
+        in: query
+        name: status
+        type: string
+      - description: Cari di email / nama user
+        in: query
+        name: search
+        type: string
+      - description: Halaman
+        in: query
+        name: page
+        type: integer
+      - description: Jumlah per halaman (maks 100)
+        in: query
+        name: limit
+        type: integer
+      - description: email | name | joined_at
+        in: query
+        name: sort_by
+        type: string
+      - description: asc | desc
+        in: query
+        name: sort_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.TenantMemberResponse'
+                  type: array
+                meta:
+                  $ref: '#/definitions/dto.Meta'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List tenant members
+      tags:
+      - Tenants
+    post:
+      consumes:
+      - application/json
+      description: Isi salah satu user_id atau email (user harus sudah terdaftar).
+        Member inactive diaktifkan kembali.
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenantId
+        required: true
+        type: string
+      - description: Member
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.AddTenantMemberRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.TenantMemberResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Add tenant member
+      tags:
+      - Tenants
   /api/v1/users:
     post:
       consumes:

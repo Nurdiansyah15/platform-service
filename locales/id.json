@@ -58,5 +58,18 @@
   "DOMAIN_SOLUTION_CLIENT_REVOKED": "Solution client sudah dicabut.",
   "DOMAIN_SOLUTION_CLIENT_INVALID": "Solution client tidak valid.",
   "DOMAIN_SOLUTION_CLIENT_PERSISTENCE_FAILED": "Gagal menyimpan solution client.",
-  "DOMAIN_SOLUTION_CLIENT_QUERY_FAILED": "Gagal memuat solution client."
+  "DOMAIN_SOLUTION_CLIENT_QUERY_FAILED": "Gagal memuat solution client.",
+  "DOMAIN_TENANT_NOT_FOUND": "Tenant tidak ditemukan.",
+  "DOMAIN_TENANT_SLUG_DUPLICATE": "Slug tenant sudah dipakai.",
+  "DOMAIN_TENANT_SLUG_INVALID": "Slug tenant hanya boleh huruf kecil, angka, dan tanda hubung (maks 100 karakter).",
+  "DOMAIN_TENANT_NAME_INVALID": "Nama tenant wajib diisi (maks 255 karakter).",
+  "DOMAIN_TENANT_STATUS_INVALID": "Status tenant harus active, suspended, atau closed.",
+  "DOMAIN_TENANT_ACCESS_DENIED": "Anda tidak memiliki akses ke tenant ini.",
+  "DOMAIN_TENANT_PERSISTENCE_FAILED": "Gagal menyimpan tenant.",
+  "DOMAIN_TENANT_QUERY_FAILED": "Gagal memuat tenant.",
+  "DOMAIN_TENANT_MEMBER_NOT_FOUND": "Member tenant tidak ditemukan.",
+  "DOMAIN_TENANT_MEMBER_ALREADY_EXISTS": "User sudah menjadi member tenant ini.",
+  "DOMAIN_TENANT_MEMBER_STATUS_INVALID": "Status member harus active atau invited.",
+  "DOMAIN_TENANT_MEMBER_USER_NOT_FOUND": "User yang akan ditambahkan tidak ditemukan.",
+  "DOMAIN_TENANT_MEMBER_IDENTITY_REQUIRED": "Isi salah satu: user_id atau email."
 }

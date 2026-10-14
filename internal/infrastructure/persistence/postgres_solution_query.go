@@ -39,7 +39,7 @@ func (r *PostgresSolutionQuery) List(ctx context.Context, q port.SolutionListRea
 		where = append(where, fmt.Sprintf("status = $%d", len(args)))
 	}
 	if q.Search != nil && strings.TrimSpace(*q.Search) != "" {
-		args = append(args, "%"+strings.TrimSpace(*q.Search)+"%")
+		args = append(args, likePattern(*q.Search))
 		where = append(where, fmt.Sprintf("(code ILIKE $%d OR name ILIKE $%d)", len(args), len(args)))
 	}
 	whereSQL := ""
