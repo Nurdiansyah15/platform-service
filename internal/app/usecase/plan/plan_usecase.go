@@ -13,6 +13,7 @@ import (
 	"platform-service/internal/domain/plan/constant"
 	"platform-service/internal/domain/plan/entity"
 	planrepo "platform-service/internal/domain/plan/repository"
+	pricingvo "platform-service/internal/domain/pricing/valueobject"
 	solutionconstant "platform-service/internal/domain/solution/constant"
 	solutionrepo "platform-service/internal/domain/solution/repository"
 )
@@ -43,7 +44,7 @@ func (uc *PlanUseCase) Create(ctx context.Context, solutionID string, req dto.Cr
 	if _, err := uc.deps.Solutions.FindByID(ctx, solutionID); err != nil {
 		return nil, mapPlanDomainError(err)
 	}
-	price, err := parsePriceInput(req.Price)
+	price, err := pricingvo.ParsePriceJSON(req.Price)
 	if err != nil {
 		return nil, mapPlanDomainError(err)
 	}

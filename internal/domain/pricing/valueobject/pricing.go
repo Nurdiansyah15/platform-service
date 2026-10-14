@@ -2,6 +2,8 @@
 package valueobject
 
 import (
+	"bytes"
+	"encoding/json"
 	"regexp"
 	"strings"
 
@@ -73,3 +75,20 @@ func NewBillingCycle(raw string) (BillingCycle, error) {
 }
 
 func (c BillingCycle) String() string { return string(c) }
+
+// ParsePriceJSON mengubah harga dari JSON (angka atau string angka) menjadi teks
+// untuk NewPrice. Kosong / null → "" (dianggap harga 0 oleh pemanggil).
+func ParsePriceJSON(raw json.RawMessage) (string, error) {
+	v := bytes.TrimSpace(raw)
+	if len(v) == 0 || bytes.Equal(v, []byte("null")) {
+		return "", nil
+	}
+	if v[0] == '"' {
+		var s string
+		if err := json.Unmarshal(v, &s); err != nil {
+			return "", domainerr.New(constant.CodePriceInvalid)
+		}
+		return s, nil
+	}
+	return string(v), nil
+}

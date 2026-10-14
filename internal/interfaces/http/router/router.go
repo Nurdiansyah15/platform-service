@@ -24,6 +24,7 @@ type Handlers struct {
 	Org      *api.OrganizationHandler
 	Benefit  *api.BenefitHandler
 	Plan     *api.PlanHandler
+	Addon    *api.AddonHandler
 }
 
 type Deps struct {
@@ -80,4 +81,5 @@ func registerDomainRoutes(r Routes, h Handlers) {
 	RegisterOrganizationRoutes(r, h.Org)
 	RegisterBenefitRoutes(r, h.Benefit)
 	RegisterPlanRoutes(r, h.Plan)
+	RegisterAddonRoutes(r, h.Addon)
 }

@@ -220,14 +220,18 @@ Keputusan desain di luar spec:
 - Test: `plan_handler_test.go`, pricing VO, plan entity, `assignment_validator_test.go`, repository (NUMERIC round trip, composite FK menolak benefit lintas solution)
 - Bug yang ditemukan test: `ORDER BY price` merujuk kolom output `price::text` → urut teks; diperbaiki dengan kolom ter-qualify (`plans.price`)
 
-### Fase 9 — Add-ons & Add-on Benefits
-- Tabel: `addons`, `addon_benefits` (composite FK)
+### Fase 9 — Add-ons & Add-on Benefits ✅
+- Tabel: `addons` (pola sama `plans`: soft delete, partial unique code, `UNIQUE (id, solution_id)`, NUMERIC price), `addon_benefits` (composite FK ke `addons` & `benefits`, index `benefit_id`)
+- Domain `addon`: entity `Addon`, `AddonBenefit`, VO `AddonCode`; memakai ulang `pricing` VO dan `AssignmentValidator`
+- `pricing.ParsePriceJSON` — parsing harga JSON (angka / string) dipindah ke domain pricing, dipakai plan & add-on
+- Akses identik dengan plan (tulis = admin + `LICENSE_MANAGED`; baca = token valid, non-admin hanya add-on aktif dari solution aktif)
 - Endpoint:
-  - [ ] `POST /solutions/{solutionId}/addons` (MVP)
-  - [ ] `GET /solutions/{solutionId}/addons` (MVP)
-  - [ ] `GET /addons/{addonId}/benefits` (MVP)
-  - [ ] `PUT /addons/{addonId}/benefits` (MVP)
-- Test: `addon_handler_test.go` (pola sama Fase 8)
+  - [x] `POST /solutions/{solutionId}/addons` (MVP)
+  - [x] `GET /solutions/{solutionId}/addons` (MVP)
+  - [x] `GET /addons/{addonId}/benefits` (MVP)
+  - [x] `PUT /addons/{addonId}/benefits` (MVP) — replace-all
+- Test: `addon_handler_test.go`, entity, repository (composite FK), `ParsePriceJSON`
+- Test infra: `mustCreateAddon`
 
 ### Fase 10 — Subscriptions, Snapshot & Tenant Switch
 - Tabel: `subscriptions`, `subscription_addons`, `subscription_benefit_snapshots` (`UNIQUE NULLS NOT DISTINCT`)

@@ -224,3 +224,19 @@ func mustCreatePlan(t *testing.T, solutionID, code string, extra map[string]any)
 	testhelper.DecodeBody(t, w, &got)
 	return got.ID
 }
+
+// mustCreateAddon membuat add-on via API (admin) dan mengembalikan ID-nya. extra menimpa field default.
+func mustCreateAddon(t *testing.T, solutionID, code string, extra map[string]any) string {
+	t.Helper()
+	body := map[string]any{"code": code, "name": "Add-on " + code, "price": "25000"}
+	for k, v := range extra {
+		body[k] = v
+	}
+	w := testSrv.POST("/api/v1/solutions/"+solutionID+"/addons", body, adminHeader())
+	require.Equal(t, 201, w.Code, "mustCreateAddon body=%s", w.Body.String())
+	var got struct {
+		ID string `json:"id"`
+	}
+	testhelper.DecodeBody(t, w, &got)
+	return got.ID
+}

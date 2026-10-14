@@ -104,5 +104,11 @@
   "DOMAIN_PRICING_BILLING_CYCLE_INVALID": "billing_cycle must be monthly or yearly.",
   "DOMAIN_BENEFIT_ASSIGNMENT_DUPLICATE": "The same benefit is listed more than once.",
   "DOMAIN_BENEFIT_ASSIGNMENT_UNKNOWN": "One or more benefits were not found.",
-  "DOMAIN_BENEFIT_SOLUTION_MISMATCH": "Benefit belongs to a different solution."
+  "DOMAIN_BENEFIT_SOLUTION_MISMATCH": "Benefit belongs to a different solution.",
+  "DOMAIN_ADDON_NOT_FOUND": "Add-on not found.",
+  "DOMAIN_ADDON_CODE_DUPLICATE": "Add-on code is already used in this solution.",
+  "DOMAIN_ADDON_CODE_INVALID": "Add-on code may only contain lowercase letters, numbers, and hyphens (max 100 characters).",
+  "DOMAIN_ADDON_NAME_INVALID": "Add-on name is required (max 255 characters).",
+  "DOMAIN_ADDON_PERSISTENCE_FAILED": "Failed to save add-on.",
+  "DOMAIN_ADDON_QUERY_FAILED": "Failed to load add-on."
 }

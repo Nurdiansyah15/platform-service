@@ -13,6 +13,32 @@ definitions:
       user_id:
         type: string
     type: object
+  dto.AddonResponse:
+    properties:
+      billing_cycle:
+        type: string
+      code:
+        type: string
+      created_at:
+        type: string
+      currency:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      price:
+        example: "25000.00"
+        type: string
+      solution_id:
+        type: string
+      updated_at:
+        type: string
+    type: object
   dto.AssignedBenefitResponse:
     properties:
       aggregation_strategy:
@@ -123,6 +149,34 @@ definitions:
         type: string
       updated_at:
         type: string
+    type: object
+  dto.CreateAddonRequest:
+    properties:
+      billing_cycle:
+        enum:
+        - monthly
+        - yearly
+        type: string
+      code:
+        maxLength: 100
+        type: string
+      currency:
+        type: string
+      description:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        maxLength: 255
+        type: string
+      price:
+        description: Price — angka JSON atau string angka, maks 2 desimal (mis. 25000
+          atau "25000.00").
+        example: "25000.00"
+        type: string
+    required:
+    - code
+    - name
     type: object
   dto.CreateBenefitRequest:
     properties:
@@ -571,6 +625,97 @@ paths:
       summary: JSON Web Key Set
       tags:
       - Service Auth
+  /api/v1/addons/{addonId}/benefits:
+    get:
+      parameters:
+      - description: Add-on ID
+        in: path
+        name: addonId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.AssignedBenefitResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List add-on benefits
+      tags:
+      - Add-ons
+    put:
+      consumes:
+      - application/json
+      description: 'Replace-all: daftar ini menjadi seluruh benefit add-on (array
+        kosong = hapus semua). Tidak memengaruhi subscription berjalan.'
+      parameters:
+      - description: Add-on ID
+        in: path
+        name: addonId
+        required: true
+        type: string
+      - description: Benefit values
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ReplaceBenefitsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.AssignedBenefitResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Replace add-on benefits
+      tags:
+      - Add-ons
   /api/v1/auth/login:
     post:
       consumes:
@@ -1168,6 +1313,130 @@ paths:
       summary: Get solution
       tags:
       - Solution Catalog
+  /api/v1/solutions/{solutionId}/addons:
+    get:
+      description: Non-admin hanya melihat add-on aktif dari solution aktif.
+      parameters:
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Filter (platform admin saja)
+        in: query
+        name: is_active
+        type: boolean
+      - description: monthly | yearly
+        in: query
+        name: billing_cycle
+        type: string
+      - description: Cari di code / name
+        in: query
+        name: search
+        type: string
+      - description: Halaman
+        in: query
+        name: page
+        type: integer
+      - description: Jumlah per halaman (maks 100)
+        in: query
+        name: limit
+        type: integer
+      - description: price | code | name | created_at
+        in: query
+        name: sort_by
+        type: string
+      - description: asc | desc
+        in: query
+        name: sort_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.AddonResponse'
+                  type: array
+                meta:
+                  $ref: '#/definitions/dto.Meta'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List add-ons of a solution
+      tags:
+      - Add-ons
+    post:
+      consumes:
+      - application/json
+      description: price boleh angka atau string angka (maks 2 desimal); respons selalu
+        string (mis. "25000.00").
+      parameters:
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Add-on
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateAddonRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.AddonResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Create add-on
+      tags:
+      - Add-ons
   /api/v1/solutions/{solutionId}/benefits:
     get:
       parameters:

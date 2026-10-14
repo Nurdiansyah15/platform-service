@@ -104,5 +104,11 @@
   "DOMAIN_PRICING_BILLING_CYCLE_INVALID": "billing_cycle harus monthly atau yearly.",
   "DOMAIN_BENEFIT_ASSIGNMENT_DUPLICATE": "Benefit yang sama disebutkan lebih dari sekali.",
   "DOMAIN_BENEFIT_ASSIGNMENT_UNKNOWN": "Satu atau lebih benefit tidak ditemukan.",
-  "DOMAIN_BENEFIT_SOLUTION_MISMATCH": "Benefit milik solution lain."
+  "DOMAIN_BENEFIT_SOLUTION_MISMATCH": "Benefit milik solution lain.",
+  "DOMAIN_ADDON_NOT_FOUND": "Add-on tidak ditemukan.",
+  "DOMAIN_ADDON_CODE_DUPLICATE": "Code add-on sudah dipakai di solution ini.",
+  "DOMAIN_ADDON_CODE_INVALID": "Code add-on hanya boleh huruf kecil, angka, dan tanda hubung (maks 100 karakter).",
+  "DOMAIN_ADDON_NAME_INVALID": "Nama add-on wajib diisi (maks 255 karakter).",
+  "DOMAIN_ADDON_PERSISTENCE_FAILED": "Gagal menyimpan add-on.",
+  "DOMAIN_ADDON_QUERY_FAILED": "Gagal memuat add-on."
 }

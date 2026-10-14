@@ -1,8 +1,6 @@
 package plan
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 
 	"platform-service/internal/app/apperror"
@@ -16,22 +14,6 @@ import (
 	pricingconstant "platform-service/internal/domain/pricing/constant"
 	solutionconstant "platform-service/internal/domain/solution/constant"
 )
-
-// parsePriceInput menerima harga sebagai angka JSON atau string angka. Kosong → "" (harga 0).
-func parsePriceInput(raw json.RawMessage) (string, error) {
-	v := bytes.TrimSpace(raw)
-	if len(v) == 0 || bytes.Equal(v, []byte("null")) {
-		return "", nil
-	}
-	if v[0] == '"' {
-		var s string
-		if err := json.Unmarshal(v, &s); err != nil {
-			return "", domainerr.New(pricingconstant.CodePriceInvalid)
-		}
-		return s, nil
-	}
-	return string(v), nil
-}
 
 func mapPlanDomainError(err error) error {
 	var de *domainerr.DomainError
@@ -65,7 +47,7 @@ func toPlanResponse(p *entity.Plan) dto.PlanResponse {
 	}
 }
 
-// toAssignedBenefitResponses dipakai juga oleh usecase add-on (Fase 9) lewat duplikasi kecil di paketnya.
+// toAssignedBenefitResponses memetakan read item benefit plan ke DTO.
 func toAssignedBenefitResponses(items []port.AssignedBenefitReadItem) []dto.AssignedBenefitResponse {
 	out := make([]dto.AssignedBenefitResponse, 0, len(items))
 	for _, it := range items {

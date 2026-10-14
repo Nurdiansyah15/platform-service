@@ -45,3 +45,14 @@ func TestNewBillingCycle(t *testing.T) {
 	_, err = valueobject.NewBillingCycle("weekly")
 	testhelper.AssertDomainError(t, err, constant.CodeBillingCycleInvalid)
 }
+
+func TestParsePriceJSON(t *testing.T) {
+	cases := map[string]string{`150000`: "150000", `"99.50"`: "99.50", ``: "", `null`: "", ` 1e5 `: "1e5"}
+	for in, want := range cases {
+		got, err := valueobject.ParsePriceJSON([]byte(in))
+		require.NoError(t, err, in)
+		assert.Equal(t, want, got)
+	}
+	_, err := valueobject.ParsePriceJSON([]byte(`"tidak ditutup`))
+	testhelper.AssertDomainError(t, err, constant.CodePriceInvalid)
+}

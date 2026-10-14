@@ -15,6 +15,7 @@ import (
 
 	"platform-service/internal/app/port"
 	"platform-service/internal/app/principal"
+	"platform-service/internal/app/usecase/addon"
 	"platform-service/internal/app/usecase/auth"
 	"platform-service/internal/app/usecase/benefit"
 	"platform-service/internal/app/usecase/organization"
@@ -108,6 +109,9 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	planRepo := persistence.NewPostgresPlanRepository(opts.DB)
 	planBenefitRepo := persistence.NewPostgresPlanBenefitRepository(opts.DB)
 	planQuery := persistence.NewPostgresPlanQuery(opts.DB)
+	addonRepo := persistence.NewPostgresAddonRepository(opts.DB)
+	addonBenefitRepo := persistence.NewPostgresAddonBenefitRepository(opts.DB)
+	addonQuery := persistence.NewPostgresAddonQuery(opts.DB)
 	transactor := persistence.NewPostgresTransactor(opts.DB)
 	outbox := persistence.NewPostgresEventOutbox()
 
@@ -177,6 +181,14 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Solutions:    solutionRepo,
 		Query:        planQuery,
 	})
+	addonUC := addon.NewAddonUseCase(addon.AddonDeps{
+		Tx:            transactor,
+		Addons:        addonRepo,
+		AddonBenefits: addonBenefitRepo,
+		Benefits:      benefitRepo,
+		Solutions:     solutionRepo,
+		Query:         addonQuery,
+	})
 
 	// ── Authenticator ───────────────────────────────────────────────────────
 	// JWT diverifikasi dulu, lalu principal divalidasi ulang ke DB
@@ -213,6 +225,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 			Org:      api.NewOrganizationHandler(companyUC, branchUC),
 			Benefit:  api.NewBenefitHandler(benefitUC),
 			Plan:     api.NewPlanHandler(planUC),
+			Addon:    api.NewAddonHandler(addonUC),
 		},
 	})
 
