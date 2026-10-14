@@ -140,8 +140,9 @@ func mustServiceToken(t *testing.T, c clientCredentials, scope string) string {
 	return resp.AccessToken
 }
 
-// tenantToken menerbitkan token user dengan tenant aktif (claim tid) untuk user nyata.
-// Sementara memakai FakeAuthenticator; diganti POST /auth/switch-tenant di Fase 10.
+// tenantToken menerbitkan token FAKE dengan claim tid sembarang untuk user nyata.
+// Hanya untuk skenario yang tidak bisa dibuat lewat API (mis. tid tenant tempat user
+// bukan member — switch-tenant akan menolaknya). Untuk alur normal pakai mustTenantOwner.
 func tenantToken(userID, tenantID string) map[string]string {
 	return testhelper.BearerHeader(testSrv.Auth.Issue(principalUser(userID, tenantID)))
 }
@@ -159,13 +160,45 @@ func mustCreateTenant(t *testing.T, headers map[string]string) string {
 	return got.ID
 }
 
-// mustTenantOwner membuat user baru yang membuat tenant baru (otomatis member active).
-// Mengembalikan header token ber-tid tenant tersebut, ID user, dan ID tenant.
+// mustTenantOwner menyiapkan user baru yang memiliki tenant siap pakai lewat alur nyata:
+// login ke solution baru → buat tenant (otomatis member) → admin membuat plan & subscription
+// → POST /auth/switch-tenant. Mengembalikan header token ber-tid, ID user, dan ID tenant.
 func mustTenantOwner(t *testing.T) (map[string]string, string, string) {
 	t.Helper()
-	tok, userID, _ := mustLoginNewUser(t)
+	tok, userID, solutionCode := mustLoginNewUser(t)
 	tenantID := mustCreateTenant(t, testhelper.BearerHeader(tok.AccessToken))
-	return tenantToken(userID, tenantID), userID, tenantID
+	solutionID := mustSolutionID(t, solutionCode)
+	mustSubscribe(t, tenantID, mustCreatePlan(t, solutionID, "basic", nil))
+	switched := mustSwitchTenant(t, tok.AccessToken, tenantID)
+	return testhelper.BearerHeader(switched.AccessToken), userID, tenantID
+}
+
+// mustSolutionID mencari ID solution berdasarkan code.
+func mustSolutionID(t *testing.T, code string) string {
+	t.Helper()
+	var id string
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(), `SELECT id FROM solutions WHERE code = $1`, code).Scan(&id))
+	return id
+}
+
+// mustSubscribe membuat subscription tenant ke plan (admin) dan mengembalikan ID-nya.
+func mustSubscribe(t *testing.T, tenantID, planID string) string {
+	t.Helper()
+	w := testSrv.POST("/api/v1/tenants/"+tenantID+"/subscriptions", map[string]any{"plan_id": planID}, adminHeader())
+	require.Equal(t, 201, w.Code, "mustSubscribe body=%s", w.Body.String())
+	var got struct {
+		ID string `json:"id"`
+	}
+	testhelper.DecodeBody(t, w, &got)
+	return got.ID
+}
+
+// mustSwitchTenant memilih tenant aktif untuk sesi token tersebut.
+func mustSwitchTenant(t *testing.T, accessToken, tenantID string) tokenPair {
+	t.Helper()
+	w := testSrv.POST("/api/v1/auth/switch-tenant", map[string]any{"tenant_id": tenantID}, testhelper.BearerHeader(accessToken))
+	require.Equal(t, 200, w.Code, "mustSwitchTenant body=%s", w.Body.String())
+	return decodeTokens(w.Body.Bytes())
 }
 
 func countEvents(t *testing.T, eventType, tenantID string) int {

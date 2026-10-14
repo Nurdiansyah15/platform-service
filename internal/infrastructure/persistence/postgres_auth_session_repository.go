@@ -53,10 +53,10 @@ func (r *PostgresAuthSessionRepository) FindByRefreshTokenHash(ctx context.Conte
 func (r *PostgresAuthSessionRepository) SaveRotation(ctx context.Context, s *entity.AuthSession, previousHash string) error {
 	const q = `
 		UPDATE auth_sessions
-		SET refresh_token_hash = $2, expires_at = $3, last_used_at = $4
+		SET refresh_token_hash = $2, expires_at = $3, last_used_at = $4, tenant_id = $6
 		WHERE id = $1 AND refresh_token_hash = $5 AND revoked_at IS NULL`
 
-	res, err := execFromContext(ctx, r.db).ExecContext(ctx, q, s.ID, s.RefreshTokenHash, s.ExpiresAt, s.LastUsedAt, previousHash)
+	res, err := execFromContext(ctx, r.db).ExecContext(ctx, q, s.ID, s.RefreshTokenHash, s.ExpiresAt, s.LastUsedAt, previousHash, s.TenantID)
 	if err != nil {
 		return domainerr.Wrap(constant.CodeSessionPersistenceFailed, err)
 	}

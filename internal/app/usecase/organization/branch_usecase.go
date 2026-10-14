@@ -19,7 +19,7 @@ type BranchUseCase struct {
 }
 
 func NewBranchUseCase(deps OrganizationDeps) *BranchUseCase {
-	return &BranchUseCase{deps: deps, access: service.NewAccessPolicy(deps.Members), now: time.Now}
+	return &BranchUseCase{deps: deps, access: service.NewAccessPolicy(deps.Members, deps.Subscriptions), now: time.Now}
 }
 
 // Create membuat branch di company. Company tenant lain diperlakukan sebagai tidak ada (404).

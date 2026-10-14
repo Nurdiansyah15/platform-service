@@ -49,3 +49,16 @@ type SolutionSummary struct {
 	Code string `json:"code"`
 	Name string `json:"name"`
 }
+
+type SwitchTenantRequest struct {
+	TenantID string `json:"tenant_id" binding:"required,uuid"`
+}
+
+type SelectableTenantResponse struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Slug   string `json:"slug"`
+	Status string `json:"status"`
+	// IsActive — tenant ini adalah tenant aktif token saat ini.
+	IsActive bool `json:"is_active"`
+}

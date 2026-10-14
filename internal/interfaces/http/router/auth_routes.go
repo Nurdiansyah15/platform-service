@@ -14,6 +14,8 @@ func RegisterAuthRoutes(r Routes, h *api.AuthHandler) {
 	protected := r.Authenticated.Group("/auth", middleware.RequireUser())
 	protected.POST("/logout", h.Logout)
 	protected.GET("/me", h.Me)
+	protected.GET("/tenants", h.Tenants)
+	protected.POST("/switch-tenant", h.SwitchTenant)
 }
 
 // RegisterUserRoutes — manajemen user (spec §3.1).

@@ -1,5 +1,17 @@
 basePath: /
 definitions:
+  dto.AddSubscriptionAddonRequest:
+    properties:
+      addon_id:
+        type: string
+      quantity:
+        description: Quantity — default 1.
+        maximum: 1000000
+        minimum: 1
+        type: integer
+    required:
+    - addon_id
+    type: object
   dto.AddTenantMemberRequest:
     properties:
       email:
@@ -132,6 +144,13 @@ definitions:
         type: string
       updated_at:
         type: string
+    type: object
+  dto.ChangePlanRequest:
+    properties:
+      plan_id:
+        type: string
+    required:
+    - plan_id
     type: object
   dto.CompanyResponse:
     properties:
@@ -301,6 +320,23 @@ definitions:
     - code
     - name
     type: object
+  dto.CreateSubscriptionRequest:
+    properties:
+      current_period_start:
+        description: CurrentPeriodStart — default sekarang. current_period_end dihitung
+          dari billing_cycle plan.
+        type: string
+      plan_id:
+        type: string
+      status:
+        description: 'Status awal: active (default) atau trialing.'
+        enum:
+        - active
+        - trialing
+        type: string
+    required:
+    - plan_id
+    type: object
   dto.CreateTenantRequest:
     properties:
       name:
@@ -466,6 +502,20 @@ definitions:
     required:
     - benefits
     type: object
+  dto.SelectableTenantResponse:
+    properties:
+      id:
+        type: string
+      is_active:
+        description: IsActive — tenant ini adalah tenant aktif token saat ini.
+        type: boolean
+      name:
+        type: string
+      slug:
+        type: string
+      status:
+        type: string
+    type: object
   dto.SessionResponse:
     properties:
       created_at:
@@ -533,6 +583,73 @@ definitions:
         type: string
       name:
         type: string
+    type: object
+  dto.SubscriptionAddonResponse:
+    properties:
+      addon_code:
+        type: string
+      addon_id:
+        type: string
+      addon_name:
+        type: string
+      created_at:
+        type: string
+      currency:
+        type: string
+      id:
+        type: string
+      quantity:
+        type: integer
+      status:
+        type: string
+      subscription_id:
+        type: string
+      unit_price_at_purchase:
+        example: "25000.00"
+        type: string
+      updated_at:
+        type: string
+    type: object
+  dto.SubscriptionResponse:
+    properties:
+      billing_cycle:
+        type: string
+      created_at:
+        type: string
+      currency:
+        type: string
+      current_period_end:
+        type: string
+      current_period_start:
+        type: string
+      id:
+        type: string
+      plan_code:
+        type: string
+      plan_id:
+        type: string
+      plan_name:
+        type: string
+      price_at_purchase:
+        example: "150000.00"
+        type: string
+      solution_code:
+        type: string
+      solution_id:
+        type: string
+      status:
+        type: string
+      tenant_id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  dto.SwitchTenantRequest:
+    properties:
+      tenant_id:
+        type: string
+    required:
+    - tenant_id
     type: object
   dto.TenantMemberResponse:
     properties:
@@ -835,6 +952,79 @@ paths:
           schema:
             $ref: '#/definitions/respond.ErrorBody'
       summary: Refresh token
+      tags:
+      - Auth
+  /api/v1/auth/switch-tenant:
+    post:
+      consumes:
+      - application/json
+      description: Mengganti tenant aktif sesi dan menerbitkan access & refresh token
+        baru; refresh token lama tidak berlaku.
+      parameters:
+      - description: Tenant tujuan
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.SwitchTenantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.AuthTokenResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Switch active tenant
+      tags:
+      - Auth
+  /api/v1/auth/tenants:
+    get:
+      description: Tenant tempat user member active, tenant active, dan subscribe
+        solution sesi (trialing / active).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.SelectableTenantResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Tenants selectable for the session's solution
       tags:
       - Auth
   /api/v1/benefits/{benefitId}:
@@ -1735,6 +1925,202 @@ paths:
       summary: Create plan
       tags:
       - Plans
+  /api/v1/subscriptions/{subscriptionId}/addons:
+    get:
+      parameters:
+      - description: Subscription ID
+        in: path
+        name: subscriptionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.SubscriptionAddonResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List subscription add-ons
+      tags:
+      - Subscriptions
+    post:
+      consumes:
+      - application/json
+      description: Membekukan benefit add-on ke snapshot. Add-on yang pernah dibatalkan
+        diaktifkan ulang.
+      parameters:
+      - description: Subscription ID
+        in: path
+        name: subscriptionId
+        required: true
+        type: string
+      - description: Add-on
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.AddSubscriptionAddonRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.SubscriptionAddonResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Add add-on to subscription
+      tags:
+      - Subscriptions
+  /api/v1/subscriptions/{subscriptionId}/cancel:
+    post:
+      parameters:
+      - description: Subscription ID
+        in: path
+        name: subscriptionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.SubscriptionResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Cancel subscription
+      tags:
+      - Subscriptions
+  /api/v1/subscriptions/{subscriptionId}/change-plan:
+    post:
+      consumes:
+      - application/json
+      description: Mengganti snapshot benefit plan. Periode baru dimulai saat ini.
+      parameters:
+      - description: Subscription ID
+        in: path
+        name: subscriptionId
+        required: true
+        type: string
+      - description: Plan baru
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ChangePlanRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.SubscriptionResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Change subscription plan
+      tags:
+      - Subscriptions
   /api/v1/tenants:
     get:
       description: Platform admin melihat semua tenant; user lain hanya tenant tempat
@@ -2129,6 +2515,126 @@ paths:
       summary: Add tenant member
       tags:
       - Tenants
+  /api/v1/tenants/{tenantId}/subscriptions:
+    get:
+      description: Token service hanya melihat subscription solution miliknya.
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenantId
+        required: true
+        type: string
+      - description: trialing | active | past_due | canceled | expired
+        in: query
+        name: status
+        type: string
+      - description: Halaman
+        in: query
+        name: page
+        type: integer
+      - description: Jumlah per halaman (maks 100)
+        in: query
+        name: limit
+        type: integer
+      - description: created_at | status | current_period_end
+        in: query
+        name: sort_by
+        type: string
+      - description: asc | desc
+        in: query
+        name: sort_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.SubscriptionResponse'
+                  type: array
+                meta:
+                  $ref: '#/definitions/dto.Meta'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List tenant subscriptions
+      tags:
+      - Subscriptions
+    post:
+      consumes:
+      - application/json
+      description: Membekukan benefit plan ke snapshot. Maksimal satu subscription
+        hidup (trialing/active/past_due) per tenant per solution.
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenantId
+        required: true
+        type: string
+      - description: Subscription
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateSubscriptionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.SubscriptionResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Create subscription
+      tags:
+      - Subscriptions
   /api/v1/users:
     post:
       consumes:

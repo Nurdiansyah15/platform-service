@@ -5,12 +5,18 @@ import (
 	"platform-service/internal/interfaces/http/middleware"
 )
 
-// RegisterOrganizationRoutes — Company & Branch (spec §3.3). Saat ini khusus token
-// user; akses token service (org:read / org:write) menyusul di Fase 10.
+// Scope service untuk company & branch (spec §2.8).
+const (
+	scopeOrgRead  = "org:read"
+	scopeOrgWrite = "org:write"
+)
+
+// RegisterOrganizationRoutes — Company & Branch (spec §3.3). Token user, atau token
+// service ber-scope untuk tenant yang subscribe solution-nya.
 func RegisterOrganizationRoutes(r Routes, h *api.OrganizationHandler) {
-	g := r.Authenticated.Group("", middleware.RequireUser())
-	g.GET("/tenants/:tenantId/companies", h.ListCompanies)
-	g.POST("/tenants/:tenantId/companies", h.CreateCompany)
-	g.GET("/companies/:companyId/branches", h.ListBranches)
-	g.POST("/companies/:companyId/branches", h.CreateBranch)
+	g := r.Authenticated
+	g.GET("/tenants/:tenantId/companies", middleware.RequireUserOrService(scopeOrgRead), h.ListCompanies)
+	g.POST("/tenants/:tenantId/companies", middleware.RequireUserOrService(scopeOrgWrite), h.CreateCompany)
+	g.GET("/companies/:companyId/branches", middleware.RequireUserOrService(scopeOrgRead), h.ListBranches)
+	g.POST("/companies/:companyId/branches", middleware.RequireUserOrService(scopeOrgWrite), h.CreateBranch)
 }

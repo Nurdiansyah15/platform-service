@@ -23,6 +23,7 @@ import (
 	"platform-service/internal/app/usecase/signingkey"
 	"platform-service/internal/app/usecase/solution"
 	"platform-service/internal/app/usecase/solutionclient"
+	"platform-service/internal/app/usecase/subscription"
 	"platform-service/internal/app/usecase/system"
 	"platform-service/internal/app/usecase/tenant"
 	"platform-service/internal/app/usecase/user"
@@ -112,6 +113,11 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	addonRepo := persistence.NewPostgresAddonRepository(opts.DB)
 	addonBenefitRepo := persistence.NewPostgresAddonBenefitRepository(opts.DB)
 	addonQuery := persistence.NewPostgresAddonQuery(opts.DB)
+	subscriptionRepo := persistence.NewPostgresSubscriptionRepository(opts.DB)
+	subscriptionAddonRepo := persistence.NewPostgresSubscriptionAddonRepository(opts.DB)
+	snapshotRepo := persistence.NewPostgresSnapshotRepository(opts.DB)
+	benefitValueSource := persistence.NewPostgresBenefitValueSource(opts.DB)
+	subscriptionQuery := persistence.NewPostgresSubscriptionQuery(opts.DB)
 	transactor := persistence.NewPostgresTransactor(opts.DB)
 	outbox := persistence.NewPostgresEventOutbox()
 
@@ -136,6 +142,10 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Users:           userRepo,
 		Solutions:       solutionRepo,
 		Sessions:        sessionRepo,
+		Tenants:         tenantRepo,
+		Members:         memberRepo,
+		Subscriptions:   subscriptionRepo,
+		Selectable:      subscriptionQuery,
 		Hasher:          hasher,
 		Tokens:          tokenIssuer,
 		RefreshTokenTTL: cfg.Auth.RefreshTokenTTL,
@@ -158,6 +168,8 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Members: memberRepo,
 		Users:   userRepo,
 		Query:   tenantQuery,
+		// AccessPolicy: token service hanya untuk tenant yang subscribe solution-nya.
+		Subscriptions: subscriptionRepo,
 	}
 	tenantUC := tenant.NewTenantUseCase(tenantDeps)
 	memberUC := tenant.NewMemberUseCase(tenantDeps)
@@ -169,6 +181,8 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Companies: companyRepo,
 		Branches:  branchRepo,
 		Query:     orgQuery,
+		// AccessPolicy: token service hanya untuk tenant yang subscribe solution-nya.
+		Subscriptions: subscriptionRepo,
 	}
 	companyUC := organization.NewCompanyUseCase(orgDeps)
 	branchUC := organization.NewBranchUseCase(orgDeps)
@@ -188,6 +202,20 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Benefits:      benefitRepo,
 		Solutions:     solutionRepo,
 		Query:         addonQuery,
+	})
+	subscriptionUC := subscription.NewSubscriptionUseCase(subscription.SubscriptionDeps{
+		Tx:                 transactor,
+		Outbox:             outbox,
+		Subscriptions:      subscriptionRepo,
+		SubscriptionAddons: subscriptionAddonRepo,
+		Snapshots:          snapshotRepo,
+		BenefitValues:      benefitValueSource,
+		Tenants:            tenantRepo,
+		Members:            memberRepo,
+		Plans:              planRepo,
+		Addons:             addonRepo,
+		Solutions:          solutionRepo,
+		Query:              subscriptionQuery,
 	})
 
 	// ── Authenticator ───────────────────────────────────────────────────────
@@ -226,6 +254,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 			Benefit:  api.NewBenefitHandler(benefitUC),
 			Plan:     api.NewPlanHandler(planUC),
 			Addon:    api.NewAddonHandler(addonUC),
+			Sub:      api.NewSubscriptionHandler(subscriptionUC),
 		},
 	})
 

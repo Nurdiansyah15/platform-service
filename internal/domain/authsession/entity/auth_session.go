@@ -81,6 +81,17 @@ func (s *AuthSession) Rotate(newHash string, ttl time.Duration, now time.Time) (
 	return previousHash, nil
 }
 
+// SwitchTenant mengganti tenant aktif sesi. Refresh token ikut di-rotate agar
+// token lama (dengan tid lama) tidak bisa ditukar lagi.
+func (s *AuthSession) SwitchTenant(tenantID, newHash string, ttl time.Duration, now time.Time) (previousHash string, err error) {
+	previousHash, err = s.Rotate(newHash, ttl, now)
+	if err != nil {
+		return "", err
+	}
+	s.TenantID = &tenantID
+	return previousHash, nil
+}
+
 // Revoke mengakhiri sesi. Idempotent: sesi yang sudah revoked tidak berubah.
 func (s *AuthSession) Revoke(now time.Time) {
 	if s.RevokedAt != nil {

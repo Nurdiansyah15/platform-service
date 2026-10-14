@@ -23,6 +23,8 @@ type OrganizationDeps struct {
 	Companies orgrepo.CompanyRepository
 	Branches  orgrepo.BranchRepository
 	Query     port.OrganizationQueryReadModel
+	// Subscriptions dipakai AccessPolicy untuk akses token service.
+	Subscriptions service.SubscriptionChecker
 }
 
 type CompanyUseCase struct {
@@ -32,7 +34,7 @@ type CompanyUseCase struct {
 }
 
 func NewCompanyUseCase(deps OrganizationDeps) *CompanyUseCase {
-	return &CompanyUseCase{deps: deps, access: service.NewAccessPolicy(deps.Members), now: time.Now}
+	return &CompanyUseCase{deps: deps, access: service.NewAccessPolicy(deps.Members, deps.Subscriptions), now: time.Now}
 }
 
 // Create membuat company di tenant.

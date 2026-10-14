@@ -22,7 +22,7 @@ type MemberUseCase struct {
 }
 
 func NewMemberUseCase(deps TenantDeps) *MemberUseCase {
-	return &MemberUseCase{deps: deps, access: service.NewAccessPolicy(deps.Members), now: time.Now}
+	return &MemberUseCase{deps: deps, access: service.NewAccessPolicy(deps.Members, deps.Subscriptions), now: time.Now}
 }
 
 // List menampilkan member tenant beserta data user.

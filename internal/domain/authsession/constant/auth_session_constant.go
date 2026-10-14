@@ -16,4 +16,5 @@ const (
 	CodeUserNotActive       domainerr.Code = "DOMAIN_AUTH_USER_NOT_ACTIVE"
 	CodeSolutionUnavailable domainerr.Code = "DOMAIN_AUTH_SOLUTION_UNAVAILABLE"
 	CodeRefreshTokenInvalid domainerr.Code = "DOMAIN_AUTH_REFRESH_TOKEN_INVALID"
+	CodeTenantNotSelectable domainerr.Code = "DOMAIN_AUTH_TENANT_NOT_SELECTABLE"
 )

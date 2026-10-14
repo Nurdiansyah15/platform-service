@@ -43,7 +43,7 @@ func mapAuthDomainError(err error) error {
 	switch de.Code {
 	case constant.CodeInvalidCredentials, constant.CodeRefreshTokenInvalid:
 		return apperror.Unauthorized(string(de.Code))
-	case constant.CodeUserNotActive:
+	case constant.CodeUserNotActive, constant.CodeTenantNotSelectable:
 		return apperror.Forbidden(string(de.Code))
 	case constant.CodeSolutionUnavailable:
 		return apperror.Unprocessable(string(de.Code), nil)

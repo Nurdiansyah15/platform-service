@@ -22,6 +22,8 @@ type TenantDeps struct {
 	Members tenantrepo.TenantMemberRepository
 	Users   userrepo.UserRepository
 	Query   port.TenantQueryReadModel
+	// Subscriptions dipakai AccessPolicy untuk akses token service.
+	Subscriptions service.SubscriptionChecker
 }
 
 type TenantUseCase struct {
@@ -31,7 +33,7 @@ type TenantUseCase struct {
 }
 
 func NewTenantUseCase(deps TenantDeps) *TenantUseCase {
-	return &TenantUseCase{deps: deps, access: service.NewAccessPolicy(deps.Members), now: time.Now}
+	return &TenantUseCase{deps: deps, access: service.NewAccessPolicy(deps.Members, deps.Subscriptions), now: time.Now}
 }
 
 // Create membuat tenant baru. Pembuat non-admin otomatis menjadi member active;

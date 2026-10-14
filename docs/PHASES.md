@@ -160,7 +160,7 @@ Keputusan desain di luar spec:
   - Semua user login boleh membuat tenant; pembuat non-admin otomatis member active. Platform admin tidak otomatis jadi member
   - `POST /tenants` & `GET /tenants` boleh tanpa `tid` (onboarding / pemilihan tenant); endpoint per-tenant wajib `tid`
   - Tambah member via `user_id` **atau** `email` (user harus sudah ada), status `active` (default) / `invited`; member inactive diaktifkan ulang; sudah active/invited → 409
-  - Endpoint khusus token user; akses token service (`users:read` / `users:write`) menyusul Fase 10 (butuh cek subscription)
+  - Akses token service (`users:read` / `users:write`) ditambahkan di Fase 10
 - Endpoint:
   - [x] `POST /tenants` (MVP)
   - [x] `GET /tenants` (MVP) — admin: semua; user: tenant tempat ia member active
@@ -177,7 +177,7 @@ Keputusan desain di luar spec:
 - Akses:
   - `/tenants/{tenantId}/companies` → `AccessPolicy` tenant
   - `/companies/{companyId}/branches` → company dimuat lalu `AccessPolicy` terhadap tenant pemiliknya; company tenant lain / sudah dihapus → **404** (tidak membocorkan keberadaan). `tid` kosong tetap 403
-  - Khusus token user; akses token service (`org:read` / `org:write`) menyusul Fase 10
+  - Akses token service (`org:read` / `org:write`) ditambahkan di Fase 10
 - Endpoint:
   - [x] `GET /tenants/{tenantId}/companies` (MVP) — tanpa yang terhapus, filter status/search, pagination
   - [x] `POST /tenants/{tenantId}/companies` (MVP)
@@ -233,31 +233,34 @@ Keputusan desain di luar spec:
 - Test: `addon_handler_test.go`, entity, repository (composite FK), `ParsePriceJSON`
 - Test infra: `mustCreateAddon`
 
-### Fase 10 — Subscriptions, Snapshot & Tenant Switch
-- Tabel: `subscriptions`, `subscription_addons`, `subscription_benefit_snapshots` (`UNIQUE NULLS NOT DISTINCT`)
-- Domain service `SnapshotBuilder`:
-  - create subscription → salin `plan_benefits`
-  - change-plan → hapus snapshot plan lama, salin plan baru
-  - tambah add-on → salin `addon_benefits`
-  - cancel add-on → hapus snapshot add-on
-  - semua dalam satu tx + outbox `subscription.*`, `subscription_addon.*`, `entitlement.changed`
+### Fase 10 — Subscriptions, Snapshot & Tenant Switch ✅
+- Tabel: `subscriptions` (composite FK ke `plans`, `UNIQUE (id, solution_id)`, CHECK status & billing_cycle), `subscription_addons` (composite FK ke `subscriptions` & `addons`, unique `(subscription_id, addon_id)`, CHECK quantity & status), `subscription_benefit_snapshots` (`UNIQUE NULLS NOT DISTINCT`), index spec §2.11
+- Keputusan:
+  - Subscription dibuat/diubah platform admin (+ `LICENSE_MANAGED`); belum ada integrasi pembayaran
+  - Maksimal satu subscription **live** (`trialing`/`active`/`past_due`) per tenant per solution — partial unique `uq_subscriptions_live_tenant_solution` → 409
+  - Subscription **usable** (dipakai pilih tenant, akses service) = `trialing`/`active`
+  - Periode: `current_period_end` = mulai + 1 bulan / 1 tahun dengan tanggal dijepit ke akhir bulan (31 Jan → 28 Feb, 29 Feb + 1 th → 28 Feb)
+  - Add-on yang dibatalkan lalu dipasang lagi → baris lama diaktifkan ulang (sesuai unique spec)
+- Domain `subscription`: `Subscription` (`ChangePlan`, `Cancel`, `AttachAddon`), `SubscriptionAddon` (`Reactivate`), `BenefitSnapshot`; domain service `SnapshotBuilder` (sumber nilai via port `BenefitValueSource`); event `subscription.created`, `subscription.plan_changed`, `subscription.status_changed`, `subscription_addon.added`, `entitlement.changed` (semua membawa `tenant_id` & `solution_id`)
 - Endpoint:
-  - [ ] `POST /tenants/{tenantId}/subscriptions` (MVP)
-  - [ ] `GET /tenants/{tenantId}/subscriptions` (MVP)
-  - [ ] `POST /subscriptions/{subscriptionId}/change-plan` (MVP)
-  - [ ] `POST /subscriptions/{subscriptionId}/cancel` (MVP)
-  - [ ] `GET /subscriptions/{subscriptionId}/addons` (MVP)
-  - [ ] `POST /subscriptions/{subscriptionId}/addons` (MVP)
-  - [ ] `GET /auth/tenants` (MVP)
-  - [ ] `POST /auth/switch-tenant` (MVP)
-- Lainnya: login auto-mengisi `tid` bila user hanya punya 1 tenant yang subscribe solution sesi
-- Buka akses token service ke endpoint tenant & member (`users:read` / `users:write`) serta company & branch (`org:read` / `org:write`) untuk tenant yang subscribe solution client (perluas `AccessPolicy`)
-- Ganti helper test `tenantToken` (FakeAuthenticator) dengan token hasil `POST /auth/switch-tenant`
-- Test: `subscription_handler_test.go`, `subscription_addon_handler_test.go`, `auth_tenant_handler_test.go`
-  - plan dari solution lain 422
-  - snapshot tidak berubah saat `plan_benefits` diubah setelah subscribe
-  - switch ke tenant tanpa subscription aktif 403
-  - token dengan `tid` kosong ditolak endpoint tenant-scoped
+  - [x] `POST /tenants/{tenantId}/subscriptions` (MVP) — admin + `LICENSE_MANAGED`
+  - [x] `GET /tenants/{tenantId}/subscriptions` (MVP) — user (AccessPolicy) / service `entitlements:read` (hanya solution miliknya)
+  - [x] `POST /subscriptions/{subscriptionId}/change-plan` (MVP) — ganti snapshot plan
+  - [x] `POST /subscriptions/{subscriptionId}/cancel` (MVP) — snapshot tetap sebagai histori
+  - [x] `GET /subscriptions/{subscriptionId}/addons` (MVP) — subscription tenant lain → 404
+  - [x] `POST /subscriptions/{subscriptionId}/addons` (MVP)
+  - [x] `GET /auth/tenants` (MVP) — tenant: member active + tenant active + subscription usable untuk solution sesi; tandai `is_active`
+  - [x] `POST /auth/switch-tenant` (MVP) — update `auth_sessions.tenant_id` + rotasi refresh token (compare-and-swap) + token baru
+- Auth:
+  - Login otomatis mengisi `tid` bila hanya ada satu tenant yang bisa dipilih
+  - Refresh ditolak bila membership / tenant aktif sesi tidak lagi `active` (spec §2.7)
+  - Access token lama (tid berbeda dari sesi) ditolak platform setelah switch
+- Akses token service (menutup tunda Fase 5 & 6): `AccessPolicy` menerima token service hanya untuk tenant yang subscribe (usable) solution client
+  - tenant & member: `users:read` / `users:write`; company & branch: `org:read` / `org:write`
+  - `POST /tenants` & `GET /tenants` tetap khusus token user
+- Test: `subscription_handler_test.go`, `auth_tenant_handler_test.go`, `service_access_handler_test.go`, entity (periode & transisi), access policy (service), repository (live unique, NULLS NOT DISTINCT, HasUsable)
+- Test infra: `mustTenantOwner` kini memakai alur nyata (login → tenant → subscribe → switch-tenant); helper `mustSubscribe`, `mustSwitchTenant`, `mustSolutionID`, `newSubFixture`, `snapshotValues`, `eventTypesFor`. `tenantToken` (fake) hanya untuk tid tenant tempat user bukan member
+- Belum: event `entitlement.changed` belum memuat nilai entitlement (dihitung Fase 12); `past_due`/`expired` belum ada job otomatis (perlu scheduler billing)
 
 ### Fase 11 — Usage & Metering
 - Tabel: `usage_records`, `tenant_usage`

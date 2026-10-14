@@ -110,5 +110,19 @@
   "DOMAIN_ADDON_CODE_INVALID": "Code add-on hanya boleh huruf kecil, angka, dan tanda hubung (maks 100 karakter).",
   "DOMAIN_ADDON_NAME_INVALID": "Nama add-on wajib diisi (maks 255 karakter).",
   "DOMAIN_ADDON_PERSISTENCE_FAILED": "Gagal menyimpan add-on.",
-  "DOMAIN_ADDON_QUERY_FAILED": "Gagal memuat add-on."
+  "DOMAIN_ADDON_QUERY_FAILED": "Gagal memuat add-on.",
+  "DOMAIN_SUBSCRIPTION_NOT_FOUND": "Subscription tidak ditemukan.",
+  "DOMAIN_SUBSCRIPTION_ALREADY_LIVE": "Tenant sudah memiliki subscription berjalan untuk solution ini.",
+  "DOMAIN_SUBSCRIPTION_NOT_LIVE": "Subscription sudah tidak berjalan (dibatalkan atau kedaluwarsa).",
+  "DOMAIN_SUBSCRIPTION_STATUS_INVALID": "Status awal harus active atau trialing.",
+  "DOMAIN_SUBSCRIPTION_SAME_PLAN": "Subscription sudah memakai plan ini.",
+  "DOMAIN_SUBSCRIPTION_PLAN_UNAVAILABLE": "Plan tidak tersedia (tidak ada, tidak aktif, atau milik solution lain).",
+  "DOMAIN_SUBSCRIPTION_TENANT_INACTIVE": "Tenant tidak aktif.",
+  "DOMAIN_SUBSCRIPTION_PERSISTENCE_FAILED": "Gagal menyimpan subscription.",
+  "DOMAIN_SUBSCRIPTION_QUERY_FAILED": "Gagal memuat subscription.",
+  "DOMAIN_SUBSCRIPTION_ADDON_NOT_FOUND": "Add-on subscription tidak ditemukan.",
+  "DOMAIN_SUBSCRIPTION_ADDON_ALREADY_ACTIVE": "Add-on ini sudah aktif di subscription.",
+  "DOMAIN_SUBSCRIPTION_ADDON_UNAVAILABLE": "Add-on tidak tersedia (tidak ada, tidak aktif, atau milik solution lain).",
+  "DOMAIN_SUBSCRIPTION_ADDON_QUANTITY_INVALID": "Quantity minimal 1.",
+  "DOMAIN_AUTH_TENANT_NOT_SELECTABLE": "Tenant ini tidak bisa dipilih: Anda harus member aktif, tenant harus aktif, dan tenant harus berlangganan solution ini."
 }

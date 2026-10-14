@@ -71,7 +71,11 @@ func isDomainCode(err error, code domainerr.Code) bool {
 }
 
 func accessorOf(p *principal.Principal) service.Accessor {
-	return service.Accessor{UserID: p.UserID, ActiveTenantID: p.TenantID, IsPlatformAdmin: p.IsPlatformAdmin}
+	a := service.Accessor{UserID: p.UserID, ActiveTenantID: p.TenantID, IsPlatformAdmin: p.IsUser() && p.IsPlatformAdmin}
+	if p.IsService() {
+		a.ServiceSolutionID = p.SolutionID
+	}
+	return a
 }
 
 func toCompanyResponse(c *entity.Company) dto.CompanyResponse {
