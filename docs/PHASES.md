@@ -315,20 +315,25 @@ Keputusan desain di luar spec:
   - [x] `PUT /tenants/{tenantId}/roles/{roleId}/permissions` (MVP) — hanya custom role milik tenant (global / tenant lain → 404)
   - Akses endpoint tenant: user (AccessPolicy) atau service `roles:write` milik solution tersebut
 - Test: `role_handler_test.go` (global & tenant, deprecated tetap, role sistem immutable, isolasi antar tenant), `permission_assignment_test.go`, repository (partial unique, CHECK sistem, composite FK)
-- Item terbuka: saat ini semua member aktif tenant boleh mengelola custom role — dibatasi berbasis permission di Fase 15 bila diputuskan
+- Semua member aktif tenant boleh mengelola custom role (dikonfirmasi di Fase 15)
 - Belum: GET/PATCH/DELETE role, `roles/sync` system role (L6)
 
-### Fase 15 — Role Assignment & Authz Check
-- Tabel: `user_role_assignments`
-- Domain service:
-  - `ScopeValidator` (scope tenant/company/branch harus milik tenant)
-  - `PermissionEvaluator` (assignment di tenant berlaku ke company & branch di bawahnya; company berlaku ke branch-nya)
+### Fase 15 — Role Assignment & Authz Check ✅
+- Keputusan user: endpoint administratif tenant (member, company/branch, role custom, role assignment) tetap terbuka untuk **semua member aktif**; platform tidak menegakkan RBAC untuk administrasi tenant — solution/console membatasi lewat `authz/check`
+- Tabel: `user_role_assignments` (FK `(tenant_id, user_id)` → `tenant_members`, unique `(user_id, role_id, scope_type, scope_id)`, CHECK scope_type, index spec)
+- Domain `authz`:
+  - `ScopeValidator`: tenant = tenant itu sendiri (scope_id boleh kosong), company = milik tenant, branch = dari company milik tenant (company/branch wajib scope_id; yang dihapus tidak berlaku)
+  - `Evaluate` (murni): assignment tenant → seluruh tenant; company → company itu & branch-nya; branch → hanya branch itu; cek level tenant hanya dipenuhi assignment tenant; mengembalikan `granted_by`
+  - `GrantReader`: assignment → role solution (belum dihapus, global atau custom tenant) → permission (termasuk deprecated yang masih terpasang)
+  - Event `role_assignment.created`
 - Endpoint:
-  - [ ] `POST /tenants/{tenantId}/users/{userId}/role-assignments` (MVP)
-  - [ ] `POST /authz/check` (MVP)
-  - [ ] `POST /authz/check-batch` (MVP)
-- Test: `role_assignment_handler_test.go`, `authz_handler_test.go`
-  - user bukan member 422, role tenant lain 403, scope bukan milik tenant 422, duplikat 409, check allow/deny per scope
+  - [x] `POST /tenants/{tenantId}/users/{userId}/role-assignments` (MVP) — user (AccessPolicy) / service `roles:write` milik solution role; validasi member active, subscription usable (403), custom role milik tenant (422), scope (422), duplikat (409)
+  - [x] `POST /authz/check` (MVP)
+  - [x] `POST /authz/check-batch` (MVP) — 1–100 cek
+  - Check: service `authz:check` wajib `tenant_id` + `user_id` (solution = milik client); user mengecek dirinya sendiri pada `tid` (tanpa tid → 403, user lain → 403). `allowed: false` bila member tidak active, subscription tidak usable, role dihapus, atau permission tidak dikenal
+- Test: `authz_handler_test.go` (validasi assignment, hierarki scope, member inactive, subscription dibatalkan, role dihapus, token user, batch), `permission_evaluator_test.go` (matriks), repository (duplikat, FK member)
+- Bug yang ditemukan test: scope company tanpa `scope_id` → UUID kosong ke Postgres → 500; kini ditolak 422 sebelum query
+- Belum: GET/PATCH/DELETE role-assignments & `effective-permissions` (L6)
 
 ### Fase 16 — Webhooks & Event Delivery
 - Tabel: `webhook_endpoints`, `webhook_deliveries`
@@ -425,5 +430,5 @@ Pola sama: usecase + handler + handler test wajib.
 
 ## Item Terbuka
 
-- **Policy akses endpoint tenant-scoped untuk user** — saat ini "platform admin atau member aktif". Perlu diputuskan sebelum Fase 15 apakah diperketat memakai RBAC (mis. permission platform untuk kelola member/company).
+- ~~Policy akses endpoint tenant-scoped untuk user~~ — diputuskan di Fase 15: tetap "platform admin atau member aktif"; pembatasan administrasi tenant dilakukan solution/console lewat `authz/check`.
 - **Implementasi `KeyStore` produksi** (KMS / Vault) — dev & test memakai file lokal / fake.

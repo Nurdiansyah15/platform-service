@@ -155,5 +155,15 @@
   "DOMAIN_ROLE_PERMISSION_DUPLICATE": "The same permission code is listed more than once.",
   "DOMAIN_ROLE_PERMISSION_DEPRECATED": "Deprecated permissions cannot be added to a role.",
   "DOMAIN_ROLE_PERSISTENCE_FAILED": "Failed to save role.",
-  "DOMAIN_ROLE_QUERY_FAILED": "Failed to load roles."
+  "DOMAIN_ROLE_QUERY_FAILED": "Failed to load roles.",
+  "DOMAIN_AUTHZ_ASSIGNMENT_DUPLICATE": "The user already has this role on this scope.",
+  "DOMAIN_AUTHZ_ASSIGNMENT_NOT_MEMBER": "The user is not an active member of this tenant.",
+  "DOMAIN_AUTHZ_ASSIGNMENT_ROLE_UNAVAILABLE": "The role is not available for this tenant (not found, deleted, or belongs to another tenant / solution).",
+  "DOMAIN_AUTHZ_ASSIGNMENT_NOT_SUBSCRIBED": "The tenant does not have an active subscription to the role's solution.",
+  "DOMAIN_AUTHZ_SCOPE_TYPE_INVALID": "scope_type must be tenant, company, or branch.",
+  "DOMAIN_AUTHZ_SCOPE_INVALID": "scope_id does not belong to this tenant (or is required for company / branch).",
+  "DOMAIN_AUTHZ_CHECK_TARGET_REQUIRED": "tenant_id and user_id are required for service tokens.",
+  "DOMAIN_AUTHZ_CHECK_SOLUTION_UNAVAILABLE": "The token's solution is not available.",
+  "DOMAIN_AUTHZ_PERSISTENCE_FAILED": "Failed to save role assignment.",
+  "DOMAIN_AUTHZ_QUERY_FAILED": "Failed to load permissions."
 }

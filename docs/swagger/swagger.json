@@ -502,6 +502,143 @@
                 }
             }
         },
+        "/api/v1/authz/check": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Token service: wajib tenant_id \u0026 user_id (solution = milik client). Token user: mengecek diri sendiri pada tenant aktif (tid). Scope default tenant; assignment company berlaku untuk branch di bawahnya.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Authorization"
+                ],
+                "summary": "Check permission",
+                "parameters": [
+                    {
+                        "description": "Permission check",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.AuthzCheckRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.AuthzCheckResult"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/authz/check-batch": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Authorization"
+                ],
+                "summary": "Check permissions in batch",
+                "parameters": [
+                    {
+                        "description": "Maks 100 cek",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.AuthzCheckBatchRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.AuthzCheckBatchResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/benefits/{benefitId}": {
             "get": {
                 "security": [
@@ -4276,6 +4413,101 @@
                 }
             }
         },
+        "/api/v1/tenants/{tenantId}/users/{userId}/role-assignments": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "User wajib member active; tenant wajib subscribe solution role; custom role harus milik tenant; scope_id harus milik tenant (tenant / company / branch).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Authorization"
+                ],
+                "summary": "Assign role to tenant member",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Assignment",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateRoleAssignmentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.RoleAssignmentResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users": {
             "post": {
                 "security": [
@@ -4531,6 +4763,121 @@
                     "type": "string"
                 },
                 "token_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.AuthzCheckBatchRequest": {
+            "type": "object",
+            "required": [
+                "checks"
+            ],
+            "properties": {
+                "checks": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/dto.AuthzCheckItem"
+                    }
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.AuthzCheckBatchResponse": {
+            "type": "object",
+            "properties": {
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.AuthzCheckResult"
+                    }
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.AuthzCheckItem": {
+            "type": "object",
+            "required": [
+                "permission"
+            ],
+            "properties": {
+                "permission": {
+                    "type": "string",
+                    "maxLength": 150
+                },
+                "scope_id": {
+                    "type": "string"
+                },
+                "scope_type": {
+                    "type": "string",
+                    "enum": [
+                        "tenant",
+                        "company",
+                        "branch"
+                    ]
+                }
+            }
+        },
+        "dto.AuthzCheckRequest": {
+            "type": "object",
+            "required": [
+                "permission"
+            ],
+            "properties": {
+                "permission": {
+                    "type": "string",
+                    "maxLength": 150
+                },
+                "scope_id": {
+                    "type": "string"
+                },
+                "scope_type": {
+                    "type": "string",
+                    "enum": [
+                        "tenant",
+                        "company",
+                        "branch"
+                    ]
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.AuthzCheckResult": {
+            "type": "object",
+            "properties": {
+                "allowed": {
+                    "type": "boolean"
+                },
+                "granted_by": {
+                    "description": "GrantedBy — code role yang memberi izin.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "permission": {
+                    "type": "string"
+                },
+                "scope_id": {
+                    "type": "string"
+                },
+                "scope_type": {
                     "type": "string"
                 }
             }
@@ -4813,6 +5160,30 @@
                     "description": "Price — angka JSON atau string angka, maks 2 desimal (mis. 150000 atau \"150000.50\").",
                     "type": "string",
                     "example": "150000.00"
+                }
+            }
+        },
+        "dto.CreateRoleAssignmentRequest": {
+            "type": "object",
+            "required": [
+                "role_id"
+            ],
+            "properties": {
+                "role_id": {
+                    "type": "string"
+                },
+                "scope_id": {
+                    "description": "ScopeID — wajib untuk company / branch; untuk tenant boleh kosong (= tenant itu sendiri).",
+                    "type": "string"
+                },
+                "scope_type": {
+                    "description": "ScopeType — tenant (default) | company | branch.",
+                    "type": "string",
+                    "enum": [
+                        "tenant",
+                        "company",
+                        "branch"
+                    ]
                 }
             }
         },
@@ -5350,6 +5721,38 @@
                     "description": "Quantity — angka atau string angka \u003e 0, maks 4 desimal.",
                     "type": "string",
                     "example": "1"
+                }
+            }
+        },
+        "dto.RoleAssignmentResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "role_code": {
+                    "type": "string"
+                },
+                "role_id": {
+                    "type": "string"
+                },
+                "scope_id": {
+                    "type": "string"
+                },
+                "scope_type": {
+                    "type": "string"
+                },
+                "solution_id": {
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },

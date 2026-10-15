@@ -17,6 +17,7 @@ import (
 	"platform-service/internal/app/principal"
 	"platform-service/internal/app/usecase/addon"
 	"platform-service/internal/app/usecase/auth"
+	"platform-service/internal/app/usecase/authz"
 	"platform-service/internal/app/usecase/benefit"
 	"platform-service/internal/app/usecase/entitlement"
 	"platform-service/internal/app/usecase/organization"
@@ -32,6 +33,7 @@ import (
 	"platform-service/internal/app/usecase/usage"
 	"platform-service/internal/app/usecase/user"
 	"platform-service/internal/config"
+	authzservice "platform-service/internal/domain/authz/service"
 	entservice "platform-service/internal/domain/entitlement/service"
 	"platform-service/internal/infrastructure/crypto"
 	i18n "platform-service/internal/infrastructure/i18n"
@@ -131,6 +133,8 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	roleRepo := persistence.NewPostgresRoleRepository(opts.DB)
 	rolePermissionRepo := persistence.NewPostgresRolePermissionRepository(opts.DB)
 	roleQuery := persistence.NewPostgresRoleQuery(opts.DB)
+	assignmentRepo := persistence.NewPostgresRoleAssignmentRepository(opts.DB)
+	grantReader := persistence.NewPostgresGrantReader(opts.DB)
 	transactor := persistence.NewPostgresTransactor(opts.DB)
 	outbox := persistence.NewPostgresEventOutbox()
 
@@ -245,6 +249,17 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Subscriptions:   subscriptionRepo,
 		Query:           roleQuery,
 	})
+	authzUC := authz.NewAuthzUseCase(authz.AuthzDeps{
+		Tx:            transactor,
+		Outbox:        outbox,
+		Assignments:   assignmentRepo,
+		Grants:        grantReader,
+		Scopes:        authzservice.NewScopeValidator(companyRepo, branchRepo),
+		Roles:         roleRepo,
+		Members:       memberRepo,
+		Subscriptions: subscriptionRepo,
+		Solutions:     solutionRepo,
+	})
 	entitlementResolver := entservice.NewResolver(subscriptionRepo, snapshotReader)
 	entitlementUC := entitlement.NewEntitlementUseCase(entitlement.EntitlementDeps{
 		Benefits:      benefitRepo,
@@ -308,6 +323,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 			Ent:      api.NewEntitlementHandler(entitlementUC),
 			Perm:     api.NewPermissionHandler(permissionUC),
 			Role:     api.NewRoleHandler(roleUC),
+			Authz:    api.NewAuthzHandler(authzUC),
 		},
 	})
 

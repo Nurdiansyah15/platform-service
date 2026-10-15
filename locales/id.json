@@ -155,5 +155,15 @@
   "DOMAIN_ROLE_PERMISSION_DUPLICATE": "Code permission yang sama disebutkan lebih dari sekali.",
   "DOMAIN_ROLE_PERMISSION_DEPRECATED": "Permission deprecated tidak dapat ditambahkan ke role.",
   "DOMAIN_ROLE_PERSISTENCE_FAILED": "Gagal menyimpan role.",
-  "DOMAIN_ROLE_QUERY_FAILED": "Gagal memuat role."
+  "DOMAIN_ROLE_QUERY_FAILED": "Gagal memuat role.",
+  "DOMAIN_AUTHZ_ASSIGNMENT_DUPLICATE": "User sudah memiliki role ini pada scope tersebut.",
+  "DOMAIN_AUTHZ_ASSIGNMENT_NOT_MEMBER": "User bukan member aktif tenant ini.",
+  "DOMAIN_AUTHZ_ASSIGNMENT_ROLE_UNAVAILABLE": "Role tidak tersedia untuk tenant ini (tidak ada, dihapus, atau milik tenant / solution lain).",
+  "DOMAIN_AUTHZ_ASSIGNMENT_NOT_SUBSCRIBED": "Tenant tidak memiliki subscription aktif untuk solution role ini.",
+  "DOMAIN_AUTHZ_SCOPE_TYPE_INVALID": "scope_type harus tenant, company, atau branch.",
+  "DOMAIN_AUTHZ_SCOPE_INVALID": "scope_id bukan milik tenant ini (atau wajib untuk company / branch).",
+  "DOMAIN_AUTHZ_CHECK_TARGET_REQUIRED": "tenant_id dan user_id wajib untuk token service.",
+  "DOMAIN_AUTHZ_CHECK_SOLUTION_UNAVAILABLE": "Solution token tidak tersedia.",
+  "DOMAIN_AUTHZ_PERSISTENCE_FAILED": "Gagal menyimpan role assignment.",
+  "DOMAIN_AUTHZ_QUERY_FAILED": "Gagal memuat permission."
 }

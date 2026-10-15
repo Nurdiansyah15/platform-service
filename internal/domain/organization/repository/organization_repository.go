@@ -16,4 +16,6 @@ type CompanyRepository interface {
 type BranchRepository interface {
 	// Save insert/update. Code bentrok dalam company → CodeBranchCodeDuplicate.
 	Save(ctx context.Context, b *entity.Branch) error
+	// FindByID mengabaikan branch yang sudah di-soft delete.
+	FindByID(ctx context.Context, id string) (*entity.Branch, error)
 }
