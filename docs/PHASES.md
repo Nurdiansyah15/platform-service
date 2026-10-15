@@ -301,22 +301,22 @@ Keputusan desain di luar spec:
 - Test: `catalog_sync_handler_test.go` (siklus create → no-op → update/deprecate → reactivate, 5 sync paralel versi sama = diterapkan sekali), `catalog_sync_test.go` (planner), validasi code
 - Belum: `roles/sync` (system role, L6), `catalog-version` (L6), CRUD permission manual (L6)
 
-### Fase 14 — Roles (Global & Tenant Custom)
-- Tabel: `roles`, `role_permissions` (CHECK, partial unique, composite FK sesuai spec)
-- Domain:
-  - `Role` (system role immutable, kepemilikan tenant)
-  - custom role hanya untuk solution yang di-subscribe tenant (`trialing` / `active`)
-  - permission `deprecated` tidak boleh ditambahkan
+### Fase 14 — Roles (Global & Tenant Custom) ✅
+- Tabel: `roles` (CHECK `NOT is_system OR tenant_id IS NULL`, partial unique code global & per tenant, `UNIQUE (id, solution_id)`, soft delete, index spec), `role_permissions` (composite FK ke `roles` & `permissions`, index `permission_id`)
+- Domain `role`: entity `Role` (`IsGlobal`, `IsOwnedBy`, `EnsureEditable`), VO `RoleCode`; domain service `ResolvePermissions` (code dikenal & tidak dobel; permission `deprecated` tidak boleh ditambahkan baru, tapi yang sudah terpasang boleh tetap); event `role.created`, `role.permissions_changed` (payload memuat `permission_codes`)
+- Permission dipasang memakai **`permission_codes`** (bukan UUID), replace-all dalam satu transaksi
 - Endpoint:
-  - [ ] `GET /solutions/{solutionId}/roles` (MVP)
-  - [ ] `POST /solutions/{solutionId}/roles` (MVP)
-  - [ ] `GET /roles/{roleId}/permissions` (MVP)
-  - [ ] `PUT /roles/{roleId}/permissions` (MVP)
-  - [ ] `GET /tenants/{tenantId}/solutions/{solutionId}/roles` (MVP)
-  - [ ] `POST /tenants/{tenantId}/solutions/{solutionId}/roles` (MVP)
-  - [ ] `PUT /tenants/{tenantId}/roles/{roleId}/permissions` (MVP)
-- Test: `role_handler_test.go`, `tenant_role_handler_test.go`
-  - role system tidak bisa diubah 403, custom role milik tenant lain 404, permission dari solution lain 422, tenant tidak subscribe 403
+  - [x] `GET /solutions/{solutionId}/roles` (MVP) — hanya role global; token valid apa pun
+  - [x] `POST /solutions/{solutionId}/roles` (MVP) — platform admin
+  - [x] `GET /roles/{roleId}/permissions` (MVP) — role global: token valid; custom role: hanya tenant pemilik (selain itu 404)
+  - [x] `PUT /roles/{roleId}/permissions` (MVP) — platform admin; role sistem → 403; custom role → 404 (pakai path tenant)
+  - [x] `GET /tenants/{tenantId}/solutions/{solutionId}/roles` (MVP) — role global + custom milik tenant
+  - [x] `POST /tenants/{tenantId}/solutions/{solutionId}/roles` (MVP) — tenant wajib subscribe (usable) → selain itu 403
+  - [x] `PUT /tenants/{tenantId}/roles/{roleId}/permissions` (MVP) — hanya custom role milik tenant (global / tenant lain → 404)
+  - Akses endpoint tenant: user (AccessPolicy) atau service `roles:write` milik solution tersebut
+- Test: `role_handler_test.go` (global & tenant, deprecated tetap, role sistem immutable, isolasi antar tenant), `permission_assignment_test.go`, repository (partial unique, CHECK sistem, composite FK)
+- Item terbuka: saat ini semua member aktif tenant boleh mengelola custom role — dibatasi berbasis permission di Fase 15 bila diputuskan
+- Belum: GET/PATCH/DELETE role, `roles/sync` system role (L6)
 
 ### Fase 15 — Role Assignment & Authz Check
 - Tabel: `user_role_assignments`

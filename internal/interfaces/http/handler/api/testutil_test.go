@@ -273,3 +273,11 @@ func mustCreateAddon(t *testing.T, solutionID, code string, extra map[string]any
 	testhelper.DecodeBody(t, w, &got)
 	return got.ID
 }
+
+func countEventsBySolution(t *testing.T, eventType, solutionID string) int {
+	t.Helper()
+	var n int
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM events WHERE event_type = $1 AND solution_id = $2`, eventType, solutionID).Scan(&n))
+	return n
+}

@@ -144,5 +144,16 @@
   "DOMAIN_PERMISSION_CATALOG_VERSION_INVALID": "version wajib diisi (maks 50 karakter).",
   "DOMAIN_PERMISSION_CATALOG_SYNC_FORBIDDEN": "Hanya client milik solution ini atau administrator platform yang boleh melakukan sync katalog.",
   "DOMAIN_PERMISSION_PERSISTENCE_FAILED": "Gagal menyimpan permission.",
-  "DOMAIN_PERMISSION_QUERY_FAILED": "Gagal memuat permission."
+  "DOMAIN_PERMISSION_QUERY_FAILED": "Gagal memuat permission.",
+  "DOMAIN_ROLE_NOT_FOUND": "Role tidak ditemukan.",
+  "DOMAIN_ROLE_CODE_DUPLICATE": "Code role sudah dipakai.",
+  "DOMAIN_ROLE_CODE_INVALID": "Code role hanya boleh huruf kecil, angka, '_' dan '-', diawali huruf (maks 100 karakter).",
+  "DOMAIN_ROLE_NAME_INVALID": "Nama role wajib diisi (maks 255 karakter).",
+  "DOMAIN_ROLE_SYSTEM_IMMUTABLE": "Role sistem tidak dapat diubah.",
+  "DOMAIN_ROLE_TENANT_NOT_SUBSCRIBED": "Tenant harus memiliki subscription aktif untuk solution ini agar bisa membuat role.",
+  "DOMAIN_ROLE_PERMISSION_UNKNOWN": "Satu atau lebih code permission tidak ada di katalog solution ini.",
+  "DOMAIN_ROLE_PERMISSION_DUPLICATE": "Code permission yang sama disebutkan lebih dari sekali.",
+  "DOMAIN_ROLE_PERMISSION_DEPRECATED": "Permission deprecated tidak dapat ditambahkan ke role.",
+  "DOMAIN_ROLE_PERSISTENCE_FAILED": "Gagal menyimpan role.",
+  "DOMAIN_ROLE_QUERY_FAILED": "Gagal memuat role."
 }

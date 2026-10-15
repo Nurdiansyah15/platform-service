@@ -144,5 +144,16 @@
   "DOMAIN_PERMISSION_CATALOG_VERSION_INVALID": "version is required (max 50 characters).",
   "DOMAIN_PERMISSION_CATALOG_SYNC_FORBIDDEN": "Only the solution's own client or a platform administrator may sync this catalog.",
   "DOMAIN_PERMISSION_PERSISTENCE_FAILED": "Failed to save permission.",
-  "DOMAIN_PERMISSION_QUERY_FAILED": "Failed to load permissions."
+  "DOMAIN_PERMISSION_QUERY_FAILED": "Failed to load permissions.",
+  "DOMAIN_ROLE_NOT_FOUND": "Role not found.",
+  "DOMAIN_ROLE_CODE_DUPLICATE": "Role code is already used.",
+  "DOMAIN_ROLE_CODE_INVALID": "Role code may only contain lowercase letters, numbers, '_' and '-', starting with a letter (max 100 characters).",
+  "DOMAIN_ROLE_NAME_INVALID": "Role name is required (max 255 characters).",
+  "DOMAIN_ROLE_SYSTEM_IMMUTABLE": "System roles cannot be changed.",
+  "DOMAIN_ROLE_TENANT_NOT_SUBSCRIBED": "The tenant must have an active subscription to this solution to create roles.",
+  "DOMAIN_ROLE_PERMISSION_UNKNOWN": "One or more permission codes are not in this solution's catalog.",
+  "DOMAIN_ROLE_PERMISSION_DUPLICATE": "The same permission code is listed more than once.",
+  "DOMAIN_ROLE_PERMISSION_DEPRECATED": "Deprecated permissions cannot be added to a role.",
+  "DOMAIN_ROLE_PERSISTENCE_FAILED": "Failed to save role.",
+  "DOMAIN_ROLE_QUERY_FAILED": "Failed to load roles."
 }

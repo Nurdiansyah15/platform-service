@@ -29,6 +29,7 @@ type Handlers struct {
 	Usage    *api.UsageHandler
 	Ent      *api.EntitlementHandler
 	Perm     *api.PermissionHandler
+	Role     *api.RoleHandler
 }
 
 type Deps struct {
@@ -90,4 +91,5 @@ func registerDomainRoutes(r Routes, h Handlers) {
 	RegisterUsageRoutes(r, h.Usage)
 	RegisterEntitlementRoutes(r, h.Ent)
 	RegisterPermissionRoutes(r, h.Perm)
+	RegisterRoleRoutes(r, h.Role)
 }

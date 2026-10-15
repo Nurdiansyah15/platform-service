@@ -22,6 +22,7 @@ import (
 	"platform-service/internal/app/usecase/organization"
 	"platform-service/internal/app/usecase/permission"
 	"platform-service/internal/app/usecase/plan"
+	"platform-service/internal/app/usecase/role"
 	"platform-service/internal/app/usecase/signingkey"
 	"platform-service/internal/app/usecase/solution"
 	"platform-service/internal/app/usecase/solutionclient"
@@ -127,6 +128,9 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	snapshotReader := persistence.NewPostgresSnapshotReader(opts.DB)
 	permissionRepo := persistence.NewPostgresPermissionRepository(opts.DB)
 	permissionQuery := persistence.NewPostgresPermissionQuery(opts.DB)
+	roleRepo := persistence.NewPostgresRoleRepository(opts.DB)
+	rolePermissionRepo := persistence.NewPostgresRolePermissionRepository(opts.DB)
+	roleQuery := persistence.NewPostgresRoleQuery(opts.DB)
 	transactor := persistence.NewPostgresTransactor(opts.DB)
 	outbox := persistence.NewPostgresEventOutbox()
 
@@ -229,6 +233,18 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	permissionUC := permission.NewPermissionUseCase(permission.PermissionDeps{
 		Tx: transactor, Permissions: permissionRepo, Solutions: solutionRepo, Query: permissionQuery,
 	})
+	roleUC := role.NewRoleUseCase(role.RoleDeps{
+		Tx:              transactor,
+		Outbox:          outbox,
+		Roles:           roleRepo,
+		RolePermissions: rolePermissionRepo,
+		Permissions:     permissionRepo,
+		Solutions:       solutionRepo,
+		Tenants:         tenantRepo,
+		Members:         memberRepo,
+		Subscriptions:   subscriptionRepo,
+		Query:           roleQuery,
+	})
 	entitlementResolver := entservice.NewResolver(subscriptionRepo, snapshotReader)
 	entitlementUC := entitlement.NewEntitlementUseCase(entitlement.EntitlementDeps{
 		Benefits:      benefitRepo,
@@ -291,6 +307,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 			Usage:    api.NewUsageHandler(usageUC),
 			Ent:      api.NewEntitlementHandler(entitlementUC),
 			Perm:     api.NewPermissionHandler(permissionUC),
+			Role:     api.NewRoleHandler(roleUC),
 		},
 	})
 
