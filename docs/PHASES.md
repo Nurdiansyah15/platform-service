@@ -335,17 +335,18 @@ Keputusan desain di luar spec:
 - Bug yang ditemukan test: scope company tanpa `scope_id` → UUID kosong ke Postgres → 500; kini ditolak 422 sebelum query
 - Belum: GET/PATCH/DELETE role-assignments & `effective-permissions` (L6)
 
-### Fase 16 — Webhooks & Event Delivery
-- Tabel: `webhook_endpoints`, `webhook_deliveries`
-- `cmd/worker` (+ target `worker` di `Dockerfile`):
-  - dispatcher outbox → deliveries (event tenant hanya ke solution yang di-subscribe tenant)
-  - header `X-Platform-Event-Id`, `X-Platform-Event-Type`, `X-Platform-Timestamp`, `X-Platform-Signature` (HMAC-SHA256 `timestamp.body`)
-  - retry exponential backoff → `dead`
-  - secret webhook dienkripsi (AES-GCM, key dari config)
+### Fase 16 — Webhooks & Event Delivery ✅
+- Tabel: `webhook_endpoints` (event_types `TEXT[]`, CHECK status, index spec), `webhook_deliveries` (unique `(event_id, webhook_endpoint_id)`, partial index pending/failed)
+- Domain `webhook`: VO URL (https; http hanya di luar production via `WEBHOOK_*`/`AllowInsecureURL`), event types tervalidasi terhadap katalog spec §2.9, `Delivery.Evaluate` (2xx = success; selain itu failed + backoff 30 dtk × 2^(n-1) maks 6 jam; percobaan ke-8 → `dead`), `service.Sign/Verify` (`sha256=` + hex HMAC-SHA256 `timestamp.body`)
+- Aturan routing (dipakai fan-out **dan** `GET /events`): event milik solution; event tenant (`solution_id` NULL) bila tenant berlangganan solution (`trialing`/`active`/`past_due`); event user (tenant & solution NULL, `payload.user_id`) bila user member aktif tenant pelanggan solution. Webhook hanya menerima event yang terjadi setelah endpoint dibuat
+- Secret webhook `whsec_…` dienkripsi AES-256-GCM (`WEBHOOK_SECRET_KEY`, base64 32 byte; production wajib diisi, dev memakai kunci bawaan)
+- `cmd/worker` (+ `make run-worker`, target `worker` di `Dockerfile`): loop `WEBHOOK_POLL_INTERVAL` → `Dispatcher.RunOnce` = fan-out events → deliveries, lalu klaim delivery jatuh tempo (`FOR UPDATE SKIP LOCKED` + lease `next_attempt_at`, aman multi-replika) dan kirim HTTP di luar transaksi; graceful shutdown menyelesaikan siklus berjalan
 - Endpoint:
-  - [ ] `POST /solutions/{solutionId}/webhooks` (MVP; secret tampil sekali)
-  - [ ] `GET /events` (MVP; service `events:read`, dibatasi solution pemanggil, filter `since`, `event_type`, `tenant_id`)
-- Test: `webhook_handler_test.go`, `event_handler_test.go`; dispatcher diuji dengan `httptest.Server` (header, signature, retry)
+  - [x] `POST /solutions/{solutionId}/webhooks` (MVP; platform admin; secret tampil sekali)
+  - [x] `GET /events` (MVP; service `events:read`, dibatasi solution pemanggil, filter `since`, `event_type`, `tenant_id`, pagination cursor `meta.next_cursor` urut `(occurred_at, id)`, `limit` 1–200)
+- Test: `webhook_handler_test.go` (create, events routing/filter/cursor, dispatcher dengan `httptest.Server`: header & signature, kirim sekali, retry/backoff, pulih, dead, routing), repository (fan-out idempoten, lease klaim, endpoint disabled), `aes_cipher_test.go`, domain entity/signature
+- Perbaikan lintas fase: query param yang gagal di-parse (`limit=abc`, `since` bukan RFC3339) kini 400, bukan 500
+- Belum: GET/PATCH/DELETE webhook, rotate-secret, test, riwayat & retry manual delivery, `/event-types` (L8); pembersihan event/delivery lama
 
 ### Fase 17 — Licensing (on_prem)
 - Tabel: `installations`, `licenses`, `license_checkins`

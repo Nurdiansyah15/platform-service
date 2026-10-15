@@ -28,7 +28,23 @@ type Config struct {
 	Database DatabaseConfig
 	Auth     AuthConfig
 	CORS     CORSConfig
+	Webhook  WebhookConfig
 }
+
+// WebhookConfig mengatur enkripsi secret & worker pengiriman webhook.
+type WebhookConfig struct {
+	// SecretKey — kunci AES-256 (base64, 32 byte) untuk mengenkripsi secret webhook.
+	SecretKey string
+	// AllowInsecureURL — izinkan URL http (hanya dev/test; production wajib https).
+	AllowInsecureURL bool
+	PollInterval     time.Duration
+	BatchSize        int
+	Timeout          time.Duration
+}
+
+// devWebhookSecretKey dipakai di luar production bila WEBHOOK_SECRET_KEY kosong.
+// JANGAN dipakai di production (Validate menolaknya).
+const devWebhookSecretKey = "ZGV2LW9ubHktd2ViaG9vay1zZWNyZXQta2V5LTMyYiE="
 
 type AppConfig struct {
 	Env             string
@@ -103,6 +119,11 @@ func Load() (*Config, error) {
 			AllowOrigins: splitCSV(getEnv("CORS_ALLOW_ORIGINS", "*")),
 		},
 	}
+	cfg.Webhook.SecretKey = getEnv("WEBHOOK_SECRET_KEY", "")
+	if cfg.Webhook.SecretKey == "" && cfg.App.Env != "production" {
+		cfg.Webhook.SecretKey = devWebhookSecretKey
+	}
+	cfg.Webhook.AllowInsecureURL = cfg.App.Env != "production"
 
 	var err error
 	if cfg.App.ShutdownTimeout, err = parseDuration("APP_SHUTDOWN_TIMEOUT", "15s"); err != nil {
@@ -124,6 +145,16 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	if cfg.Webhook.PollInterval, err = parseDuration("WEBHOOK_POLL_INTERVAL", "2s"); err != nil {
+		return nil, err
+	}
+	if cfg.Webhook.Timeout, err = parseDuration("WEBHOOK_TIMEOUT", "10s"); err != nil {
+		return nil, err
+	}
+	if cfg.Webhook.BatchSize, err = parseInt("WEBHOOK_BATCH_SIZE", 50); err != nil {
+		return nil, err
+	}
+
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -137,6 +168,9 @@ func (c *Config) Validate() error {
 	}
 	if c.App.IssuerURL == "" {
 		return fmt.Errorf("config: ISSUER_URL wajib diisi")
+	}
+	if c.App.Env == "production" && (c.Webhook.SecretKey == "" || c.Webhook.SecretKey == devWebhookSecretKey) {
+		return fmt.Errorf("config: WEBHOOK_SECRET_KEY wajib diisi di production")
 	}
 	return nil
 }

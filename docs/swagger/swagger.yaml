@@ -485,6 +485,30 @@ definitions:
     - email
     - name
     type: object
+  dto.CreateWebhookRequest:
+    properties:
+      event_types:
+        description: EventTypes — subset katalog event (spec §2.9).
+        items:
+          type: string
+        maxItems: 50
+        minItems: 1
+        type: array
+      url:
+        example: https://hr.example.com/hooks/platform
+        maxLength: 2048
+        type: string
+    required:
+    - event_types
+    - url
+    type: object
+  dto.CursorMeta:
+    properties:
+      limit:
+        type: integer
+      next_cursor:
+        type: string
+    type: object
   dto.EntitlementResponse:
     properties:
       aggregation_strategy:
@@ -547,6 +571,21 @@ definitions:
         description: Subscription — null bila tenant tidak berlangganan (semua benefit
           granted=false).
       tenant_id:
+        type: string
+    type: object
+  dto.EventItem:
+    properties:
+      data:
+        type: object
+      id:
+        type: string
+      occurred_at:
+        type: string
+      solution_id:
+        type: string
+      tenant_id:
+        type: string
+      type:
         type: string
     type: object
   dto.HealthResponse:
@@ -1070,6 +1109,28 @@ definitions:
       status:
         type: string
       updated_at:
+        type: string
+    type: object
+  dto.WebhookWithSecretResponse:
+    properties:
+      created_at:
+        type: string
+      event_types:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      secret:
+        description: Secret — kunci HMAC-SHA256 untuk memverifikasi X-Platform-Signature.
+        type: string
+      solution_id:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+      url:
         type: string
     type: object
   respond.ErrorBody:
@@ -1642,6 +1703,64 @@ paths:
       summary: Create branch
       tags:
       - Organization
+  /api/v1/events:
+    get:
+      description: Event yang relevan untuk solution pemanggil, urut occurred_at naik.
+        Lanjutkan dengan `cursor` = meta.next_cursor.
+      parameters:
+      - description: RFC3339; event dengan occurred_at >= since
+        in: query
+        name: since
+        type: string
+      - description: Filter tipe event
+        in: query
+        name: event_type
+        type: string
+      - description: Filter tenant
+        in: query
+        name: tenant_id
+        type: string
+      - description: meta.next_cursor dari halaman sebelumnya
+        in: query
+        name: cursor
+        type: string
+      - description: 1–200, default 50
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.EventItem'
+                  type: array
+                meta:
+                  $ref: '#/definitions/dto.CursorMeta'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List events (polling / replay)
+      tags:
+      - Events
   /api/v1/oauth/token:
     post:
       consumes:
@@ -2698,6 +2817,58 @@ paths:
       summary: Create global role
       tags:
       - Roles
+  /api/v1/solutions/{solutionId}/webhooks:
+    post:
+      consumes:
+      - application/json
+      description: Secret HMAC hanya ditampilkan sekali di respons ini. Penerima memverifikasi
+        X-Platform-Signature = "sha256=" + hex(HMAC-SHA256(secret, timestamp + "."
+        + body)).
+      parameters:
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Webhook
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateWebhookRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.WebhookWithSecretResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Create webhook endpoint
+      tags:
+      - Webhooks
   /api/v1/subscriptions/{subscriptionId}/addons:
     get:
       parameters:

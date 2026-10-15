@@ -226,6 +226,9 @@ Perhitungan memakai `entitlement/service.Calculate` + `Resolver` — jangan meng
 
 ### 8.4 Outbox
 Setiap perubahan yang ada di katalog event (spec §2.9) menulis baris `events` di transaksi yang sama dengan perubahan data, lewat `port.EventOutbox.Append`. Implementasinya menolak (`ErrOutboxRequiresTx`) bila dipanggil di luar `Transactor.WithTx`. Jangan kirim webhook langsung dari usecase.
+- Pengiriman dilakukan `cmd/worker` (`webhook.Dispatcher`, dirangkai `bootstrap.NewDispatcher`). Aturan routing event → solution ada di satu tempat (`eventRoutedToSolution` di `postgres_webhook_repository.go`) dan dipakai fan-out maupun `GET /events` — ubah keduanya bersamaan.
+- Event user (tanpa tenant & solution) wajib memuat `user_id` di payload agar bisa di-route.
+- Test dispatcher: `testSrv.NewDispatcher()` + `httptest.Server`; endpoint webhook di test lain pakai URL yang langsung menolak koneksi (`http://127.0.0.1:1/...`), jangan domain publik.
 
 ### 8.5 Autentikasi & otorisasi
 - Token user: `typ=user`, `aud = solutions.code`, `tid` boleh kosong. Token service: `typ=service`, `aud=platform`, `sol`, `scope`.

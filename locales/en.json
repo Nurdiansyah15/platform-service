@@ -165,5 +165,11 @@
   "DOMAIN_AUTHZ_CHECK_TARGET_REQUIRED": "tenant_id and user_id are required for service tokens.",
   "DOMAIN_AUTHZ_CHECK_SOLUTION_UNAVAILABLE": "The token's solution is not available.",
   "DOMAIN_AUTHZ_PERSISTENCE_FAILED": "Failed to save role assignment.",
-  "DOMAIN_AUTHZ_QUERY_FAILED": "Failed to load permissions."
+  "DOMAIN_AUTHZ_QUERY_FAILED": "Failed to load permissions.",
+  "DOMAIN_WEBHOOK_NOT_FOUND": "Webhook not found.",
+  "DOMAIN_WEBHOOK_URL_INVALID": "Webhook URL must be an absolute https URL.",
+  "DOMAIN_WEBHOOK_EVENT_TYPE_INVALID": "Event types must be a non-empty list from the event catalog.",
+  "DOMAIN_WEBHOOK_PERSISTENCE_FAILED": "Failed to save webhook.",
+  "DOMAIN_WEBHOOK_QUERY_FAILED": "Failed to load webhooks or events.",
+  "DOMAIN_EVENT_CURSOR_INVALID": "Invalid event cursor."
 }

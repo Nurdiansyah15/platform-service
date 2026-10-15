@@ -9,6 +9,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/app     ./cmd/app
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/seeder  ./cmd/seeder
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/worker  ./cmd/worker
 
 # ── App image ─────────────────────────────────────────────────────────────────
 FROM alpine:3.20 AS app
@@ -35,3 +36,11 @@ FROM alpine:3.20 AS seeder
 RUN apk --no-cache add ca-certificates tzdata
 COPY --from=builder /out/seeder /seeder
 ENTRYPOINT ["/seeder"]
+
+# ── Worker image ──────────────────────────────────────────────────────────────
+# Pengirim webhook (outbox → webhook_deliveries → HTTP).
+FROM alpine:3.20 AS worker
+RUN apk --no-cache add ca-certificates tzdata && adduser -D -u 10001 platform
+COPY --from=builder /out/worker /worker
+USER platform
+ENTRYPOINT ["/worker"]

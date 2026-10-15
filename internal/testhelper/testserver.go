@@ -23,6 +23,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"platform-service/internal/app/port"
+	"platform-service/internal/app/usecase/webhook"
 	"platform-service/internal/bootstrap"
 	"platform-service/internal/config"
 	"platform-service/internal/infrastructure/crypto"
@@ -135,7 +136,26 @@ func TestConfig(mode config.DeploymentMode) *config.Config {
 			RefreshTokenTTL: 720 * time.Hour,
 		},
 		CORS: config.CORSConfig{AllowOrigins: []string{"*"}},
+		Webhook: config.WebhookConfig{
+			SecretKey:        TestWebhookSecretKey,
+			AllowInsecureURL: true,
+			PollInterval:     time.Second,
+			BatchSize:        500,
+			Timeout:          2 * time.Second,
+		},
 	}
+}
+
+// TestWebhookSecretKey — kunci AES-256 (base64) untuk mengenkripsi secret webhook di test.
+const TestWebhookSecretKey = "dGVzdC1vbmx5LXdlYmhvb2stc2VjcmV0LWtleS0zMmI="
+
+// NewDispatcher membangun dispatcher webhook di atas DB test (HTTP sender asli).
+func (s *TestServer) NewDispatcher() *webhook.Dispatcher {
+	d, err := bootstrap.NewDispatcher(s.Config, s.DB, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	if err != nil {
+		log.Fatalf("testhelper: %v", err)
+	}
+	return d
 }
 
 // LocalesDir mengembalikan path absolut <repo>/locales. `go test` menjalankan

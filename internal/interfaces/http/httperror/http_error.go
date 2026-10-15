@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -104,6 +106,16 @@ func mapError(err error) *httpError {
 	var syntaxErr *json.SyntaxError
 	if errors.As(err, &syntaxErr) {
 		return badRequest("invalid JSON format")
+	}
+
+	// Query/form/uri yang tidak bisa di-parse ke tipe field (mis. limit=abc, since=kemarin).
+	var numErr *strconv.NumError
+	if errors.As(err, &numErr) {
+		return badRequest("invalid number in request parameters")
+	}
+	var timeErr *time.ParseError
+	if errors.As(err, &timeErr) {
+		return badRequest("invalid time in request parameters; use RFC3339")
 	}
 
 	return internalError(string(appErr.CodeInternal))

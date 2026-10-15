@@ -51,3 +51,20 @@ func TestLoad_InvalidDuration(t *testing.T) {
 
 	assert.ErrorContains(t, err, "ACCESS_TOKEN_TTL")
 }
+
+func TestLoad_WebhookSecretKey(t *testing.T) {
+	t.Chdir(t.TempDir())
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	assert.NotEmpty(t, cfg.Webhook.SecretKey, "dev memakai kunci bawaan")
+	assert.True(t, cfg.Webhook.AllowInsecureURL)
+
+	t.Setenv("APP_ENV", "production")
+	_, err = config.Load()
+	assert.ErrorContains(t, err, "WEBHOOK_SECRET_KEY")
+
+	t.Setenv("WEBHOOK_SECRET_KEY", "cHJvZC1rZXktcHJvZC1rZXktcHJvZC1rZXktMzJiISE=")
+	cfg, err = config.Load()
+	require.NoError(t, err)
+	assert.False(t, cfg.Webhook.AllowInsecureURL, "production wajib https")
+}

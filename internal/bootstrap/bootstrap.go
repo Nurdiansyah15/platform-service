@@ -32,6 +32,7 @@ import (
 	"platform-service/internal/app/usecase/tenant"
 	"platform-service/internal/app/usecase/usage"
 	"platform-service/internal/app/usecase/user"
+	"platform-service/internal/app/usecase/webhook"
 	"platform-service/internal/config"
 	authzservice "platform-service/internal/domain/authz/service"
 	entservice "platform-service/internal/domain/entitlement/service"
@@ -40,6 +41,7 @@ import (
 	"platform-service/internal/infrastructure/jwttoken"
 	"platform-service/internal/infrastructure/keystore"
 	"platform-service/internal/infrastructure/persistence"
+	webhookinfra "platform-service/internal/infrastructure/webhook"
 	"platform-service/internal/interfaces/http/handler/api"
 	"platform-service/internal/interfaces/http/httperror"
 	"platform-service/internal/interfaces/http/router"
@@ -137,6 +139,11 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	grantReader := persistence.NewPostgresGrantReader(opts.DB)
 	transactor := persistence.NewPostgresTransactor(opts.DB)
 	outbox := persistence.NewPostgresEventOutbox()
+
+	webhookCipher, err := crypto.NewAESCipher(cfg.Webhook.SecretKey)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: webhook cipher: %w", err)
+	}
 
 	// ── Token ───────────────────────────────────────────────────────────────
 	keyRing := jwttoken.NewKeyRing(signingKeyRepo, keyStore)
@@ -282,6 +289,14 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Members:       memberRepo,
 	})
 
+	webhookUC := webhook.NewWebhookUseCase(webhook.WebhookDeps{
+		Endpoints:        persistence.NewPostgresWebhookEndpointRepository(opts.DB),
+		Solutions:        solutionRepo,
+		Events:           persistence.NewPostgresEventQuery(opts.DB),
+		Cipher:           webhookCipher,
+		AllowInsecureURL: cfg.Webhook.AllowInsecureURL,
+	})
+
 	// ── Authenticator ───────────────────────────────────────────────────────
 	// JWT diverifikasi dulu, lalu principal divalidasi ulang ke DB
 	// (user: sesi & status user; service: status client & scope terkini).
@@ -324,10 +339,32 @@ func New(ctx context.Context, opts Options) (*App, error) {
 			Perm:     api.NewPermissionHandler(permissionUC),
 			Role:     api.NewRoleHandler(roleUC),
 			Authz:    api.NewAuthzHandler(authzUC),
+			Webhook:  api.NewWebhookHandler(webhookUC),
 		},
 	})
 
 	return &App{Engine: engine, TokenIssuer: tokenIssuer, Users: userUC}, nil
+}
+
+// NewDispatcher merangkai dispatcher webhook untuk cmd/worker (dan test).
+// sender nil berarti HTTP sender dengan Config.Webhook.Timeout.
+func NewDispatcher(cfg *config.Config, db *sql.DB, logger *slog.Logger, sender port.WebhookSender) (*webhook.Dispatcher, error) {
+	cipher, err := crypto.NewAESCipher(cfg.Webhook.SecretKey)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: webhook cipher: %w", err)
+	}
+	if sender == nil {
+		sender = webhookinfra.NewHTTPSender(cfg.Webhook.Timeout)
+	}
+	return webhook.NewDispatcher(webhook.DispatcherDeps{
+		Deliveries: persistence.NewPostgresWebhookDeliveryRepository(db),
+		Sender:     sender,
+		Cipher:     cipher,
+		Logger:     logger,
+		BatchSize:  cfg.Webhook.BatchSize,
+		// Lease > timeout agar delivery yang masih dikirim tidak diambil worker lain.
+		Lease: cfg.Webhook.Timeout*2 + 30*time.Second,
+	}), nil
 }
 
 // dbValidatedAuthenticator memverifikasi JWT lalu memvalidasi principal ke DB,

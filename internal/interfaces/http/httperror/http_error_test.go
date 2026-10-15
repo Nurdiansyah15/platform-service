@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -106,6 +107,24 @@ func TestHandle_MalformedJSON(t *testing.T) {
 	}, `{"name":`)
 	assert.Equal(t, 400, code)
 	assert.Equal(t, "ERR_BAD_REQUEST", body.ErrorCode)
+}
+
+func TestHandle_UnparsableQueryParams(t *testing.T) {
+	type query struct {
+		Limit *int       `form:"limit"`
+		Since *time.Time `form:"since" time_format:"2006-01-02T15:04:05Z07:00"`
+	}
+	for _, raw := range []string{"limit=abc", "since=kemarin"} {
+		gin.SetMode(gin.TestMode)
+		r := gin.New()
+		r.GET("/x", func(c *gin.Context) {
+			var q query
+			httperror.Handle(c, c.ShouldBindQuery(&q))
+		})
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/x?"+raw, nil))
+		assert.Equal(t, 400, w.Code, raw)
+	}
 }
 
 func TestMiddleware_RecoversPanic(t *testing.T) {

@@ -31,6 +31,7 @@ type Handlers struct {
 	Perm     *api.PermissionHandler
 	Role     *api.RoleHandler
 	Authz    *api.AuthzHandler
+	Webhook  *api.WebhookHandler
 }
 
 type Deps struct {
@@ -94,4 +95,5 @@ func registerDomainRoutes(r Routes, h Handlers) {
 	RegisterPermissionRoutes(r, h.Perm)
 	RegisterRoleRoutes(r, h.Role)
 	RegisterAuthzRoutes(r, h.Authz)
+	RegisterWebhookRoutes(r, h.Webhook)
 }

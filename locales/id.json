@@ -165,5 +165,11 @@
   "DOMAIN_AUTHZ_CHECK_TARGET_REQUIRED": "tenant_id dan user_id wajib untuk token service.",
   "DOMAIN_AUTHZ_CHECK_SOLUTION_UNAVAILABLE": "Solution token tidak tersedia.",
   "DOMAIN_AUTHZ_PERSISTENCE_FAILED": "Gagal menyimpan role assignment.",
-  "DOMAIN_AUTHZ_QUERY_FAILED": "Gagal memuat permission."
+  "DOMAIN_AUTHZ_QUERY_FAILED": "Gagal memuat permission.",
+  "DOMAIN_WEBHOOK_NOT_FOUND": "Webhook tidak ditemukan.",
+  "DOMAIN_WEBHOOK_URL_INVALID": "URL webhook harus URL https absolut.",
+  "DOMAIN_WEBHOOK_EVENT_TYPE_INVALID": "Event types harus berisi minimal satu event dari katalog.",
+  "DOMAIN_WEBHOOK_PERSISTENCE_FAILED": "Gagal menyimpan webhook.",
+  "DOMAIN_WEBHOOK_QUERY_FAILED": "Gagal memuat webhook atau event.",
+  "DOMAIN_EVENT_CURSOR_INVALID": "Cursor event tidak valid."
 }

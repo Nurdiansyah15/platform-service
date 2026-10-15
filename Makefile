@@ -1,4 +1,4 @@
-.PHONY: help dev-up dev-down dev-logs run build tidy migrate-up migrate-down migrate-fresh migrate-version migrate-force migrate-create seed test test-unit test-handler test-integration lint swagger docker-build
+.PHONY: help dev-up dev-down dev-logs run run-worker build tidy migrate-up migrate-down migrate-fresh migrate-version migrate-force migrate-create seed test test-unit test-handler test-integration lint swagger docker-build
 
 COMPOSE_DEV   := docker compose -f docker-compose.dev.yml
 GOLANGCI_VER  := v2.5.0
@@ -14,6 +14,7 @@ help:
 	@echo "    make dev-down                  Hentikan container dev"
 	@echo "    make dev-logs                  Tail log postgres dev"
 	@echo "    make run                       Jalankan API (go run ./cmd/app)"
+	@echo "    make run-worker                Jalankan worker webhook (go run ./cmd/worker)"
 	@echo "    make build                     Build semua binary ke ./bin"
 	@echo "    make tidy                      go mod tidy"
 	@echo ""
@@ -51,10 +52,14 @@ dev-logs:
 run:
 	go run ./cmd/app
 
+run-worker:
+	go run ./cmd/worker
+
 build:
 	CGO_ENABLED=0 go build -trimpath -o bin/app ./cmd/app
 	CGO_ENABLED=0 go build -trimpath -o bin/migrate ./cmd/migrate
 	CGO_ENABLED=0 go build -trimpath -o bin/seeder ./cmd/seeder
+	CGO_ENABLED=0 go build -trimpath -o bin/worker ./cmd/worker
 
 tidy:
 	go mod tidy
