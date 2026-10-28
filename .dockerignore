@@ -3,5 +3,6 @@ bin
 .env
 docs
 graphify-out
+web
 *.md
 !locales

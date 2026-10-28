@@ -34,6 +34,8 @@ func main() {
 		PlatformAdminEmail:    os.Getenv("PLATFORM_ADMIN_EMAIL"),
 		PlatformAdminName:     os.Getenv("PLATFORM_ADMIN_NAME"),
 		PlatformAdminPassword: os.Getenv("PLATFORM_ADMIN_PASSWORD"),
+		ConsoleSolutionCode:   getEnv("CONSOLE_SOLUTION_CODE", "platform-console"),
+		ConsoleSolutionName:   getEnv("CONSOLE_SOLUTION_NAME", "Platform Console"),
 	}
 	for _, s := range seeders.All(seedCfg) {
 		if len(only) > 0 && !slices.Contains(only, s.Name()) {
@@ -46,4 +48,11 @@ func main() {
 		ran++
 	}
 	log.Printf("selesai: %d seeder dijalankan", ran)
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }

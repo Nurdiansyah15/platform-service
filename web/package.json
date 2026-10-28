@@ -1,0 +1,33 @@
+{
+  "name": "platform-console",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@iconify-json/lucide": "^1.2.148",
+    "@nuxt/ui": "^4.12.0",
+    "@pinia/nuxt": "^1.0.3",
+    "nuxt": "^4.6.3",
+    "pinia": "^4.1.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^5.9.0",
+    "vue-tsc": "^3.3.13"
+  },
+  "packageManager": "pnpm@10.34.9",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "vue-demi"
+    ]
+  }
+}

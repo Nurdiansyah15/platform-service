@@ -17,11 +17,14 @@ type Config struct {
 	PlatformAdminEmail    string
 	PlatformAdminName     string
 	PlatformAdminPassword string
+	ConsoleSolutionCode   string
+	ConsoleSolutionName   string
 }
 
 // All mengembalikan semua seeder sesuai urutan eksekusi.
 func All(cfg Config) []Seeder {
 	return []Seeder{
+		ConsoleSolutionSeeder{Code: cfg.ConsoleSolutionCode, SolutionName: cfg.ConsoleSolutionName},
 		PlatformAdminSeeder{Email: cfg.PlatformAdminEmail, AdminName: cfg.PlatformAdminName, Password: cfg.PlatformAdminPassword},
 	}
 }

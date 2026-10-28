@@ -26,6 +26,7 @@ Domain model berisi rule bisnis inti. Usecase mengatur alur. Infrastruktur hanya
 
 - Go 1.25, Gin, `database/sql` + `pgx/v5/stdlib` (SQL ditulis manual, tanpa ORM), golang-migrate (file di-embed), go-playground/validator (tag `binding`), golang-jwt/v5 (RS256), testify, testcontainers-go.
 - PostgreSQL 16 (minimal 15 untuk `UNIQUE NULLS NOT DISTINCT`).
+- `web/`: Nuxt 4 SPA (`ssr: false`), Nuxt UI v4 + Pinia, pnpm; dev via service `web` di compose (`make dev-up`) atau `make web-dev`.
 
 ```
 cmd/{app,migrate,seeder,worker}/main.go
@@ -45,6 +46,7 @@ internal/
     middleware/ respond/ httperror/ httpquery/
     router/                  # router.go + <ctx>_routes.go (RegisterXxxRoutes)
 locales/{en,id}.json
+web/                       # UI Nuxt 4 (SPA) — auth, org, solution, authorization
 ```
 
 ---

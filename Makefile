@@ -1,6 +1,9 @@
-.PHONY: help dev-up dev-down dev-logs dev-ps dev-restart dev-migrate dev-seed dev-shell dev-build run run-worker build tidy migrate-up migrate-down migrate-fresh migrate-version migrate-force migrate-create seed test test-unit test-handler test-integration lint swagger docker-build
+.PHONY: help dev-up dev-down dev-logs dev-ps dev-restart dev-migrate dev-seed dev-shell dev-build dev-web web-install web-dev web-build web-typecheck run run-worker build tidy migrate-up migrate-down migrate-fresh migrate-version migrate-force migrate-create seed test test-unit test-handler test-integration lint swagger docker-build
 
-COMPOSE_DEV   := docker compose -f docker-compose.dev.yml
+# Lewat `sudo make`, id -u = 0; pakai UID pemanggil asli agar file di bind mount tidak root-owned.
+DEV_UID       ?= $(or $(SUDO_UID),$(shell id -u))
+DEV_GID       ?= $(or $(SUDO_GID),$(shell id -g))
+COMPOSE_DEV   := DEV_UID=$(DEV_UID) DEV_GID=$(DEV_GID) docker compose -f docker-compose.dev.yml
 GOLANGCI_VER  := v2.5.0
 TEST_TIMEOUT  ?= 300s
 
@@ -16,9 +19,16 @@ help:
 	@echo "    make dev-ps                    Status container dev"
 	@echo "    make dev-restart               Restart app + worker (muat ulang kode)"
 	@echo "    make dev-build                 Build ulang image dev"
+	@echo "    make dev-web                   Jalankan hanya UI Nuxt (web/)"
 	@echo "    make dev-migrate CMD=up        Jalankan migrasi di container (default: up)"
 	@echo "    make dev-seed ONLY=\"a b\"       Jalankan seeder di container"
 	@echo "    make dev-shell                 Shell masuk container app"
+	@echo ""
+	@echo "  UI / Nuxt (web/, pnpm di container node:22):"
+	@echo "    make web-install               pnpm install"
+	@echo "    make web-dev                   pnpm dev"
+	@echo "    make web-build                 pnpm build"
+	@echo "    make web-typecheck             Vue typecheck"
 	@echo ""
 	@echo "  Development (host, tanpa Docker):"
 	@echo "    make run                       Jalankan API (go run ./cmd/app)"
@@ -49,7 +59,7 @@ help:
 
 # ── Development (Docker) ──────────────────────────────────────────────────────
 # Source di-bind-mount dari host; postgres memakai volume bernama.
-dev-up:
+dev-up: web-install
 	$(COMPOSE_DEV) up -d --build
 
 dev-down:
@@ -62,10 +72,13 @@ dev-ps:
 	$(COMPOSE_DEV) --profile tools ps
 
 dev-restart:
-	$(COMPOSE_DEV) restart app worker
+	$(COMPOSE_DEV) restart app worker web
 
 dev-build:
 	$(COMPOSE_DEV) build --no-cache app
+
+dev-web: web-install
+	$(COMPOSE_DEV) up -d web
 
 dev-migrate:
 	$(COMPOSE_DEV) run --rm migrate $(or $(CMD),up)
@@ -75,6 +88,24 @@ dev-seed:
 
 dev-shell:
 	$(COMPOSE_DEV) run --rm --entrypoint sh app
+
+# ── UI / Nuxt (container node:22, tidak bergantung Node di host) ──────────────
+# pnpm dijalankan di image service `web` sebagai UID host. Store pnpm di /tmp
+# container agar tidak tercipta web/.pnpm-store. Untuk pnpm di host (Node
+# ^22.21 + corepack): make web-install WEB_PNPM="cd web && corepack pnpm".
+WEB_PNPM ?= $(COMPOSE_DEV) run --rm --no-deps -T web corepack pnpm
+
+web-install:
+	$(WEB_PNPM) install --store-dir /tmp/pnpm-store
+
+web-dev:
+	$(COMPOSE_DEV) run --rm --no-deps --service-ports web corepack pnpm dev --host 0.0.0.0
+
+web-build:
+	$(WEB_PNPM) build
+
+web-typecheck:
+	$(WEB_PNPM) typecheck
 
 # ── Development (host) ────────────────────────────────────────────────────────
 run:
