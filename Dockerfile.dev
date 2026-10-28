@@ -1,0 +1,13 @@
+# ── Dev image ─────────────────────────────────────────────────────────────────
+# Hanya menyediakan toolchain Go + cache modul. Source code di-bind-mount dari
+# host (lihat docker-compose.dev.yml) sehingga tidak perlu build ulang per ubah.
+FROM golang:1.25-alpine
+
+RUN apk add --no-cache git tzdata
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+CMD ["go", "run", "./cmd/app"]

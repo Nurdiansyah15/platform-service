@@ -1,4 +1,4 @@
-.PHONY: help dev-up dev-down dev-logs run run-worker build tidy migrate-up migrate-down migrate-fresh migrate-version migrate-force migrate-create seed test test-unit test-handler test-integration lint swagger docker-build
+.PHONY: help dev-up dev-down dev-logs dev-ps dev-restart dev-migrate dev-seed dev-shell dev-build run run-worker build tidy migrate-up migrate-down migrate-fresh migrate-version migrate-force migrate-create seed test test-unit test-handler test-integration lint swagger docker-build
 
 COMPOSE_DEV   := docker compose -f docker-compose.dev.yml
 GOLANGCI_VER  := v2.5.0
@@ -9,16 +9,24 @@ help:
 	@echo ""
 	@echo "  platform-service — perintah yang tersedia:"
 	@echo ""
-	@echo "  Development:"
-	@echo "    make dev-up                    Jalankan postgres dev (tunggu healthy)"
+	@echo "  Development (Docker — source di-bind-mount dari host):"
+	@echo "    make dev-up                    Build + jalankan postgres, migrate, app, worker"
 	@echo "    make dev-down                  Hentikan container dev"
-	@echo "    make dev-logs                  Tail log postgres dev"
+	@echo "    make dev-logs SVC=app          Tail log (kosong = semua service)"
+	@echo "    make dev-ps                    Status container dev"
+	@echo "    make dev-restart               Restart app + worker (muat ulang kode)"
+	@echo "    make dev-build                 Build ulang image dev"
+	@echo "    make dev-migrate CMD=up        Jalankan migrasi di container (default: up)"
+	@echo "    make dev-seed ONLY=\"a b\"       Jalankan seeder di container"
+	@echo "    make dev-shell                 Shell masuk container app"
+	@echo ""
+	@echo "  Development (host, tanpa Docker):"
 	@echo "    make run                       Jalankan API (go run ./cmd/app)"
 	@echo "    make run-worker                Jalankan worker webhook (go run ./cmd/worker)"
 	@echo "    make build                     Build semua binary ke ./bin"
 	@echo "    make tidy                      go mod tidy"
 	@echo ""
-	@echo "  Migrasi:"
+	@echo "  Migrasi (host):"
 	@echo "    make migrate-up                Jalankan semua migrasi"
 	@echo "    make migrate-down              Rollback satu migrasi terakhir"
 	@echo "    make migrate-fresh             Drop semua tabel lalu migrasi ulang (DEV ONLY)"
@@ -26,7 +34,7 @@ help:
 	@echo "    make migrate-force VERSION=x   Paksa versi (perbaiki state dirty)"
 	@echo "    make migrate-create NAME=x     Buat pasangan file migrasi bertimestamp"
 	@echo ""
-	@echo "  Seeder:"
+	@echo "  Seeder (host):"
 	@echo "    make seed                      Jalankan semua seeder (opsional: ONLY=\"a b\")"
 	@echo ""
 	@echo "  Quality:"
@@ -39,16 +47,36 @@ help:
 	@echo "    make docker-build              Build image app"
 	@echo ""
 
-# ── Development ───────────────────────────────────────────────────────────────
+# ── Development (Docker) ──────────────────────────────────────────────────────
+# Source di-bind-mount dari host; postgres memakai volume bernama.
 dev-up:
-	$(COMPOSE_DEV) up -d --wait postgres
+	$(COMPOSE_DEV) up -d --build
 
 dev-down:
-	$(COMPOSE_DEV) down
+	$(COMPOSE_DEV) --profile tools down
 
 dev-logs:
-	$(COMPOSE_DEV) logs -f --tail=$(or $(TAIL),100) postgres
+	$(COMPOSE_DEV) logs -f --tail=$(or $(TAIL),100) $(SVC)
 
+dev-ps:
+	$(COMPOSE_DEV) --profile tools ps
+
+dev-restart:
+	$(COMPOSE_DEV) restart app worker
+
+dev-build:
+	$(COMPOSE_DEV) build --no-cache app
+
+dev-migrate:
+	$(COMPOSE_DEV) run --rm migrate $(or $(CMD),up)
+
+dev-seed:
+	$(COMPOSE_DEV) --profile tools run --rm seeder $(ONLY)
+
+dev-shell:
+	$(COMPOSE_DEV) run --rm --entrypoint sh app
+
+# ── Development (host) ────────────────────────────────────────────────────────
 run:
 	go run ./cmd/app
 

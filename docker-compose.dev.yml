@@ -1,5 +1,35 @@
 name: platform-service
 
+# Env bersama untuk semua service app (app, worker, migrate, seeder).
+# DB_HOST diarahkan ke nama service postgres; nilai dari .env di-host (bila ada)
+# tetap dibaca godotenv di dalam container untuk var di luar daftar ini.
+x-app-env: &app-env
+  APP_ENV: development
+  APP_PORT: "8080"
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_USER: "${DB_USER:-platform}"
+  DB_PASS: "${DB_PASS:-secret}"
+  DB_NAME: "${DB_NAME:-platform}"
+  DB_SSLMODE: "${DB_SSLMODE:-disable}"
+  ISSUER_URL: "${ISSUER_URL:-http://localhost:8080}"
+  LOCALES_DIR: locales
+  PLATFORM_ADMIN_EMAIL: "${PLATFORM_ADMIN_EMAIL:-admin@platform.local}"
+  PLATFORM_ADMIN_NAME: "${PLATFORM_ADMIN_NAME:-Platform Admin}"
+  PLATFORM_ADMIN_PASSWORD: "${PLATFORM_ADMIN_PASSWORD:-ChangeMe123!}"
+
+# Basis service Go dev: image sama, source di-bind-mount (tanpa volume kode).
+x-dev: &dev
+  build:
+    context: .
+    dockerfile: Dockerfile.dev
+  image: platform-service/dev
+  working_dir: /app
+  volumes:
+    - .:/app
+  environment: *app-env
+  restart: unless-stopped
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -18,6 +48,42 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # Satu kali jalan saat `up`; app & worker menunggu migrasi selesai.
+  migrate:
+    <<: *dev
+    restart: "no"
+    entrypoint: ["go", "run", "./cmd/migrate"]
+    command: ["up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # On-demand: `docker compose --profile tools run --rm seeder [name...]`
+  seeder:
+    <<: *dev
+    restart: "no"
+    profiles: ["tools"]
+    entrypoint: ["go", "run", "./cmd/seeder"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  app:
+    <<: *dev
+    command: ["go", "run", "./cmd/app"]
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *dev
+    command: ["go", "run", "./cmd/worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
