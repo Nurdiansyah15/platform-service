@@ -15,7 +15,7 @@ type AuthSession struct {
 	ID               string
 	UserID           string
 	SolutionID       string
-	TenantID         *string // tenant aktif; nil sebelum user memilih tenant
+	CompanyID        *string // company aktif; nil sebelum user memilih company
 	RefreshTokenHash string
 	UserAgent        *string
 	IPAddress        *string
@@ -28,7 +28,7 @@ type AuthSession struct {
 type NewAuthSessionParams struct {
 	UserID           string
 	SolutionID       string
-	TenantID         *string
+	CompanyID        *string
 	RefreshTokenHash string
 	UserAgent        string
 	IPAddress        string
@@ -44,7 +44,7 @@ func NewAuthSession(p NewAuthSessionParams, now time.Time) (*AuthSession, error)
 		ID:               uuid.NewString(),
 		UserID:           p.UserID,
 		SolutionID:       p.SolutionID,
-		TenantID:         p.TenantID,
+		CompanyID:        p.CompanyID,
 		RefreshTokenHash: p.RefreshTokenHash,
 		UserAgent:        optional(p.UserAgent),
 		IPAddress:        optional(p.IPAddress),
@@ -81,14 +81,14 @@ func (s *AuthSession) Rotate(newHash string, ttl time.Duration, now time.Time) (
 	return previousHash, nil
 }
 
-// SwitchTenant mengganti tenant aktif sesi. Refresh token ikut di-rotate agar
-// token lama (dengan tid lama) tidak bisa ditukar lagi.
-func (s *AuthSession) SwitchTenant(tenantID, newHash string, ttl time.Duration, now time.Time) (previousHash string, err error) {
+// SwitchCompany mengganti company aktif sesi. Refresh token ikut di-rotate agar
+// token lama (dengan cid lama) tidak bisa ditukar lagi.
+func (s *AuthSession) SwitchCompany(companyID, newHash string, ttl time.Duration, now time.Time) (previousHash string, err error) {
 	previousHash, err = s.Rotate(newHash, ttl, now)
 	if err != nil {
 		return "", err
 	}
-	s.TenantID = &tenantID
+	s.CompanyID = &companyID
 	return previousHash, nil
 }
 

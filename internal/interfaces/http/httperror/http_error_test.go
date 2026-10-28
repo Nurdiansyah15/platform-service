@@ -78,8 +78,8 @@ func TestHandle_InternalErrorDoesNotLeakCause(t *testing.T) {
 }
 
 type createReq struct {
-	Name     string `json:"name" binding:"required"`
-	TenantID string `json:"tenant_id" binding:"required,uuid"`
+	Name      string `json:"name" binding:"required"`
+	CompanyID string `json:"company_id" binding:"required,uuid"`
 }
 
 func TestHandle_ValidationErrorUsesJSONFieldNames(t *testing.T) {
@@ -90,14 +90,14 @@ func TestHandle_ValidationErrorUsesJSONFieldNames(t *testing.T) {
 			return
 		}
 		c.Status(201)
-	}, `{"tenant_id":"bukan-uuid"}`)
+	}, `{"company_id":"bukan-uuid"}`)
 
 	assert.Equal(t, 422, code)
 	assert.Equal(t, "ERR_UNPROCESSABLE_ENTITY", body.ErrorCode)
 	var fields map[string]string
 	require.NoError(t, json.Unmarshal(body.Errors, &fields))
 	assert.Contains(t, fields, "name")
-	assert.Contains(t, fields, "tenant_id")
+	assert.Contains(t, fields, "company_id")
 }
 
 func TestHandle_MalformedJSON(t *testing.T) {

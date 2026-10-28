@@ -12,15 +12,14 @@ import (
 	"platform-service/internal/domain/organization/valueobject"
 )
 
+// Company adalah entitas tertinggi (menggantikan tenant).
 type Company struct {
 	ID        string
-	TenantID  string
 	Name      string
-	Code      valueobject.OrgCode
-	Status    valueobject.OrgStatus
+	Slug      valueobject.Slug
+	Status    valueobject.CompanyStatus
 	CreatedAt time.Time
 	UpdatedAt time.Time
-	DeletedAt *time.Time
 }
 
 type Branch struct {
@@ -40,16 +39,24 @@ type OrgUnitParams struct {
 	Status string
 }
 
-func NewCompany(tenantID string, p OrgUnitParams, now time.Time) (*Company, error) {
-	name, code, status, err := validateOrgUnit(p)
+func NewCompany(name, slug string, now time.Time) (*Company, error) {
+	n := strings.TrimSpace(name)
+	if n == "" || utf8.RuneCountInString(n) > constant.NameMaxLength {
+		return nil, domainerr.New(constant.CodeCompanyNameInvalid)
+	}
+	s, err := valueobject.NewSlug(slug)
 	if err != nil {
 		return nil, err
 	}
 	now = now.UTC()
 	return &Company{
-		ID: uuid.NewString(), TenantID: tenantID, Name: name, Code: code, Status: status,
+		ID: uuid.NewString(), Name: n, Slug: s, Status: valueobject.CompanyStatusActive,
 		CreatedAt: now, UpdatedAt: now,
 	}, nil
+}
+
+func (c *Company) IsActive() bool {
+	return c.Status == valueobject.CompanyStatusActive
 }
 
 func NewBranch(companyID string, p OrgUnitParams, now time.Time) (*Branch, error) {

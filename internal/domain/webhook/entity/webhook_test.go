@@ -60,10 +60,10 @@ func TestNewEndpointURLAndEventTypes(t *testing.T) {
 	_, err = valueobject.NewEndpointURL("/relative", true)
 	assert.Error(t, err)
 
-	types, err := valueobject.NewEventTypes([]string{"tenant.updated", "company.created", "tenant.updated"})
+	types, err := valueobject.NewEventTypes([]string{"company.updated", "company.created", "company.updated"})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"company.created", "tenant.updated"}, types)
-	_, err = valueobject.NewEventTypes([]string{"tenant.exploded"})
+	assert.Equal(t, []string{"company.created", "company.updated"}, types)
+	_, err = valueobject.NewEventTypes([]string{"company.exploded"})
 	assert.Error(t, err)
 	_, err = valueobject.NewEventTypes(nil)
 	assert.Error(t, err)

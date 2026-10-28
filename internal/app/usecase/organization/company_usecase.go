@@ -10,19 +10,20 @@ import (
 	"platform-service/internal/domain/organization/entity"
 	"platform-service/internal/domain/organization/event"
 	orgrepo "platform-service/internal/domain/organization/repository"
-	tenantrepo "platform-service/internal/domain/tenant/repository"
-	"platform-service/internal/domain/tenant/service"
+	"platform-service/internal/domain/organization/service"
+	userrepo "platform-service/internal/domain/user/repository"
 )
 
-// OrganizationDeps dipakai bersama CompanyUseCase dan BranchUseCase.
+// OrganizationDeps dipakai bersama CompanyUseCase, CompanyMemberUseCase, dan BranchUseCase.
 type OrganizationDeps struct {
-	Tx        port.Transactor
-	Outbox    port.EventOutbox
-	Tenants   tenantrepo.TenantRepository
-	Members   tenantrepo.TenantMemberRepository
-	Companies orgrepo.CompanyRepository
-	Branches  orgrepo.BranchRepository
-	Query     port.OrganizationQueryReadModel
+	Tx           port.Transactor
+	Outbox       port.EventOutbox
+	Companies    orgrepo.CompanyRepository
+	Members      orgrepo.CompanyMemberRepository
+	Branches     orgrepo.BranchRepository
+	Users        userrepo.UserRepository
+	CompanyQuery port.CompanyQueryReadModel
+	BranchQuery  port.OrganizationQueryReadModel
 	// Subscriptions dipakai AccessPolicy untuk akses token service.
 	Subscriptions service.SubscriptionChecker
 }
@@ -37,55 +38,86 @@ func NewCompanyUseCase(deps OrganizationDeps) *CompanyUseCase {
 	return &CompanyUseCase{deps: deps, access: service.NewAccessPolicy(deps.Members, deps.Subscriptions), now: time.Now}
 }
 
-// Create membuat company di tenant.
+// Create membuat company baru. Pembuat non-admin otomatis menjadi member active;
+// platform admin tidak (admin membuat company untuk pelanggan lalu menambah member).
 //
-// Required — auth: user (platform admin, atau member active dengan tid = tenantId) | scope: -
-func (uc *CompanyUseCase) Create(ctx context.Context, actor *principal.Principal, tenantID string, req dto.CreateOrgUnitRequest) (*dto.CompanyResponse, error) {
-	if err := ensureTenant(ctx, uc.access, uc.deps.Tenants, actor, tenantID); err != nil {
-		return nil, err
-	}
-	c, err := entity.NewCompany(tenantID, entity.OrgUnitParams{Name: req.Name, Code: req.Code, Status: req.Status}, uc.now())
+// Required — auth: user | scope: -
+func (uc *CompanyUseCase) Create(ctx context.Context, actor *principal.Principal, req dto.CreateCompanyRequest) (*dto.CompanyResponse, error) {
+	now := uc.now()
+	c, err := entity.NewCompany(req.Name, req.Slug, now)
 	if err != nil {
-		return nil, mapOrgDomainError(err)
+		return nil, mapCompanyDomainError(err)
 	}
 
 	err = uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
 		if err := uc.deps.Companies.Save(ctx, c); err != nil {
 			return err
 		}
-		return uc.deps.Outbox.Append(ctx, port.OutboxEvent{
-			EventType: event.TypeCompanyCreated,
-			TenantID:  &c.TenantID,
-			Payload: event.CompanyPayload{
-				ID: c.ID, TenantID: c.TenantID, Code: c.Code.Value(), Name: c.Name, Status: c.Status.String(), UpdatedAt: c.UpdatedAt,
-			},
-		})
+		if actor.IsPlatformAdmin {
+			return nil
+		}
+		m, err := entity.NewCompanyMember(c.ID, actor.UserID, "", now)
+		if err != nil {
+			return err
+		}
+		if err := uc.deps.Members.Save(ctx, m); err != nil {
+			return err
+		}
+		return uc.deps.Outbox.Append(ctx, memberAddedEvent(m))
 	})
 	if err != nil {
-		return nil, mapOrgDomainError(err)
+		return nil, mapCompanyDomainError(err)
+	}
+
+	resp := toCompanyResponse(c)
+	return &resp, nil
+}
+
+// List menampilkan company: platform admin melihat semua, user lain hanya company
+// tempat ia member active. Endpoint pemilihan company — boleh dipanggil tanpa cid.
+//
+// Required — auth: user | scope: -
+func (uc *CompanyUseCase) List(ctx context.Context, actor *principal.Principal, req dto.ListCompanyQuery) ([]dto.CompanyResponse, dto.Meta, error) {
+	q := port.CompanyListReadQuery{Status: req.Status, Search: req.Search, PaginationParams: req.PaginationParams}
+	if !actor.IsPlatformAdmin {
+		q.MemberUserID = &actor.UserID
+	}
+	items, meta, err := uc.deps.CompanyQuery.ListCompanies(ctx, q)
+	if err != nil {
+		return nil, dto.Meta{}, mapCompanyDomainError(err)
+	}
+	out := make([]dto.CompanyResponse, 0, len(items))
+	for _, it := range items {
+		out = append(out, dto.CompanyResponse{
+			ID: it.ID, Name: it.Name, Slug: it.Slug, Status: it.Status, CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt,
+		})
+	}
+	return out, meta, nil
+}
+
+// Get mengambil detail company.
+//
+// Required — auth: user (platform admin, atau member active dengan cid = companyId) | scope: -
+func (uc *CompanyUseCase) Get(ctx context.Context, actor *principal.Principal, companyID string) (*dto.CompanyResponse, error) {
+	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), companyID); err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+	c, err := uc.deps.Companies.FindByID(ctx, companyID)
+	if err != nil {
+		return nil, mapCompanyDomainError(err)
 	}
 	resp := toCompanyResponse(c)
 	return &resp, nil
 }
 
-// List menampilkan company (belum dihapus) milik tenant.
-//
-// Required — auth: user (platform admin, atau member active dengan tid = tenantId) | scope: -
-func (uc *CompanyUseCase) List(ctx context.Context, actor *principal.Principal, tenantID string, req dto.ListOrgUnitQuery) ([]dto.CompanyResponse, dto.Meta, error) {
-	if err := ensureTenant(ctx, uc.access, uc.deps.Tenants, actor, tenantID); err != nil {
-		return nil, dto.Meta{}, err
+func memberAddedEvent(m *entity.CompanyMember) port.OutboxEvent {
+	companyID := m.CompanyID
+	return port.OutboxEvent{
+		EventType: event.TypeCompanyMemberAdded,
+		CompanyID: &companyID,
+		Payload: event.CompanyMemberPayload{
+			CompanyID: m.CompanyID, UserID: m.UserID, Status: m.Status.String(), JoinedAt: m.JoinedAt,
+		},
+		OccurredAt: m.JoinedAt,
 	}
-	items, meta, err := uc.deps.Query.ListCompanies(ctx, port.OrgUnitListReadQuery{
-		ParentID: tenantID, Status: req.Status, Search: req.Search, PaginationParams: req.PaginationParams,
-	})
-	if err != nil {
-		return nil, dto.Meta{}, mapOrgDomainError(err)
-	}
-	out := make([]dto.CompanyResponse, 0, len(items))
-	for _, it := range items {
-		out = append(out, dto.CompanyResponse{
-			ID: it.ID, TenantID: it.ParentID, Name: it.Name, Code: it.Code, Status: it.Status, CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt,
-		})
-	}
-	return out, meta, nil
 }

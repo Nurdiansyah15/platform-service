@@ -15,7 +15,7 @@ import (
 // UsageRecord adalah satu laporan pemakaian (append-only).
 type UsageRecord struct {
 	ID                 string
-	TenantID           string
+	CompanyID          string
 	SolutionID         string
 	BenefitID          string
 	Mode               valueobject.Mode
@@ -27,7 +27,7 @@ type UsageRecord struct {
 }
 
 type NewUsageRecordParams struct {
-	TenantID           string
+	CompanyID          string
 	Benefit            *benefitentity.Benefit
 	Mode               valueobject.Mode
 	Quantity           valueobject.Quantity
@@ -61,7 +61,7 @@ func NewUsageRecord(p NewUsageRecordParams, now time.Time) (*UsageRecord, error)
 	}
 	return &UsageRecord{
 		ID:                 uuid.NewString(),
-		TenantID:           p.TenantID,
+		CompanyID:          p.CompanyID,
 		SolutionID:         p.Benefit.SolutionID,
 		BenefitID:          p.Benefit.ID,
 		Mode:               p.Mode,
@@ -76,7 +76,7 @@ func NewUsageRecord(p NewUsageRecordParams, now time.Time) (*UsageRecord, error)
 // SamePayload — laporan ulang dengan idempotency key yang sama dianggap replay
 // hanya bila isinya identik.
 func (r *UsageRecord) SamePayload(o *UsageRecord) bool {
-	return r.TenantID == o.TenantID && r.BenefitID == o.BenefitID && r.Mode == o.Mode && r.Quantity == o.Quantity
+	return r.CompanyID == o.CompanyID && r.BenefitID == o.BenefitID && r.Mode == o.Mode && r.Quantity == o.Quantity
 }
 
 // Period adalah rentang pemakaian [Start, End); End nil = tidak pernah di-reset.
@@ -85,9 +85,9 @@ type Period struct {
 	End   *time.Time
 }
 
-// TenantUsage adalah pemakaian terkini satu benefit dalam satu periode.
-type TenantUsage struct {
-	TenantID       string
+// CompanyUsage adalah pemakaian terkini satu benefit dalam satu periode.
+type CompanyUsage struct {
+	CompanyID      string
 	SolutionID     string
 	BenefitID      string
 	Period         Period

@@ -17,7 +17,7 @@ import (
 
 func TestPostgresEventOutbox_Append_RequiresTx(t *testing.T) {
 	err := persistence.NewPostgresEventOutbox().Append(context.Background(),
-		port.OutboxEvent{EventType: "tenant.updated", Payload: map[string]any{}})
+		port.OutboxEvent{EventType: "company.updated", Payload: map[string]any{}})
 
 	require.ErrorIs(t, err, persistence.ErrOutboxRequiresTx)
 }
@@ -25,13 +25,13 @@ func TestPostgresEventOutbox_Append_RequiresTx(t *testing.T) {
 func TestPostgresEventOutbox_Append_PersistsAllFields(t *testing.T) {
 	testhelper.WithTestTx(t, testDB, func(ctx context.Context) {
 		id := uuid.NewString()
-		tenantID := uuid.NewString()
+		companyID := uuid.NewString()
 		occurredAt := time.Date(2026, 10, 14, 7, 0, 0, 0, time.UTC)
 
 		err := persistence.NewPostgresEventOutbox().Append(ctx, port.OutboxEvent{
 			ID:         id,
-			EventType:  "tenant.updated",
-			TenantID:   &tenantID,
+			EventType:  "company.updated",
+			CompanyID:  &companyID,
 			Payload:    map[string]any{"name": "Acme"},
 			OccurredAt: occurredAt,
 		})
@@ -39,19 +39,19 @@ func TestPostgresEventOutbox_Append_PersistsAllFields(t *testing.T) {
 
 		var (
 			gotType     string
-			gotTenant   *string
+			gotCompany  *string
 			gotSolution *string
 			gotPayload  []byte
 			gotOccurred time.Time
 		)
 		tx := persistence.TxFromContext(ctx)
 		require.NoError(t, tx.QueryRowContext(ctx,
-			`SELECT event_type, tenant_id, solution_id, payload, occurred_at FROM events WHERE id = $1`, id,
-		).Scan(&gotType, &gotTenant, &gotSolution, &gotPayload, &gotOccurred))
+			`SELECT event_type, company_id, solution_id, payload, occurred_at FROM events WHERE id = $1`, id,
+		).Scan(&gotType, &gotCompany, &gotSolution, &gotPayload, &gotOccurred))
 
-		assert.Equal(t, "tenant.updated", gotType)
-		require.NotNil(t, gotTenant)
-		assert.Equal(t, tenantID, *gotTenant)
+		assert.Equal(t, "company.updated", gotType)
+		require.NotNil(t, gotCompany)
+		assert.Equal(t, companyID, *gotCompany)
 		assert.Nil(t, gotSolution)
 		assert.True(t, occurredAt.Equal(gotOccurred))
 

@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	tokenUser          = "user-no-tenant"
-	tokenUserTenant    = "user-with-tenant"
+	tokenUser          = "user-no-company"
+	tokenUserCompany   = "user-with-company"
 	tokenPlatformAdmin = "platform-admin"
 	tokenServiceUsage  = "service-usage"
 )
@@ -35,7 +35,7 @@ func (f fakeAuthenticator) Authenticate(_ context.Context, token string) (*princ
 
 var authn = fakeAuthenticator{
 	tokenUser:          {Kind: principal.KindUser, UserID: "u1"},
-	tokenUserTenant:    {Kind: principal.KindUser, UserID: "u2", TenantID: "t1"},
+	tokenUserCompany:   {Kind: principal.KindUser, UserID: "u2", CompanyID: "t1"},
 	tokenPlatformAdmin: {Kind: principal.KindUser, UserID: "u3", IsPlatformAdmin: true},
 	tokenServiceUsage:  {Kind: principal.KindService, ClientID: "c1", SolutionID: "s1", Scopes: []string{"usage:write"}},
 }
@@ -126,9 +126,9 @@ func TestGuards(t *testing.T) {
 		{"RequirePlatformAdmin/user biasa", tokenUser, middleware.RequirePlatformAdmin(), 403, "AUTH_PLATFORM_ADMIN_REQUIRED"},
 		{"RequirePlatformAdmin/service", tokenServiceUsage, middleware.RequirePlatformAdmin(), 403, "AUTH_PLATFORM_ADMIN_REQUIRED"},
 
-		{"RequireActiveTenant/tenant terpilih", tokenUserTenant, middleware.RequireActiveTenant(), 200, ""},
-		{"RequireActiveTenant/tid kosong", tokenUser, middleware.RequireActiveTenant(), 403, "AUTH_TENANT_NOT_SELECTED"},
-		{"RequireActiveTenant/service", tokenServiceUsage, middleware.RequireActiveTenant(), 200, ""},
+		{"RequireActiveCompany/company terpilih", tokenUserCompany, middleware.RequireActiveCompany(), 200, ""},
+		{"RequireActiveCompany/cid kosong", tokenUser, middleware.RequireActiveCompany(), 403, "AUTH_COMPANY_NOT_SELECTED"},
+		{"RequireActiveCompany/service", tokenServiceUsage, middleware.RequireActiveCompany(), 200, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

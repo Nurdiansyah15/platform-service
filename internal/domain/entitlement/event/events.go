@@ -7,7 +7,7 @@ const TypeUsageLimitReached = "usage.limit_reached"
 
 // UsageLimitReachedPayload dikirim saat pemakaian benefit melewati limit (spec §2.10).
 type UsageLimitReachedPayload struct {
-	TenantID    string     `json:"tenant_id"`
+	CompanyID   string     `json:"company_id"`
 	SolutionID  string     `json:"solution_id"`
 	BenefitCode string     `json:"benefit_code"`
 	Limit       string     `json:"limit"`

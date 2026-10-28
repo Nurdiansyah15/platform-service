@@ -6,16 +6,16 @@ import (
 )
 
 type EntitlementBenefitParam struct {
-	TenantID    string `uri:"tenantId" binding:"required,uuid"`
+	CompanyID   string `uri:"companyId" binding:"required,uuid"`
 	SolutionID  string `uri:"solutionId" binding:"required,uuid"`
 	BenefitCode string `uri:"benefitCode" binding:"required,max=100"`
 }
 
-// EntitlementsResponse — hak efektif tenant atas seluruh benefit solution.
+// EntitlementsResponse — hak efektif company atas seluruh benefit solution.
 type EntitlementsResponse struct {
-	TenantID   string `json:"tenant_id"`
+	CompanyID  string `json:"company_id"`
 	SolutionID string `json:"solution_id"`
-	// Subscription — null bila tenant tidak berlangganan (semua benefit granted=false).
+	// Subscription — null bila company tidak berlangganan (semua benefit granted=false).
 	Subscription *EntitlementSubscription `json:"subscription"`
 	Entitlements []EntitlementResponse    `json:"entitlements"`
 }

@@ -9,16 +9,16 @@ import (
 
 type RoleListReadQuery struct {
 	SolutionID string
-	// TenantID nil → hanya role global; terisi → role global + custom role tenant tersebut.
-	TenantID *string
-	Search   *string // code / name
+	// CompanyID nil → hanya role global; terisi → role global + custom role company tersebut.
+	CompanyID *string
+	Search    *string // code / name
 	dto.PaginationParams
 }
 
 type RoleReadItem struct {
 	ID          string
 	SolutionID  string
-	TenantID    *string
+	CompanyID   *string
 	Code        string
 	Name        string
 	Description *string

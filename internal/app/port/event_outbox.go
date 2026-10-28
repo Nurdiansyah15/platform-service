@@ -9,7 +9,7 @@ import (
 type OutboxEvent struct {
 	ID         string // kosong → di-generate
 	EventType  string
-	TenantID   *string
+	CompanyID  *string
 	SolutionID *string
 	Payload    any // di-marshal ke JSONB
 	OccurredAt time.Time

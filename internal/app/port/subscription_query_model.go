@@ -8,7 +8,7 @@ import (
 )
 
 type SubscriptionListReadQuery struct {
-	TenantID   string
+	CompanyID  string
 	SolutionID *string // dipaksa untuk token service (hanya solution miliknya)
 	Status     *string
 	dto.PaginationParams
@@ -16,7 +16,7 @@ type SubscriptionListReadQuery struct {
 
 type SubscriptionReadItem struct {
 	ID                 string
-	TenantID           string
+	CompanyID          string
 	SolutionID         string
 	SolutionCode       string
 	PlanID             string
@@ -46,9 +46,9 @@ type SubscriptionAddonReadItem struct {
 	UpdatedAt           time.Time
 }
 
-// SelectableTenantReadItem — tenant yang boleh dipilih user untuk solution sesi:
-// user member active, tenant active, subscription trialing / active.
-type SelectableTenantReadItem struct {
+// SelectableCompanyReadItem — company yang boleh dipilih user untuk solution sesi:
+// user member active, company active, subscription trialing / active.
+type SelectableCompanyReadItem struct {
 	ID     string
 	Name   string
 	Slug   string
@@ -60,5 +60,5 @@ type SubscriptionQueryReadModel interface {
 	GetSubscription(ctx context.Context, id string) (*SubscriptionReadItem, error)
 	ListSubscriptionAddons(ctx context.Context, subscriptionID string) ([]SubscriptionAddonReadItem, error)
 	GetSubscriptionAddon(ctx context.Context, id string) (*SubscriptionAddonReadItem, error)
-	ListSelectableTenants(ctx context.Context, userID, solutionID string) ([]SelectableTenantReadItem, error)
+	ListSelectableCompanies(ctx context.Context, userID, solutionID string) ([]SelectableCompanyReadItem, error)
 }

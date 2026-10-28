@@ -1,4 +1,4 @@
-// Package entity berisi model entitlement (hak efektif tenant atas benefit).
+// Package entity berisi model entitlement (hak efektif company atas benefit).
 package entity
 
 import (
@@ -21,7 +21,7 @@ type SnapshotValue struct {
 	AttachedAt time.Time
 }
 
-// Entitlement adalah hak efektif tenant atas satu benefit.
+// Entitlement adalah hak efektif company atas satu benefit.
 type Entitlement struct {
 	Benefit *benefitentity.Benefit
 	// Granted — benefit diberikan plan / add-on aktif.

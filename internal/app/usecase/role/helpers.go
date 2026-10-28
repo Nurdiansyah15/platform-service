@@ -8,12 +8,12 @@ import (
 	"platform-service/internal/app/port"
 	"platform-service/internal/app/principal"
 	domainerr "platform-service/internal/domain/errors"
+	orgconstant "platform-service/internal/domain/organization/constant"
+	orgservice "platform-service/internal/domain/organization/service"
 	"platform-service/internal/domain/role/constant"
 	"platform-service/internal/domain/role/entity"
 	"platform-service/internal/domain/role/event"
 	solutionconstant "platform-service/internal/domain/solution/constant"
-	tenantconstant "platform-service/internal/domain/tenant/constant"
-	tenantservice "platform-service/internal/domain/tenant/service"
 )
 
 func mapRoleDomainError(err error) error {
@@ -22,11 +22,11 @@ func mapRoleDomainError(err error) error {
 		return apperror.Internal(string(apperror.CodeInternal), err)
 	}
 	switch de.Code {
-	case constant.CodeRoleNotFound, solutionconstant.CodeSolutionNotFound, tenantconstant.CodeTenantNotFound:
+	case constant.CodeRoleNotFound, solutionconstant.CodeSolutionNotFound, orgconstant.CodeCompanyNotFound:
 		return apperror.NotFound(string(de.Code))
-	case tenantconstant.CodeTenantNotSelected:
-		return apperror.Forbidden(apperror.MsgTenantNotSelected)
-	case tenantconstant.CodeTenantAccessDenied, constant.CodeRoleSystemImmutable, constant.CodeRoleTenantNotSubscribed:
+	case orgconstant.CodeCompanyNotSelected:
+		return apperror.Forbidden(apperror.MsgCompanyNotSelected)
+	case orgconstant.CodeCompanyAccessDenied, constant.CodeRoleSystemImmutable, constant.CodeRoleCompanyNotSubscribed:
 		return apperror.Forbidden(string(de.Code))
 	case constant.CodeRoleCodeDuplicate:
 		return apperror.Conflict(string(de.Code), err)
@@ -47,29 +47,29 @@ func isPlatformAdmin(p *principal.Principal) bool {
 	return p.IsUser() && p.IsPlatformAdmin
 }
 
-func accessorOf(p *principal.Principal) tenantservice.Accessor {
-	a := tenantservice.Accessor{UserID: p.UserID, ActiveTenantID: p.TenantID, IsPlatformAdmin: isPlatformAdmin(p)}
+func accessorOf(p *principal.Principal) orgservice.Accessor {
+	a := orgservice.Accessor{UserID: p.UserID, ActiveCompanyID: p.CompanyID, IsPlatformAdmin: isPlatformAdmin(p)}
 	if p.IsService() {
 		a.ServiceSolutionID = p.SolutionID
 	}
 	return a
 }
 
-func roleScope(tenantID *string, isSystem bool) string {
+func roleScope(companyID *string, isSystem bool) string {
 	switch {
 	case isSystem:
 		return "system"
-	case tenantID == nil:
+	case companyID == nil:
 		return "global"
 	default:
-		return "tenant"
+		return "company"
 	}
 }
 
 func toRoleResponse(r *entity.Role) dto.RoleResponse {
 	return dto.RoleResponse{
-		ID: r.ID, SolutionID: r.SolutionID, TenantID: r.TenantID, Code: r.Code.Value(), Name: r.Name,
-		Description: r.Description, IsSystem: r.IsSystem, Scope: roleScope(r.TenantID, r.IsSystem),
+		ID: r.ID, SolutionID: r.SolutionID, CompanyID: r.CompanyID, Code: r.Code.Value(), Name: r.Name,
+		Description: r.Description, IsSystem: r.IsSystem, Scope: roleScope(r.CompanyID, r.IsSystem),
 		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
 }
@@ -77,10 +77,10 @@ func toRoleResponse(r *entity.Role) dto.RoleResponse {
 func roleEvent(eventType string, r *entity.Role, permissionCodes []string) port.OutboxEvent {
 	return port.OutboxEvent{
 		EventType:  eventType,
-		TenantID:   r.TenantID,
+		CompanyID:  r.CompanyID,
 		SolutionID: &r.SolutionID,
 		Payload: event.RolePayload{
-			ID: r.ID, SolutionID: r.SolutionID, TenantID: r.TenantID, Code: r.Code.Value(), Name: r.Name,
+			ID: r.ID, SolutionID: r.SolutionID, CompanyID: r.CompanyID, Code: r.Code.Value(), Name: r.Name,
 			IsSystem: r.IsSystem, PermissionCodes: permissionCodes, UpdatedAt: r.UpdatedAt,
 		},
 	}

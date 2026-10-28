@@ -15,8 +15,8 @@ import (
 	"platform-service/internal/testhelper"
 )
 
-func usagePath(tenantID, solutionID string) string {
-	return "/api/v1/tenants/" + tenantID + "/solutions/" + solutionID + "/usage"
+func usagePath(companyID, solutionID string) string {
+	return "/api/v1/companies/" + companyID + "/solutions/" + solutionID + "/usage"
 }
 
 type usageData struct {
@@ -29,10 +29,10 @@ type usageData struct {
 }
 
 // usageFixture: solution dengan benefit counter (monthly & billing_period), gauge, dan
-// non-meter; tenant subscribe; token service ber-scope usage:write.
+// non-meter; company subscribe; token service ber-scope usage:write.
 type usageFixture struct {
-	solutionID, tenantID, subscriptionID string
-	auth                                 map[string]string
+	solutionID, companyID, subscriptionID string
+	auth                                  map[string]string
 }
 
 func newUsageFixture(t *testing.T) usageFixture {
@@ -43,8 +43,8 @@ func newUsageFixture(t *testing.T) usageFixture {
 	mustCreateBenefit(t, f.solutionID, "lifetime_exports", "integer", "sum", map[string]any{"metering": "counter"})
 	mustCreateBenefit(t, f.solutionID, "active_employees", "integer", "max", map[string]any{"metering": "gauge"})
 	mustCreateBenefit(t, f.solutionID, "export_pdf", "boolean", "any_true", nil)
-	f.tenantID = mustCreateTenant(t, adminHeader())
-	f.subscriptionID = mustSubscribe(t, f.tenantID, mustCreatePlan(t, f.solutionID, "basic", nil))
+	f.companyID = mustCreateCompany(t, adminHeader())
+	f.subscriptionID = mustSubscribe(t, f.companyID, mustCreatePlan(t, f.solutionID, "basic", nil))
 	f.auth = testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, f.solutionID, "usage:write"), ""))
 	return f
 }
@@ -76,28 +76,28 @@ func TestUsage_Report_Forbidden(t *testing.T) {
 	f := newUsageFixture(t)
 	body := f.delta("api_calls", 1, uuid.NewString(), nil)
 
-	assert.Equal(t, 403, testSrv.POST(usagePath(f.tenantID, f.solutionID), body, adminHeader()).Code, "token user")
+	assert.Equal(t, 403, testSrv.POST(usagePath(f.companyID, f.solutionID), body, adminHeader()).Code, "token user")
 	noScope := testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, f.solutionID, "entitlements:read"), ""))
-	assert.Equal(t, 403, testSrv.POST(usagePath(f.tenantID, f.solutionID), body, noScope).Code, "tanpa usage:write")
+	assert.Equal(t, 403, testSrv.POST(usagePath(f.companyID, f.solutionID), body, noScope).Code, "tanpa usage:write")
 
 	other := newUsageFixture(t)
-	assert.Equal(t, 403, testSrv.POST(usagePath(f.tenantID, other.solutionID), body, f.auth).Code, "solution path bukan milik client")
+	assert.Equal(t, 403, testSrv.POST(usagePath(f.companyID, other.solutionID), body, f.auth).Code, "solution path bukan milik client")
 
-	unsubscribed := mustCreateTenant(t, adminHeader())
-	assert.Equal(t, 403, testSrv.POST(usagePath(unsubscribed, f.solutionID), body, f.auth).Code, "tenant tidak subscribe")
+	unsubscribed := mustCreateCompany(t, adminHeader())
+	assert.Equal(t, 403, testSrv.POST(usagePath(unsubscribed, f.solutionID), body, f.auth).Code, "company tidak subscribe")
 }
 
 // ── Validasi ─────────────────────────────────────────────────────────────────
 
 func TestUsage_Report_BenefitNotFound(t *testing.T) {
 	f := newUsageFixture(t)
-	w := testSrv.POST(usagePath(f.tenantID, f.solutionID), f.delta("tidak_ada", 1, uuid.NewString(), nil), f.auth)
+	w := testSrv.POST(usagePath(f.companyID, f.solutionID), f.delta("tidak_ada", 1, uuid.NewString(), nil), f.auth)
 	assert.Equal(t, 404, w.Code, w.Body.String())
 }
 
 func TestUsage_Report_Invalid(t *testing.T) {
 	f := newUsageFixture(t)
-	path := usagePath(f.tenantID, f.solutionID)
+	path := usagePath(f.companyID, f.solutionID)
 	tests := map[string]map[string]any{
 		"benefit tidak di-meter": f.delta("export_pdf", 1, uuid.NewString(), nil),
 		"gauge lewat POST":       f.delta("active_employees", 1, uuid.NewString(), nil),
@@ -122,7 +122,7 @@ func TestUsage_Report_Invalid(t *testing.T) {
 
 func TestUsage_Delta_AccumulatesAndIsIdempotent(t *testing.T) {
 	f := newUsageFixture(t)
-	path := usagePath(f.tenantID, f.solutionID)
+	path := usagePath(f.companyID, f.solutionID)
 	at := time.Date(2026, 5, 10, 8, 0, 0, 0, time.UTC)
 	key1 := uuid.NewString()
 
@@ -153,13 +153,13 @@ func TestUsage_Delta_AccumulatesAndIsIdempotent(t *testing.T) {
 
 	var records int
 	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
-		`SELECT COUNT(*) FROM usage_records WHERE tenant_id = $1`, f.tenantID).Scan(&records))
+		`SELECT COUNT(*) FROM usage_records WHERE company_id = $1`, f.companyID).Scan(&records))
 	assert.Equal(t, 2, records)
 }
 
 func TestUsage_Delta_MonthlyResetsByPeriod(t *testing.T) {
 	f := newUsageFixture(t)
-	path := usagePath(f.tenantID, f.solutionID)
+	path := usagePath(f.companyID, f.solutionID)
 	may := time.Date(2026, 5, 31, 23, 0, 0, 0, time.UTC)
 	june := time.Date(2026, 6, 1, 1, 0, 0, 0, time.UTC)
 
@@ -171,7 +171,7 @@ func TestUsage_Delta_MonthlyResetsByPeriod(t *testing.T) {
 
 func TestUsage_Delta_NeverReset_AndBillingPeriod(t *testing.T) {
 	f := newUsageFixture(t)
-	path := usagePath(f.tenantID, f.solutionID)
+	path := usagePath(f.companyID, f.solutionID)
 
 	w := testSrv.POST(path, f.delta("lifetime_exports", 3, uuid.NewString(), nil), f.auth)
 	require.Equal(t, 201, w.Code, w.Body.String())
@@ -192,7 +192,7 @@ func TestUsage_Delta_NeverReset_AndBillingPeriod(t *testing.T) {
 
 func TestUsage_Delta_ConcurrentReportsAreAtomic(t *testing.T) {
 	f := newUsageFixture(t)
-	path := usagePath(f.tenantID, f.solutionID)
+	path := usagePath(f.companyID, f.solutionID)
 
 	const n = 20
 	var wg sync.WaitGroup
@@ -201,7 +201,7 @@ func TestUsage_Delta_ConcurrentReportsAreAtomic(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			codes[i] = testSrv.POST(path, f.delta("lifetime_exports", 1, fmt.Sprintf("par-%s-%d", f.tenantID, i), nil), f.auth).Code
+			codes[i] = testSrv.POST(path, f.delta("lifetime_exports", 1, fmt.Sprintf("par-%s-%d", f.companyID, i), nil), f.auth).Code
 		}(i)
 	}
 	wg.Wait()
@@ -211,7 +211,7 @@ func TestUsage_Delta_ConcurrentReportsAreAtomic(t *testing.T) {
 
 	var used string
 	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
-		`SELECT used::text FROM tenant_usage WHERE tenant_id = $1`, f.tenantID).Scan(&used))
+		`SELECT used::text FROM company_usage WHERE company_id = $1`, f.companyID).Scan(&used))
 	assert.Equal(t, "20.0000", used)
 }
 
@@ -219,7 +219,7 @@ func TestUsage_Delta_ConcurrentReportsAreAtomic(t *testing.T) {
 
 func TestUsage_Absolute_LatestWins(t *testing.T) {
 	f := newUsageFixture(t)
-	path := usagePath(f.tenantID, f.solutionID) + "/active_employees"
+	path := usagePath(f.companyID, f.solutionID) + "/active_employees"
 	t1 := time.Date(2026, 5, 10, 8, 0, 0, 0, time.UTC)
 
 	w := testSrv.PUT(path, map[string]any{"quantity": 120, "idempotency_key": uuid.NewString(), "occurred_at": t1}, f.auth)
@@ -242,7 +242,7 @@ func TestUsage_Absolute_LatestWins(t *testing.T) {
 
 func TestUsage_Absolute_Replay(t *testing.T) {
 	f := newUsageFixture(t)
-	path := usagePath(f.tenantID, f.solutionID) + "/active_employees"
+	path := usagePath(f.companyID, f.solutionID) + "/active_employees"
 	body := map[string]any{"quantity": 7, "idempotency_key": uuid.NewString()}
 
 	require.Equal(t, 200, testSrv.PUT(path, body, f.auth).Code)

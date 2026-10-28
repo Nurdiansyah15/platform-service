@@ -13,7 +13,7 @@ const (
 
 type SubscriptionPayload struct {
 	ID             string    `json:"id"`
-	TenantID       string    `json:"tenant_id"`
+	CompanyID      string    `json:"company_id"`
 	SolutionID     string    `json:"solution_id"`
 	PlanID         string    `json:"plan_id"`
 	Status         string    `json:"status"`
@@ -25,7 +25,7 @@ type SubscriptionPayload struct {
 type SubscriptionAddonPayload struct {
 	ID             string    `json:"id"`
 	SubscriptionID string    `json:"subscription_id"`
-	TenantID       string    `json:"tenant_id"`
+	CompanyID      string    `json:"company_id"`
 	SolutionID     string    `json:"solution_id"`
 	AddonID        string    `json:"addon_id"`
 	Quantity       int       `json:"quantity"`
@@ -33,9 +33,9 @@ type SubscriptionAddonPayload struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
-// EntitlementChangedPayload memberi tahu solution agar memuat ulang entitlement tenant.
+// EntitlementChangedPayload memberi tahu solution agar memuat ulang entitlement company.
 type EntitlementChangedPayload struct {
-	TenantID       string    `json:"tenant_id"`
+	CompanyID      string    `json:"company_id"`
 	SolutionID     string    `json:"solution_id"`
 	SubscriptionID string    `json:"subscription_id"`
 	Reason         string    `json:"reason"`

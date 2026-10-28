@@ -29,10 +29,10 @@ func (r *PostgresRoleQuery) ListRoles(ctx context.Context, q port.RoleListReadQu
 	var w whereBuilder
 	w.add(`solution_id = $%d`, q.SolutionID)
 	w.add(`deleted_at IS NULL`)
-	if q.TenantID == nil {
-		w.add(`tenant_id IS NULL`)
+	if q.CompanyID == nil {
+		w.add(`company_id IS NULL`)
 	} else {
-		w.add(`(tenant_id IS NULL OR tenant_id = $%d)`, *q.TenantID)
+		w.add(`(company_id IS NULL OR company_id = $%d)`, *q.CompanyID)
 	}
 	if q.Search != nil && strings.TrimSpace(*q.Search) != "" {
 		w.add(`(code ILIKE $%d OR name ILIKE $%d)`, likePattern(*q.Search), likePattern(*q.Search))
@@ -43,10 +43,10 @@ func (r *PostgresRoleQuery) ListRoles(ctx context.Context, q port.RoleListReadQu
 	if err := exec.QueryRowContext(ctx, `SELECT COUNT(*) FROM roles `+w.sql(), w.args...).Scan(&total); err != nil {
 		return nil, dto.Meta{}, domainerr.Wrap(constant.CodeRoleQueryFailed, err)
 	}
-	// Role global tampil lebih dulu, lalu custom role tenant.
+	// Role global tampil lebih dulu, lalu custom role company.
 	rows, err := exec.QueryContext(ctx, fmt.Sprintf(`
-		SELECT id, solution_id, tenant_id, code, name, description, is_system, created_at, updated_at
-		FROM roles %s ORDER BY (tenant_id IS NOT NULL), %s %s, id LIMIT %d OFFSET %d`,
+		SELECT id, solution_id, company_id, code, name, description, is_system, created_at, updated_at
+		FROM roles %s ORDER BY (company_id IS NOT NULL), %s %s, id LIMIT %d OFFSET %d`,
 		w.sql(), sortColumn, sortType, limit, offset), w.args...)
 	if err != nil {
 		return nil, dto.Meta{}, domainerr.Wrap(constant.CodeRoleQueryFailed, err)
@@ -56,7 +56,7 @@ func (r *PostgresRoleQuery) ListRoles(ctx context.Context, q port.RoleListReadQu
 	items := make([]port.RoleReadItem, 0, limit)
 	for rows.Next() {
 		var it port.RoleReadItem
-		if err := rows.Scan(&it.ID, &it.SolutionID, &it.TenantID, &it.Code, &it.Name, &it.Description, &it.IsSystem,
+		if err := rows.Scan(&it.ID, &it.SolutionID, &it.CompanyID, &it.Code, &it.Name, &it.Description, &it.IsSystem,
 			&it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, dto.Meta{}, domainerr.Wrap(constant.CodeRoleQueryFailed, err)
 		}

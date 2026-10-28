@@ -42,7 +42,7 @@ func (f *FakeAuthenticator) Issue(p principal.Principal) string {
 	return token
 }
 
-// UserToken menerbitkan token user biasa (bukan platform admin, tanpa tenant aktif).
+// UserToken menerbitkan token user biasa (bukan platform admin, tanpa company aktif).
 func (f *FakeAuthenticator) UserToken() string {
 	return f.Issue(principal.Principal{Kind: principal.KindUser, UserID: uuid.NewString(), SessionID: uuid.NewString()})
 }

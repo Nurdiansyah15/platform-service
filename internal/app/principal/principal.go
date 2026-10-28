@@ -17,7 +17,7 @@ type Principal struct {
 	// Token user (typ=user)
 	UserID          string
 	SessionID       string
-	TenantID        string // tenant aktif; kosong sebelum pilih tenant
+	CompanyID       string // company aktif; kosong sebelum pilih company
 	SolutionCode    string // aud
 	IsPlatformAdmin bool
 
@@ -39,6 +39,6 @@ func (p *Principal) HasScope(scope string) bool {
 	return p.IsService() && slices.Contains(p.Scopes, scope)
 }
 
-func (p *Principal) HasActiveTenant() bool {
-	return p.IsUser() && p.TenantID != ""
+func (p *Principal) HasActiveCompany() bool {
+	return p.IsUser() && p.CompanyID != ""
 }

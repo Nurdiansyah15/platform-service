@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	companyentity "platform-service/internal/domain/organization/entity"
 	planentity "platform-service/internal/domain/plan/entity"
 	"platform-service/internal/domain/subscription/constant"
 	"platform-service/internal/domain/subscription/entity"
-	tenantentity "platform-service/internal/domain/tenant/entity"
 	"platform-service/internal/infrastructure/persistence"
 	"platform-service/internal/testhelper"
 )
@@ -23,9 +23,9 @@ func TestPostgresSubscriptionRepositories(t *testing.T) {
 		solutionID := seedSolutionTx(t, ctx)
 		benefit := seedBenefitTx(t, ctx, solutionID)
 
-		tn, err := tenantentity.NewTenant("Sub", testhelper.UniqueCode("sub"), time.Now())
+		tn, err := companyentity.NewCompany("Sub", testhelper.UniqueCode("sub"), time.Now())
 		require.NoError(t, err)
-		require.NoError(t, persistence.NewPostgresTenantRepository(testDB).Save(ctx, tn))
+		require.NoError(t, persistence.NewPostgresCompanyRepository(testDB).Save(ctx, tn))
 
 		p, err := planentity.NewPlan(planentity.NewPlanParams{SolutionID: solutionID, Code: "basic", Name: "Basic", Price: "1000"}, time.Now())
 		require.NoError(t, err)
@@ -61,7 +61,7 @@ func TestPostgresSubscriptionRepositories(t *testing.T) {
 		_, err = tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT dup_snapshot`)
 		require.NoError(t, err)
 
-		// Subscription live kedua untuk tenant+solution ditolak.
+		// Subscription live kedua untuk company+solution ditolak.
 		second, err := entity.NewSubscription(tn.ID, terms, "", time.Now(), time.Now())
 		require.NoError(t, err)
 		_, err = tx.ExecContext(ctx, `SAVEPOINT dup_live`)

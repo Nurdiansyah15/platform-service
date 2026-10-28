@@ -21,9 +21,9 @@ func NewPostgresRoleAssignmentRepository(db *sql.DB) *PostgresRoleAssignmentRepo
 
 func (r *PostgresRoleAssignmentRepository) Create(ctx context.Context, a *entity.RoleAssignment) error {
 	_, err := execFromContext(ctx, r.db).ExecContext(ctx, `
-		INSERT INTO user_role_assignments (id, tenant_id, user_id, role_id, scope_type, scope_id, created_at)
+		INSERT INTO user_role_assignments (id, company_id, user_id, role_id, scope_type, scope_id, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		a.ID, a.TenantID, a.UserID, a.RoleID, a.Scope.Type.String(), a.Scope.ID, a.CreatedAt)
+		a.ID, a.CompanyID, a.UserID, a.RoleID, a.Scope.Type.String(), a.Scope.ID, a.CreatedAt)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return domainerr.New(constant.CodeAssignmentDuplicate)
@@ -45,18 +45,18 @@ func NewPostgresGrantReader(db *sql.DB) *PostgresGrantReader {
 	return &PostgresGrantReader{db: db}
 }
 
-// Grants: assignment user di tenant → role solution (belum dihapus; global atau custom milik
-// tenant) → permission role (termasuk deprecated yang masih terpasang).
-func (r *PostgresGrantReader) Grants(ctx context.Context, tenantID, userID, solutionID string) ([]entity.Grant, error) {
+// Grants: assignment user di company → role solution (belum dihapus; global atau custom milik
+// company) → permission role (termasuk deprecated yang masih terpasang).
+func (r *PostgresGrantReader) Grants(ctx context.Context, companyID, userID, solutionID string) ([]entity.Grant, error) {
 	rows, err := execFromContext(ctx, r.db).QueryContext(ctx, `
 		SELECT r.code, p.code, ura.scope_type, ura.scope_id
 		FROM user_role_assignments ura
 		JOIN roles r ON r.id = ura.role_id
 		JOIN role_permissions rp ON rp.role_id = r.id
 		JOIN permissions p ON p.id = rp.permission_id
-		WHERE ura.tenant_id = $1 AND ura.user_id = $2 AND r.solution_id = $3
-		  AND r.deleted_at IS NULL AND (r.tenant_id IS NULL OR r.tenant_id = ura.tenant_id)`,
-		tenantID, userID, solutionID)
+		WHERE ura.company_id = $1 AND ura.user_id = $2 AND r.solution_id = $3
+		  AND r.deleted_at IS NULL AND (r.company_id IS NULL OR r.company_id = ura.company_id)`,
+		companyID, userID, solutionID)
 	if err != nil {
 		return nil, domainerr.Wrap(constant.CodeAuthzQueryFailed, err)
 	}

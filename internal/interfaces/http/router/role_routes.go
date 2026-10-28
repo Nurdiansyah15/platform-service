@@ -7,7 +7,7 @@ import (
 
 const scopeRolesWrite = "roles:write"
 
-// RegisterRoleRoutes — Roles global (spec §3.11) & custom tenant (spec §3.12).
+// RegisterRoleRoutes — Roles global (spec §3.11) & custom company (spec §3.12).
 func RegisterRoleRoutes(r Routes, h *api.RoleHandler) {
 	g := r.Authenticated
 	g.GET("/solutions/:solutionId/roles", h.ListGlobal)
@@ -15,8 +15,8 @@ func RegisterRoleRoutes(r Routes, h *api.RoleHandler) {
 	g.POST("/solutions/:solutionId/roles", middleware.RequirePlatformAdmin(), h.CreateGlobal)
 	g.PUT("/roles/:roleId/permissions", middleware.RequirePlatformAdmin(), h.ReplaceGlobalPermissions)
 
-	tenant := g.Group("", middleware.RequireUserOrService(scopeRolesWrite))
-	tenant.GET("/tenants/:tenantId/solutions/:solutionId/roles", h.ListForTenant)
-	tenant.POST("/tenants/:tenantId/solutions/:solutionId/roles", h.CreateForTenant)
-	tenant.PUT("/tenants/:tenantId/roles/:roleId/permissions", h.ReplaceTenantRolePermissions)
+	company := g.Group("", middleware.RequireUserOrService(scopeRolesWrite))
+	company.GET("/companies/:companyId/solutions/:solutionId/roles", h.ListForCompany)
+	company.POST("/companies/:companyId/solutions/:solutionId/roles", h.CreateForCompany)
+	company.PUT("/companies/:companyId/roles/:roleId/permissions", h.ReplaceCompanyRolePermissions)
 }

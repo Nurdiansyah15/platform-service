@@ -11,12 +11,12 @@ import (
 	benefitrepo "platform-service/internal/domain/benefit/repository"
 	entservice "platform-service/internal/domain/entitlement/service"
 	domainerr "platform-service/internal/domain/errors"
+	orgconstant "platform-service/internal/domain/organization/constant"
+	orgrepo "platform-service/internal/domain/organization/repository"
+	orgservice "platform-service/internal/domain/organization/service"
 	solutionconstant "platform-service/internal/domain/solution/constant"
 	solutionrepo "platform-service/internal/domain/solution/repository"
 	subrepo "platform-service/internal/domain/subscription/repository"
-	tenantconstant "platform-service/internal/domain/tenant/constant"
-	tenantrepo "platform-service/internal/domain/tenant/repository"
-	tenantservice "platform-service/internal/domain/tenant/service"
 	usagerepo "platform-service/internal/domain/usage/repository"
 	usageservice "platform-service/internal/domain/usage/service"
 )
@@ -24,66 +24,66 @@ import (
 type EntitlementDeps struct {
 	Benefits      benefitrepo.BenefitRepository
 	Solutions     solutionrepo.SolutionRepository
-	Tenants       tenantrepo.TenantRepository
-	Members       tenantrepo.TenantMemberRepository
+	Companies     orgrepo.CompanyRepository
+	Members       orgrepo.CompanyMemberRepository
 	Subscriptions subrepo.SubscriptionRepository
 	Resolver      *entservice.Resolver
-	TenantUsage   usagerepo.TenantUsageRepository
+	CompanyUsage  usagerepo.CompanyUsageRepository
 }
 
 type EntitlementUseCase struct {
 	deps   EntitlementDeps
-	access *tenantservice.AccessPolicy
+	access *orgservice.AccessPolicy
 	now    func() time.Time
 }
 
 func NewEntitlementUseCase(deps EntitlementDeps) *EntitlementUseCase {
-	return &EntitlementUseCase{deps: deps, access: tenantservice.NewAccessPolicy(deps.Members, deps.Subscriptions), now: time.Now}
+	return &EntitlementUseCase{deps: deps, access: orgservice.NewAccessPolicy(deps.Members, deps.Subscriptions), now: time.Now}
 }
 
-// List menghitung entitlement tenant atas seluruh benefit solution dari snapshot
+// List menghitung entitlement company atas seluruh benefit solution dari snapshot
 // subscription (spec §3.10), lengkap dengan limit / used / remaining untuk benefit di-meter.
 //
 // Required — auth: user (platform admin / member dengan tid) atau service | scope: entitlements:read
-func (uc *EntitlementUseCase) List(ctx context.Context, actor *principal.Principal, tenantID, solutionID string) (*dto.EntitlementsResponse, error) {
-	if err := uc.authorize(ctx, actor, tenantID, solutionID); err != nil {
+func (uc *EntitlementUseCase) List(ctx context.Context, actor *principal.Principal, companyID, solutionID string) (*dto.EntitlementsResponse, error) {
+	if err := uc.authorize(ctx, actor, companyID, solutionID); err != nil {
 		return nil, err
 	}
 	benefits, err := uc.deps.Benefits.ListBySolution(ctx, solutionID)
 	if err != nil {
 		return nil, mapEntitlementDomainError(err)
 	}
-	return uc.evaluate(ctx, tenantID, solutionID, benefits)
+	return uc.evaluate(ctx, companyID, solutionID, benefits)
 }
 
 // Get menghitung entitlement satu benefit.
 //
 // Required — auth: user (platform admin / member dengan tid) atau service | scope: entitlements:read
-func (uc *EntitlementUseCase) Get(ctx context.Context, actor *principal.Principal, tenantID, solutionID, benefitCode string) (*dto.EntitlementResponse, error) {
-	if err := uc.authorize(ctx, actor, tenantID, solutionID); err != nil {
+func (uc *EntitlementUseCase) Get(ctx context.Context, actor *principal.Principal, companyID, solutionID, benefitCode string) (*dto.EntitlementResponse, error) {
+	if err := uc.authorize(ctx, actor, companyID, solutionID); err != nil {
 		return nil, err
 	}
 	b, err := uc.deps.Benefits.FindByCode(ctx, solutionID, benefitCode)
 	if err != nil {
 		return nil, mapEntitlementDomainError(err)
 	}
-	resp, err := uc.evaluate(ctx, tenantID, solutionID, []*benefitentity.Benefit{b})
+	resp, err := uc.evaluate(ctx, companyID, solutionID, []*benefitentity.Benefit{b})
 	if err != nil {
 		return nil, err
 	}
 	return &resp.Entitlements[0], nil
 }
 
-// authorize: token service hanya untuk solution miliknya; tenant & solution harus ada;
-// akses tenant mengikuti AccessPolicy.
-func (uc *EntitlementUseCase) authorize(ctx context.Context, actor *principal.Principal, tenantID, solutionID string) error {
+// authorize: token service hanya untuk solution miliknya; company & solution harus ada;
+// akses company mengikuti AccessPolicy.
+func (uc *EntitlementUseCase) authorize(ctx context.Context, actor *principal.Principal, companyID, solutionID string) error {
 	if actor.IsService() && actor.SolutionID != solutionID {
-		return mapEntitlementDomainError(domainerr.New(tenantconstant.CodeTenantAccessDenied))
+		return mapEntitlementDomainError(domainerr.New(orgconstant.CodeCompanyAccessDenied))
 	}
-	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), tenantID); err != nil {
+	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), companyID); err != nil {
 		return mapEntitlementDomainError(err)
 	}
-	if _, err := uc.deps.Tenants.FindByID(ctx, tenantID); err != nil {
+	if _, err := uc.deps.Companies.FindByID(ctx, companyID); err != nil {
 		return mapEntitlementDomainError(err)
 	}
 	sol, err := uc.deps.Solutions.FindByID(ctx, solutionID)
@@ -96,12 +96,12 @@ func (uc *EntitlementUseCase) authorize(ctx context.Context, actor *principal.Pr
 	return nil
 }
 
-func (uc *EntitlementUseCase) evaluate(ctx context.Context, tenantID, solutionID string, benefits []*benefitentity.Benefit) (*dto.EntitlementsResponse, error) {
-	src, err := uc.deps.Resolver.Resolve(ctx, tenantID, solutionID)
+func (uc *EntitlementUseCase) evaluate(ctx context.Context, companyID, solutionID string, benefits []*benefitentity.Benefit) (*dto.EntitlementsResponse, error) {
+	src, err := uc.deps.Resolver.Resolve(ctx, companyID, solutionID)
 	if err != nil {
 		return nil, mapEntitlementDomainError(err)
 	}
-	resp := &dto.EntitlementsResponse{TenantID: tenantID, SolutionID: solutionID, Entitlements: make([]dto.EntitlementResponse, 0, len(benefits))}
+	resp := &dto.EntitlementsResponse{CompanyID: companyID, SolutionID: solutionID, Entitlements: make([]dto.EntitlementResponse, 0, len(benefits))}
 	var billingStart, billingEnd *time.Time
 	if s := src.Subscription; s != nil {
 		resp.Subscription = &dto.EntitlementSubscription{ID: s.ID, Status: s.Status.String(), PlanID: s.PlanID, CurrentPeriodEnd: s.CurrentPeriodEnd}
@@ -115,7 +115,7 @@ func (uc *EntitlementUseCase) evaluate(ctx context.Context, tenantID, solutionID
 
 		if b.IsMetered() && ent.Granted {
 			period := usageservice.ResolvePeriod(b.UsageReset, now, billingStart, billingEnd)
-			tu, err := uc.deps.TenantUsage.Get(ctx, tenantID, b.ID, period.Start)
+			tu, err := uc.deps.CompanyUsage.Get(ctx, companyID, b.ID, period.Start)
 			if err != nil {
 				return nil, mapEntitlementDomainError(err)
 			}

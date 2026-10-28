@@ -61,7 +61,7 @@ func (h *WebhookHandler) Create(c *gin.Context) {
 //	@Produce		json
 //	@Param			since		query		string	false	"RFC3339; event dengan occurred_at >= since"
 //	@Param			event_type	query		string	false	"Filter tipe event"
-//	@Param			tenant_id	query		string	false	"Filter tenant"
+//	@Param			company_id	query		string	false	"Filter company"
 //	@Param			cursor		query		string	false	"meta.next_cursor dari halaman sebelumnya"
 //	@Param			limit		query		int		false	"1–200, default 50"
 //	@Success		200			{object}	respond.SuccessBody{data=[]dto.EventItem,meta=dto.CursorMeta}

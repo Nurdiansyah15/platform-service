@@ -9,6 +9,9 @@ import (
 	"platform-service/internal/app/principal"
 	addonrepo "platform-service/internal/domain/addon/repository"
 	domainerr "platform-service/internal/domain/errors"
+	orgconstant "platform-service/internal/domain/organization/constant"
+	orgrepo "platform-service/internal/domain/organization/repository"
+	orgservice "platform-service/internal/domain/organization/service"
 	planrepo "platform-service/internal/domain/plan/repository"
 	solutionrepo "platform-service/internal/domain/solution/repository"
 	"platform-service/internal/domain/subscription/constant"
@@ -16,9 +19,6 @@ import (
 	"platform-service/internal/domain/subscription/event"
 	subrepo "platform-service/internal/domain/subscription/repository"
 	subservice "platform-service/internal/domain/subscription/service"
-	tenantconstant "platform-service/internal/domain/tenant/constant"
-	tenantrepo "platform-service/internal/domain/tenant/repository"
-	tenantservice "platform-service/internal/domain/tenant/service"
 )
 
 type SubscriptionDeps struct {
@@ -28,8 +28,8 @@ type SubscriptionDeps struct {
 	SubscriptionAddons subrepo.SubscriptionAddonRepository
 	Snapshots          subrepo.SnapshotRepository
 	BenefitValues      subservice.BenefitValueSource
-	Tenants            tenantrepo.TenantRepository
-	Members            tenantrepo.TenantMemberRepository
+	Companies          orgrepo.CompanyRepository
+	Members            orgrepo.CompanyMemberRepository
 	Plans              planrepo.PlanRepository
 	Addons             addonrepo.AddonRepository
 	Solutions          solutionrepo.SolutionRepository
@@ -38,7 +38,7 @@ type SubscriptionDeps struct {
 
 type SubscriptionUseCase struct {
 	deps      SubscriptionDeps
-	access    *tenantservice.AccessPolicy
+	access    *orgservice.AccessPolicy
 	snapshots *subservice.SnapshotBuilder
 	now       func() time.Time
 }
@@ -46,22 +46,22 @@ type SubscriptionUseCase struct {
 func NewSubscriptionUseCase(deps SubscriptionDeps) *SubscriptionUseCase {
 	return &SubscriptionUseCase{
 		deps:      deps,
-		access:    tenantservice.NewAccessPolicy(deps.Members, deps.Subscriptions),
+		access:    orgservice.NewAccessPolicy(deps.Members, deps.Subscriptions),
 		snapshots: subservice.NewSnapshotBuilder(deps.BenefitValues),
 		now:       time.Now,
 	}
 }
 
-// Create membuat subscription tenant ke plan dan membekukan benefit plan ke snapshot.
+// Create membuat subscription company ke plan dan membekukan benefit plan ke snapshot.
 //
 // Required — auth: user (platform admin) | scope: - | deployment: cloud (LICENSE_MANAGED di on_prem)
-func (uc *SubscriptionUseCase) Create(ctx context.Context, tenantID string, req dto.CreateSubscriptionRequest) (*dto.SubscriptionResponse, error) {
-	tenant, err := uc.deps.Tenants.FindByID(ctx, tenantID)
+func (uc *SubscriptionUseCase) Create(ctx context.Context, companyID string, req dto.CreateSubscriptionRequest) (*dto.SubscriptionResponse, error) {
+	company, err := uc.deps.Companies.FindByID(ctx, companyID)
 	if err != nil {
 		return nil, mapSubscriptionDomainError(err)
 	}
-	if !tenant.IsActive() {
-		return nil, mapSubscriptionDomainError(domainerr.New(constant.CodeSubscriptionTenantInactive))
+	if !company.IsActive() {
+		return nil, mapSubscriptionDomainError(domainerr.New(constant.CodeSubscriptionCompanyInactive))
 	}
 	terms, err := uc.planTerms(ctx, req.PlanID)
 	if err != nil {
@@ -73,7 +73,7 @@ func (uc *SubscriptionUseCase) Create(ctx context.Context, tenantID string, req 
 	if req.CurrentPeriodStart != nil {
 		periodStart = *req.CurrentPeriodStart
 	}
-	s, err := entity.NewSubscription(tenantID, terms, req.Status, periodStart, now)
+	s, err := entity.NewSubscription(companyID, terms, req.Status, periodStart, now)
 	if err != nil {
 		return nil, mapSubscriptionDomainError(err)
 	}
@@ -95,17 +95,17 @@ func (uc *SubscriptionUseCase) Create(ctx context.Context, tenantID string, req 
 	return uc.get(ctx, s.ID)
 }
 
-// List menampilkan subscription tenant. Token service hanya melihat subscription solution miliknya.
+// List menampilkan subscription company. Token service hanya melihat subscription solution miliknya.
 //
 // Required — auth: user (platform admin / member dengan tid) atau service | scope: entitlements:read
-func (uc *SubscriptionUseCase) List(ctx context.Context, actor *principal.Principal, tenantID string, req dto.ListSubscriptionQuery) ([]dto.SubscriptionResponse, dto.Meta, error) {
-	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), tenantID); err != nil {
+func (uc *SubscriptionUseCase) List(ctx context.Context, actor *principal.Principal, companyID string, req dto.ListSubscriptionQuery) ([]dto.SubscriptionResponse, dto.Meta, error) {
+	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), companyID); err != nil {
 		return nil, dto.Meta{}, mapSubscriptionDomainError(err)
 	}
-	if _, err := uc.deps.Tenants.FindByID(ctx, tenantID); err != nil {
+	if _, err := uc.deps.Companies.FindByID(ctx, companyID); err != nil {
 		return nil, dto.Meta{}, mapSubscriptionDomainError(err)
 	}
-	q := port.SubscriptionListReadQuery{TenantID: tenantID, Status: req.Status, PaginationParams: req.PaginationParams}
+	q := port.SubscriptionListReadQuery{CompanyID: companyID, Status: req.Status, PaginationParams: req.PaginationParams}
 	if actor.IsService() {
 		q.SolutionID = &actor.SolutionID
 	}
@@ -266,7 +266,7 @@ func (uc *SubscriptionUseCase) AddAddon(ctx context.Context, subscriptionID stri
 	return &resp, nil
 }
 
-// accessibleSubscription memuat subscription lalu memeriksa akses ke tenant pemiliknya.
+// accessibleSubscription memuat subscription lalu memeriksa akses ke company pemiliknya.
 // Akses ditolak / solution lain (token service) dilaporkan 404.
 func (uc *SubscriptionUseCase) accessibleSubscription(ctx context.Context, actor *principal.Principal, id string) (*entity.Subscription, error) {
 	s, err := uc.deps.Subscriptions.FindByID(ctx, id)
@@ -277,8 +277,8 @@ func (uc *SubscriptionUseCase) accessibleSubscription(ctx context.Context, actor
 	if actor.IsService() && actor.SolutionID != s.SolutionID {
 		return nil, notFound
 	}
-	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), s.TenantID); err != nil {
-		if isDomainCode(err, tenantconstant.CodeTenantAccessDenied) {
+	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), s.CompanyID); err != nil {
+		if isDomainCode(err, orgconstant.CodeCompanyAccessDenied) {
 			return nil, notFound
 		}
 		return nil, mapSubscriptionDomainError(err)

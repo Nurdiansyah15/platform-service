@@ -70,7 +70,7 @@ func TestPostgresAuthSessionRepository(t *testing.T) {
 		assert.Equal(t, s.ID, got.ID)
 		require.NotNil(t, got.IPAddress)
 		assert.Equal(t, "10.1.2.3", *got.IPAddress)
-		assert.Nil(t, got.TenantID)
+		assert.Nil(t, got.CompanyID)
 
 		// Rotasi berhasil sekali.
 		prev, err := got.Rotate("hash-2", time.Hour, now)

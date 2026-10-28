@@ -17,7 +17,7 @@ Konvensi arsitektur & test: [`CLAUDE.md`](../CLAUDE.md) (diadaptasi dari `k-foru
   - Seed helper baru ditambahkan ke `internal/testhelper/seed.go` bila domain dipakai fase berikutnya.
 - **Skenario handler test wajib per endpoint:**
   - `Unauthenticated` → 401 (semua endpoint terproteksi)
-  - `Forbidden` → 403 (bukan platform admin / bukan member tenant / scope service kurang / tenant tidak subscribe / `LICENSE_MANAGED`)
+  - `Forbidden` → 403 (bukan platform admin / bukan member company / scope service kurang / company tidak subscribe / `LICENSE_MANAGED`)
   - `InvalidPayload` → 400/422 (endpoint ber-body)
   - `NotFound` → 404 (endpoint by ID)
   - `Duplicate` / `Conflict` → 409 (bila ada unique constraint)
@@ -61,12 +61,12 @@ Keputusan desain di luar spec:
 - [x] `router.Setup` + `Routes{V1, Authenticated, Deployment}`; domain mendaftar lewat `RegisterXxxRoutes` di `registerDomainRoutes`
 - [x] Middleware: request-id, request-logger, locale, recover, CORS
 - [x] `GET /healthz` (system usecase → ping DB; 503 bila DB tidak sehat)
-- [x] Auth middleware: `Authenticate(port.TokenAuthenticator)` + `principal.Principal` (Kind `user`/`service`) + guard `RequireUser`, `RequireService(scope)`, `RequireUserOrService(scope)`, `RequirePlatformAdmin`, `RequireActiveTenant`
+- [x] Auth middleware: `Authenticate(port.TokenAuthenticator)` + `principal.Principal` (Kind `user`/`service`) + guard `RequireUser`, `RequireService(scope)`, `RequireUserOrService(scope)`, `RequirePlatformAdmin`, `RequireActiveCompany`
   - Fase 0–1 `bootstrap` memakai `rejectAllAuthenticator`; diganti verifier JWT di Fase 2
 - [x] `DeploymentGuard`: `LicenseManaged()` (403 `LICENSE_MANAGED` di on_prem), `CloudOnly()` / `OnPremOnly()` (404)
 
 ### 0.5 Outbox dasar
-- [x] Migrasi `events` + index `idx_events_occurred_at`, `idx_events_tenant_id`
+- [x] Migrasi `events` + index `idx_events_occurred_at`, `idx_events_company_id`
 - [x] `port.EventOutbox.Append(ctx, events...)` → `PostgresEventOutbox` (menolak dipanggil di luar transaksi: `ErrOutboxRequiresTx`)
 
 ### 0.6 Test infrastructure
@@ -113,7 +113,7 @@ Keputusan desain di luar spec:
 - Belum: pengecekan sesi & status user pada token user (Fase 3), status solution client pada token service (Fase 4), endpoint rotasi (L7)
 
 ### Fase 3 — Users & Auth Session ✅
-- Tabel: `users` (+ `is_platform_admin`, CHECK email lowercase), `auth_sessions` (unique `refresh_token_hash`, index sesi aktif; FK `tenant_id` menyusul Fase 5)
+- Tabel: `users` (+ `is_platform_admin`, CHECK email lowercase), `auth_sessions` (unique `refresh_token_hash`, index sesi aktif; FK `company_id` menyusul Fase 5)
 - Domain:
   - `User` (VO `Email` ter-normalisasi, `UserStatus`, `ValidatePassword` 8–72 karakter)
   - `AuthSession` (`EnsureUsable`, `Rotate` dengan masa berlaku sliding, `Revoke` idempotent)
@@ -150,37 +150,37 @@ Keputusan desain di luar spec:
 - Test: `solution_client_handler_test.go`, `oauth_handler_test.go`, entity, usecase (`ResolveServicePrincipal` dengan repo fake), repository (`TEXT[]` round trip)
 - Test infra: `TestServer.POSTForm`, helper `mustCreateClient`, `mustServiceToken`
 
-### Fase 5 — Tenant & Membership ✅
-- Tabel: `tenants` (unique slug, CHECK status), `tenant_members` (PK `(tenant_id, user_id)`, CHECK status, index `user_id`), FK `auth_sessions.tenant_id` → `tenants(id)`
+### Fase 5 — Company & Membership ✅
+- Tabel: `companies` (unique slug, CHECK status), `company_members` (PK `(company_id, user_id)`, CHECK status, index `user_id`), FK `auth_sessions.company_id` → `companies(id)`
 - Domain:
-  - `Tenant` (VO `Slug`), `TenantMember` (`NewTenantMember`, `Rejoin` untuk member inactive)
-  - Domain service `AccessPolicy.EnsureCanAccess`: platform admin bebas; user lain wajib `tid` = tenantId **dan** member `active` (spec §2.7). `tid` kosong → 403 `AUTH_TENANT_NOT_SELECTED`
-  - Event `tenant_member.added` (payload tenant_id, user_id, status, joined_at)
+  - `Company` (VO `Slug`), `CompanyMember` (`NewCompanyMember`, `Rejoin` untuk member inactive)
+  - Domain service `AccessPolicy.EnsureCanAccess`: platform admin bebas; user lain wajib `cid` = companyId **dan** member `active` (spec §2.7). `cid` kosong → 403 `AUTH_COMPANY_NOT_SELECTED`
+  - Event `company_member.added` (payload company_id, user_id, status, joined_at)
 - Keputusan:
-  - Semua user login boleh membuat tenant; pembuat non-admin otomatis member active. Platform admin tidak otomatis jadi member
-  - `POST /tenants` & `GET /tenants` boleh tanpa `tid` (onboarding / pemilihan tenant); endpoint per-tenant wajib `tid`
+  - Semua user login boleh membuat company; pembuat non-admin otomatis member active. Platform admin tidak otomatis jadi member
+  - `POST /companies` & `GET /companies` boleh tanpa `cid` (onboarding / pemilihan company); endpoint per-company wajib `cid`
   - Tambah member via `user_id` **atau** `email` (user harus sudah ada), status `active` (default) / `invited`; member inactive diaktifkan ulang; sudah active/invited → 409
   - Akses token service (`users:read` / `users:write`) ditambahkan di Fase 10
 - Endpoint:
-  - [x] `POST /tenants` (MVP)
-  - [x] `GET /tenants` (MVP) — admin: semua; user: tenant tempat ia member active
-  - [x] `GET /tenants/{tenantId}` (MVP)
-  - [x] `GET /tenants/{tenantId}/members` (MVP) — join data user, filter status/search, pagination
-  - [x] `POST /tenants/{tenantId}/members` (MVP)
-- Test: `tenant_handler_test.go`, `tenant_member_handler_test.go`, entity, `access_policy_test.go`, repository
-- Test infra: `tenantToken(userID, tenantID)` (FakeAuthenticator, sementara), `mustCreateTenant`, `mustTenantOwner`, `countEvents`
+  - [x] `POST /companies` (MVP)
+  - [x] `GET /companies` (MVP) — admin: semua; user: company tempat ia member active
+  - [x] `GET /companies/{companyId}` (MVP)
+  - [x] `GET /companies/{companyId}/members` (MVP) — join data user, filter status/search, pagination
+  - [x] `POST /companies/{companyId}/members` (MVP)
+- Test: `company_handler_test.go`, `company_member_handler_test.go`, entity, `access_policy_test.go`, repository
+- Test infra: `companyToken(userID, companyID)` (FakeAuthenticator, sementara), `mustCreateCompany`, `mustCompanyOwner`, `countEvents`
 - Lainnya: pencarian `ILIKE` di query model kini meng-escape `%` / `_` (`likePattern`)
 
 ### Fase 6 — Company & Branch ✅
-- Tabel: `companies`, `branches` (soft delete `deleted_at`, partial unique `(tenant_id, code)` / `(company_id, code)` `WHERE deleted_at IS NULL`, index FK, CHECK status)
-- Domain `organization`: `Company`, `Branch`, VO `OrgCode` (huruf/angka/`.`/`_`/`-`, dinormalisasi UPPERCASE), `OrgStatus`; event `company.created`, `branch.created` (payload memuat `tenant_id` & `updated_at`)
+- Tabel: `companies`, `branches` (soft delete `deleted_at`, partial unique `(company_id, code)` / `(company_id, code)` `WHERE deleted_at IS NULL`, index FK, CHECK status)
+- Domain `organization`: `Company`, `Branch`, VO `OrgCode` (huruf/angka/`.`/`_`/`-`, dinormalisasi UPPERCASE), `OrgStatus`; event `company.created`, `branch.created` (payload memuat `company_id` & `updated_at`)
 - Akses:
-  - `/tenants/{tenantId}/companies` → `AccessPolicy` tenant
-  - `/companies/{companyId}/branches` → company dimuat lalu `AccessPolicy` terhadap tenant pemiliknya; company tenant lain / sudah dihapus → **404** (tidak membocorkan keberadaan). `tid` kosong tetap 403
+  - `/companies/{companyId}/companies` → `AccessPolicy` company
+  - `/companies/{companyId}/branches` → `AccessPolicy` terhadap company tersebut; company lain → **403**. `cid` kosong tetap 403
   - Akses token service (`org:read` / `org:write`) ditambahkan di Fase 10
 - Endpoint:
-  - [x] `GET /tenants/{tenantId}/companies` (MVP) — tanpa yang terhapus, filter status/search, pagination
-  - [x] `POST /tenants/{tenantId}/companies` (MVP)
+  - [x] `GET /companies/{companyId}/companies` (MVP) — tanpa yang terhapus, filter status/search, pagination
+  - [x] `POST /companies/{companyId}/companies` (MVP)
   - [x] `GET /companies/{companyId}/branches` (MVP)
   - [x] `POST /companies/{companyId}/branches` (MVP)
 - Test: `company_handler_test.go`, `branch_handler_test.go`, entity, repository (duplikat, soft delete, reuse code)
@@ -233,43 +233,43 @@ Keputusan desain di luar spec:
 - Test: `addon_handler_test.go`, entity, repository (composite FK), `ParsePriceJSON`
 - Test infra: `mustCreateAddon`
 
-### Fase 10 — Subscriptions, Snapshot & Tenant Switch ✅
+### Fase 10 — Subscriptions, Snapshot & Company Switch ✅
 - Tabel: `subscriptions` (composite FK ke `plans`, `UNIQUE (id, solution_id)`, CHECK status & billing_cycle), `subscription_addons` (composite FK ke `subscriptions` & `addons`, unique `(subscription_id, addon_id)`, CHECK quantity & status), `subscription_benefit_snapshots` (`UNIQUE NULLS NOT DISTINCT`), index spec §2.11
 - Keputusan:
   - Subscription dibuat/diubah platform admin (+ `LICENSE_MANAGED`); belum ada integrasi pembayaran
-  - Maksimal satu subscription **live** (`trialing`/`active`/`past_due`) per tenant per solution — partial unique `uq_subscriptions_live_tenant_solution` → 409
-  - Subscription **usable** (dipakai pilih tenant, akses service) = `trialing`/`active`
+  - Maksimal satu subscription **live** (`trialing`/`active`/`past_due`) per company per solution — partial unique `uq_subscriptions_live_company_solution` → 409
+  - Subscription **usable** (dipakai pilih company, akses service) = `trialing`/`active`
   - Periode: `current_period_end` = mulai + 1 bulan / 1 tahun dengan tanggal dijepit ke akhir bulan (31 Jan → 28 Feb, 29 Feb + 1 th → 28 Feb)
   - Add-on yang dibatalkan lalu dipasang lagi → baris lama diaktifkan ulang (sesuai unique spec)
-- Domain `subscription`: `Subscription` (`ChangePlan`, `Cancel`, `AttachAddon`), `SubscriptionAddon` (`Reactivate`), `BenefitSnapshot`; domain service `SnapshotBuilder` (sumber nilai via port `BenefitValueSource`); event `subscription.created`, `subscription.plan_changed`, `subscription.status_changed`, `subscription_addon.added`, `entitlement.changed` (semua membawa `tenant_id` & `solution_id`)
+- Domain `subscription`: `Subscription` (`ChangePlan`, `Cancel`, `AttachAddon`), `SubscriptionAddon` (`Reactivate`), `BenefitSnapshot`; domain service `SnapshotBuilder` (sumber nilai via port `BenefitValueSource`); event `subscription.created`, `subscription.plan_changed`, `subscription.status_changed`, `subscription_addon.added`, `entitlement.changed` (semua membawa `company_id` & `solution_id`)
 - Endpoint:
-  - [x] `POST /tenants/{tenantId}/subscriptions` (MVP) — admin + `LICENSE_MANAGED`
-  - [x] `GET /tenants/{tenantId}/subscriptions` (MVP) — user (AccessPolicy) / service `entitlements:read` (hanya solution miliknya)
+  - [x] `POST /companies/{companyId}/subscriptions` (MVP) — admin + `LICENSE_MANAGED`
+  - [x] `GET /companies/{companyId}/subscriptions` (MVP) — user (AccessPolicy) / service `entitlements:read` (hanya solution miliknya)
   - [x] `POST /subscriptions/{subscriptionId}/change-plan` (MVP) — ganti snapshot plan
   - [x] `POST /subscriptions/{subscriptionId}/cancel` (MVP) — snapshot tetap sebagai histori
-  - [x] `GET /subscriptions/{subscriptionId}/addons` (MVP) — subscription tenant lain → 404
+  - [x] `GET /subscriptions/{subscriptionId}/addons` (MVP) — subscription company lain → 404
   - [x] `POST /subscriptions/{subscriptionId}/addons` (MVP)
-  - [x] `GET /auth/tenants` (MVP) — tenant: member active + tenant active + subscription usable untuk solution sesi; tandai `is_active`
-  - [x] `POST /auth/switch-tenant` (MVP) — update `auth_sessions.tenant_id` + rotasi refresh token (compare-and-swap) + token baru
+  - [x] `GET /auth/companies` (MVP) — company: member active + company active + subscription usable untuk solution sesi; tandai `is_active`
+  - [x] `POST /auth/switch-company` (MVP) — update `auth_sessions.company_id` + rotasi refresh token (compare-and-swap) + token baru
 - Auth:
-  - Login otomatis mengisi `tid` bila hanya ada satu tenant yang bisa dipilih
-  - Refresh ditolak bila membership / tenant aktif sesi tidak lagi `active` (spec §2.7)
-  - Access token lama (tid berbeda dari sesi) ditolak platform setelah switch
-- Akses token service (menutup tunda Fase 5 & 6): `AccessPolicy` menerima token service hanya untuk tenant yang subscribe (usable) solution client
-  - tenant & member: `users:read` / `users:write`; company & branch: `org:read` / `org:write`
-  - `POST /tenants` & `GET /tenants` tetap khusus token user
-- Test: `subscription_handler_test.go`, `auth_tenant_handler_test.go`, `service_access_handler_test.go`, entity (periode & transisi), access policy (service), repository (live unique, NULLS NOT DISTINCT, HasUsable)
-- Test infra: `mustTenantOwner` kini memakai alur nyata (login → tenant → subscribe → switch-tenant); helper `mustSubscribe`, `mustSwitchTenant`, `mustSolutionID`, `newSubFixture`, `snapshotValues`, `eventTypesFor`. `tenantToken` (fake) hanya untuk tid tenant tempat user bukan member
+  - Login otomatis mengisi `cid` bila hanya ada satu company yang bisa dipilih
+  - Refresh ditolak bila membership / company aktif sesi tidak lagi `active` (spec §2.7)
+  - Access token lama (cid berbeda dari sesi) ditolak platform setelah switch
+- Akses token service (menutup tunda Fase 5 & 6): `AccessPolicy` menerima token service hanya untuk company yang subscribe (usable) solution client
+  - company & member: `users:read` / `users:write`; company & branch: `org:read` / `org:write`
+  - `POST /companies` & `GET /companies` tetap khusus token user
+- Test: `subscription_handler_test.go`, `auth_company_handler_test.go`, `service_access_handler_test.go`, entity (periode & transisi), access policy (service), repository (live unique, NULLS NOT DISTINCT, HasUsable)
+- Test infra: `mustCompanyOwner` kini memakai alur nyata (login → company → subscribe → switch-company); helper `mustSubscribe`, `mustSwitchCompany`, `mustSolutionID`, `newSubFixture`, `snapshotValues`, `eventTypesFor`. `companyToken` (fake) hanya untuk cid company tempat user bukan member
 - Belum: event `entitlement.changed` belum memuat nilai entitlement (dihitung Fase 12); `past_due`/`expired` belum ada job otomatis (perlu scheduler billing)
 
 ### Fase 11 — Usage & Metering ✅
-- Tabel: `usage_records` (composite FK benefit, unique `(solution_id, idempotency_key)`, CHECK mode, index spec), `tenant_usage` (PK `(tenant_id, benefit_id, period_start)`, composite FK benefit; **tambahan** `last_occurred_at` agar laporan gauge basi tidak menimpa)
-- Domain `usage`: VO `Quantity` (NUMERIC(18,4), angka/string), `Mode`, `IdempotencyKey`; entity `UsageRecord` (counter ← delta > 0, gauge ← absolute ≥ 0, none ditolak), `TenantUsage`; `ResolvePeriod` (never = periode tetap 1970-01-01 tanpa akhir; monthly = bulan kalender UTC; billing_period = periode subscription usable)
-- Akses: khusus token service `usage:write`; `solutionId` path harus milik client (403); tenant wajib subscribe usable (403)
+- Tabel: `usage_records` (composite FK benefit, unique `(solution_id, idempotency_key)`, CHECK mode, index spec), `company_usage` (PK `(company_id, benefit_id, period_start)`, composite FK benefit; **tambahan** `last_occurred_at` agar laporan gauge basi tidak menimpa)
+- Domain `usage`: VO `Quantity` (NUMERIC(18,4), angka/string), `Mode`, `IdempotencyKey`; entity `UsageRecord` (counter ← delta > 0, gauge ← absolute ≥ 0, none ditolak), `CompanyUsage`; `ResolvePeriod` (never = periode tetap 1970-01-01 tanpa akhir; monthly = bulan kalender UTC; billing_period = periode subscription usable)
+- Akses: khusus token service `usage:write`; `solutionId` path harus milik client (403); company wajib subscribe usable (403)
 - Idempotensi: key sama + payload sama → 200 `replayed: true` (tidak diterapkan ulang); payload beda → 409. Insert record + update usage dalam satu transaksi; counter = upsert atomik `used = used + delta`
 - Endpoint:
-  - [x] `POST /tenants/{tenantId}/solutions/{solutionId}/usage` (MVP) — delta / counter, 201 diterapkan / 200 replay
-  - [x] `PUT /tenants/{tenantId}/solutions/{solutionId}/usage/{benefitCode}` (MVP) — absolute / gauge, laporan lebih lama dari `last_occurred_at` diabaikan
+  - [x] `POST /companies/{companyId}/solutions/{solutionId}/usage` (MVP) — delta / counter, 201 diterapkan / 200 replay
+  - [x] `PUT /companies/{companyId}/solutions/{solutionId}/usage/{benefitCode}` (MVP) — absolute / gauge, laporan lebih lama dari `last_occurred_at` diabaikan
 - Test: `usage_handler_test.go` (termasuk 20 laporan paralel → total tepat), entity & quantity, `ResolvePeriod`, repository (gauge basi, duplikat key)
 - `limit` / `remaining` & event `usage.limit_reached` ditambahkan di Fase 12; delta negatif untuk koreksi tidak didukung
 
@@ -283,8 +283,8 @@ Keputusan desain di luar spec:
   - `Remaining` = max(limit − used, 0) + `limit_reached`
   - Event `usage.limit_reached`
 - Endpoint:
-  - [x] `GET /tenants/{tenantId}/solutions/{solutionId}/entitlements` (MVP) — seluruh benefit solution; tanpa subscription → `subscription: null`, semua `granted: false`
-  - [x] `GET /tenants/{tenantId}/solutions/{solutionId}/entitlements/{benefitCode}` (MVP)
+  - [x] `GET /companies/{companyId}/solutions/{solutionId}/entitlements` (MVP) — seluruh benefit solution; tanpa subscription → `subscription: null`, semua `granted: false`
+  - [x] `GET /companies/{companyId}/solutions/{solutionId}/entitlements/{benefitCode}` (MVP)
   - Akses: user (AccessPolicy) atau service `entitlements:read` khusus solution miliknya
 - Benefit di-meter memuat `limit`, `used`, `remaining`, `limit_reached`, `period_start/end` (periode dihitung seperti Fase 11)
 - Usage (lanjutan Fase 11): respons laporan memuat `limit` / `remaining` / `limit_reached`; `usage.limit_reached` ditulis di transaksi laporan **hanya saat melewati limit** (sebelumnya < limit, sekarang ≥ limit)
@@ -301,36 +301,36 @@ Keputusan desain di luar spec:
 - Test: `catalog_sync_handler_test.go` (siklus create → no-op → update/deprecate → reactivate, 5 sync paralel versi sama = diterapkan sekali), `catalog_sync_test.go` (planner), validasi code
 - Belum: `roles/sync` (system role, L6), `catalog-version` (L6), CRUD permission manual (L6)
 
-### Fase 14 — Roles (Global & Tenant Custom) ✅
-- Tabel: `roles` (CHECK `NOT is_system OR tenant_id IS NULL`, partial unique code global & per tenant, `UNIQUE (id, solution_id)`, soft delete, index spec), `role_permissions` (composite FK ke `roles` & `permissions`, index `permission_id`)
+### Fase 14 — Roles (Global & Company Custom) ✅
+- Tabel: `roles` (CHECK `NOT is_system OR company_id IS NULL`, partial unique code global & per company, `UNIQUE (id, solution_id)`, soft delete, index spec), `role_permissions` (composite FK ke `roles` & `permissions`, index `permission_id`)
 - Domain `role`: entity `Role` (`IsGlobal`, `IsOwnedBy`, `EnsureEditable`), VO `RoleCode`; domain service `ResolvePermissions` (code dikenal & tidak dobel; permission `deprecated` tidak boleh ditambahkan baru, tapi yang sudah terpasang boleh tetap); event `role.created`, `role.permissions_changed` (payload memuat `permission_codes`)
 - Permission dipasang memakai **`permission_codes`** (bukan UUID), replace-all dalam satu transaksi
 - Endpoint:
   - [x] `GET /solutions/{solutionId}/roles` (MVP) — hanya role global; token valid apa pun
   - [x] `POST /solutions/{solutionId}/roles` (MVP) — platform admin
-  - [x] `GET /roles/{roleId}/permissions` (MVP) — role global: token valid; custom role: hanya tenant pemilik (selain itu 404)
-  - [x] `PUT /roles/{roleId}/permissions` (MVP) — platform admin; role sistem → 403; custom role → 404 (pakai path tenant)
-  - [x] `GET /tenants/{tenantId}/solutions/{solutionId}/roles` (MVP) — role global + custom milik tenant
-  - [x] `POST /tenants/{tenantId}/solutions/{solutionId}/roles` (MVP) — tenant wajib subscribe (usable) → selain itu 403
-  - [x] `PUT /tenants/{tenantId}/roles/{roleId}/permissions` (MVP) — hanya custom role milik tenant (global / tenant lain → 404)
-  - Akses endpoint tenant: user (AccessPolicy) atau service `roles:write` milik solution tersebut
-- Test: `role_handler_test.go` (global & tenant, deprecated tetap, role sistem immutable, isolasi antar tenant), `permission_assignment_test.go`, repository (partial unique, CHECK sistem, composite FK)
-- Semua member aktif tenant boleh mengelola custom role (dikonfirmasi di Fase 15)
+  - [x] `GET /roles/{roleId}/permissions` (MVP) — role global: token valid; custom role: hanya company pemilik (selain itu 404)
+  - [x] `PUT /roles/{roleId}/permissions` (MVP) — platform admin; role sistem → 403; custom role → 404 (pakai path company)
+  - [x] `GET /companies/{companyId}/solutions/{solutionId}/roles` (MVP) — role global + custom milik company
+  - [x] `POST /companies/{companyId}/solutions/{solutionId}/roles` (MVP) — company wajib subscribe (usable) → selain itu 403
+  - [x] `PUT /companies/{companyId}/roles/{roleId}/permissions` (MVP) — hanya custom role milik company (global / company lain → 404)
+  - Akses endpoint company: user (AccessPolicy) atau service `roles:write` milik solution tersebut
+- Test: `role_handler_test.go` (global & company, deprecated tetap, role sistem immutable, isolasi antar company), `permission_assignment_test.go`, repository (partial unique, CHECK sistem, composite FK)
+- Semua member aktif company boleh mengelola custom role (dikonfirmasi di Fase 15)
 - Belum: GET/PATCH/DELETE role, `roles/sync` system role (L6)
 
 ### Fase 15 — Role Assignment & Authz Check ✅
-- Keputusan user: endpoint administratif tenant (member, company/branch, role custom, role assignment) tetap terbuka untuk **semua member aktif**; platform tidak menegakkan RBAC untuk administrasi tenant — solution/console membatasi lewat `authz/check`
-- Tabel: `user_role_assignments` (FK `(tenant_id, user_id)` → `tenant_members`, unique `(user_id, role_id, scope_type, scope_id)`, CHECK scope_type, index spec)
+- Keputusan user: endpoint administratif company (member, company/branch, role custom, role assignment) tetap terbuka untuk **semua member aktif**; platform tidak menegakkan RBAC untuk administrasi company — solution/console membatasi lewat `authz/check`
+- Tabel: `user_role_assignments` (FK `(company_id, user_id)` → `company_members`, unique `(user_id, role_id, scope_type, scope_id)`, CHECK scope_type, index spec)
 - Domain `authz`:
-  - `ScopeValidator`: tenant = tenant itu sendiri (scope_id boleh kosong), company = milik tenant, branch = dari company milik tenant (company/branch wajib scope_id; yang dihapus tidak berlaku)
-  - `Evaluate` (murni): assignment tenant → seluruh tenant; company → company itu & branch-nya; branch → hanya branch itu; cek level tenant hanya dipenuhi assignment tenant; mengembalikan `granted_by`
-  - `GrantReader`: assignment → role solution (belum dihapus, global atau custom tenant) → permission (termasuk deprecated yang masih terpasang)
+  - `ScopeValidator`: company = company itu sendiri (scope_id boleh kosong), company = milik company, branch = dari company milik company (company/branch wajib scope_id; yang dihapus tidak berlaku)
+  - `Evaluate` (murni): assignment company → seluruh company; company → company itu & branch-nya; branch → hanya branch itu; cek level company hanya dipenuhi assignment company; mengembalikan `granted_by`
+  - `GrantReader`: assignment → role solution (belum dihapus, global atau custom company) → permission (termasuk deprecated yang masih terpasang)
   - Event `role_assignment.created`
 - Endpoint:
-  - [x] `POST /tenants/{tenantId}/users/{userId}/role-assignments` (MVP) — user (AccessPolicy) / service `roles:write` milik solution role; validasi member active, subscription usable (403), custom role milik tenant (422), scope (422), duplikat (409)
+  - [x] `POST /companies/{companyId}/users/{userId}/role-assignments` (MVP) — user (AccessPolicy) / service `roles:write` milik solution role; validasi member active, subscription usable (403), custom role milik company (422), scope (422), duplikat (409)
   - [x] `POST /authz/check` (MVP)
   - [x] `POST /authz/check-batch` (MVP) — 1–100 cek
-  - Check: service `authz:check` wajib `tenant_id` + `user_id` (solution = milik client); user mengecek dirinya sendiri pada `tid` (tanpa tid → 403, user lain → 403). `allowed: false` bila member tidak active, subscription tidak usable, role dihapus, atau permission tidak dikenal
+  - Check: service `authz:check` wajib `company_id` + `user_id` (solution = milik client); user mengecek dirinya sendiri pada `cid` (tanpa cid → 403, user lain → 403). `allowed: false` bila member tidak active, subscription tidak usable, role dihapus, atau permission tidak dikenal
 - Test: `authz_handler_test.go` (validasi assignment, hierarki scope, member inactive, subscription dibatalkan, role dihapus, token user, batch), `permission_evaluator_test.go` (matriks), repository (duplikat, FK member)
 - Bug yang ditemukan test: scope company tanpa `scope_id` → UUID kosong ke Postgres → 500; kini ditolak 422 sebelum query
 - Belum: GET/PATCH/DELETE role-assignments & `effective-permissions` (L6)
@@ -338,12 +338,12 @@ Keputusan desain di luar spec:
 ### Fase 16 — Webhooks & Event Delivery ✅
 - Tabel: `webhook_endpoints` (event_types `TEXT[]`, CHECK status, index spec), `webhook_deliveries` (unique `(event_id, webhook_endpoint_id)`, partial index pending/failed)
 - Domain `webhook`: VO URL (https; http hanya di luar production via `WEBHOOK_*`/`AllowInsecureURL`), event types tervalidasi terhadap katalog spec §2.9, `Delivery.Evaluate` (2xx = success; selain itu failed + backoff 30 dtk × 2^(n-1) maks 6 jam; percobaan ke-8 → `dead`), `service.Sign/Verify` (`sha256=` + hex HMAC-SHA256 `timestamp.body`)
-- Aturan routing (dipakai fan-out **dan** `GET /events`): event milik solution; event tenant (`solution_id` NULL) bila tenant berlangganan solution (`trialing`/`active`/`past_due`); event user (tenant & solution NULL, `payload.user_id`) bila user member aktif tenant pelanggan solution. Webhook hanya menerima event yang terjadi setelah endpoint dibuat
+- Aturan routing (dipakai fan-out **dan** `GET /events`): event milik solution; event company (`solution_id` NULL) bila company berlangganan solution (`trialing`/`active`/`past_due`); event user (company & solution NULL, `payload.user_id`) bila user member aktif company pelanggan solution. Webhook hanya menerima event yang terjadi setelah endpoint dibuat
 - Secret webhook `whsec_…` dienkripsi AES-256-GCM (`WEBHOOK_SECRET_KEY`, base64 32 byte; production wajib diisi, dev memakai kunci bawaan)
 - `cmd/worker` (+ `make run-worker`, target `worker` di `Dockerfile`): loop `WEBHOOK_POLL_INTERVAL` → `Dispatcher.RunOnce` = fan-out events → deliveries, lalu klaim delivery jatuh tempo (`FOR UPDATE SKIP LOCKED` + lease `next_attempt_at`, aman multi-replika) dan kirim HTTP di luar transaksi; graceful shutdown menyelesaikan siklus berjalan
 - Endpoint:
   - [x] `POST /solutions/{solutionId}/webhooks` (MVP; platform admin; secret tampil sekali)
-  - [x] `GET /events` (MVP; service `events:read`, dibatasi solution pemanggil, filter `since`, `event_type`, `tenant_id`, pagination cursor `meta.next_cursor` urut `(occurred_at, id)`, `limit` 1–200)
+  - [x] `GET /events` (MVP; service `events:read`, dibatasi solution pemanggil, filter `since`, `event_type`, `company_id`, pagination cursor `meta.next_cursor` urut `(occurred_at, id)`, `limit` 1–200)
 - Test: `webhook_handler_test.go` (create, events routing/filter/cursor, dispatcher dengan `httptest.Server`: header & signature, kirim sekali, retry/backoff, pulih, dead, routing), repository (fan-out idempoten, lease klaim, endpoint disabled), `aes_cipher_test.go`, domain entity/signature
 - Perbaikan lintas fase: query param yang gagal di-parse (`limit=abc`, `since` bukan RFC3339) kini 400, bukan 500
 - Belum: GET/PATCH/DELETE webhook, rotate-secret, test, riwayat & retry manual delivery, `/event-types` (L8); pembersihan event/delivery lama
@@ -385,9 +385,9 @@ Pola sama: usecase + handler + handler test wajib.
 - [ ] `GET /users/me`, `PATCH /users/me`
 - [ ] `GET /users`, `GET /users/{userId}`, `PATCH /users/{userId}`, `PATCH /users/{userId}/status`
 
-### L2 — Tenant & Organization
-- [ ] `PATCH /tenants/{tenantId}`
-- [ ] `PATCH /tenants/{tenantId}/members/{userId}`, `DELETE /tenants/{tenantId}/members/{userId}` (status `inactive` + hapus role assignment)
+### L2 — Company & Organization
+- [ ] `PATCH /companies/{companyId}`
+- [ ] `PATCH /companies/{companyId}/members/{userId}`, `DELETE /companies/{companyId}/members/{userId}` (status `inactive` + hapus role assignment)
 - [ ] `GET/PATCH/DELETE /companies/{companyId}`, `GET/PATCH/DELETE /branches/{branchId}`
 
 ### L3 — Catalog
@@ -401,16 +401,16 @@ Pola sama: usecase + handler + handler test wajib.
 - [ ] `PATCH/DELETE /subscriptions/{subscriptionId}/addons/{subscriptionAddonId}`
 
 ### L5 — Entitlement & Usage (read)
-- [ ] `POST /tenants/{tenantId}/solutions/{solutionId}/entitlements/check`
-- [ ] `GET /tenants/{tenantId}/solutions/{solutionId}/usage`, `GET .../usage/{benefitCode}`
+- [ ] `POST /companies/{companyId}/solutions/{solutionId}/entitlements/check`
+- [ ] `GET /companies/{companyId}/solutions/{solutionId}/usage`, `GET .../usage/{benefitCode}`
 
 ### L6 — RBAC
 - [ ] `GET/PATCH/DELETE /roles/{roleId}`
-- [ ] `GET/PATCH/DELETE /tenants/{tenantId}/roles/{roleId}`, `GET /tenants/{tenantId}/roles/{roleId}/permissions`
+- [ ] `GET/PATCH/DELETE /companies/{companyId}/roles/{roleId}`, `GET /companies/{companyId}/roles/{roleId}/permissions`
 - [ ] `POST /solutions/{solutionId}/permissions`, `GET/PATCH /permissions/{permissionId}`
 - [ ] `PUT /solutions/{solutionId}/roles/sync`, `GET /solutions/{solutionId}/catalog-version`
-- [ ] `GET /tenants/{tenantId}/users/{userId}/role-assignments`, `PATCH/DELETE /role-assignments/{assignmentId}`
-- [ ] `GET /tenants/{tenantId}/users/{userId}/effective-permissions`
+- [ ] `GET /companies/{companyId}/users/{userId}/role-assignments`, `PATCH/DELETE /role-assignments/{assignmentId}`
+- [ ] `GET /companies/{companyId}/users/{userId}/effective-permissions`
 
 ### L7 — Service Auth & Keys
 - [ ] `GET /.well-known/openid-configuration`
@@ -431,5 +431,5 @@ Pola sama: usecase + handler + handler test wajib.
 
 ## Item Terbuka
 
-- ~~Policy akses endpoint tenant-scoped untuk user~~ — diputuskan di Fase 15: tetap "platform admin atau member aktif"; pembatasan administrasi tenant dilakukan solution/console lewat `authz/check`.
+- ~~Policy akses endpoint company-scoped untuk user~~ — diputuskan di Fase 15: tetap "platform admin atau member aktif"; pembatasan administrasi company dilakukan solution/console lewat `authz/check`.
 - **Implementasi `KeyStore` produksi** (KMS / Vault) — dev & test memakai file lokal / fake.

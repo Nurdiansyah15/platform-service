@@ -25,19 +25,19 @@ func NewEntitlementHandler(useCase *entitlement.EntitlementUseCase) *Entitlement
 //	@Tags			Entitlements
 //	@Security		BearerAuth
 //	@Produce		json
-//	@Param			tenantId		path		string	true	"Tenant ID"
+//	@Param			companyId		path		string	true	"Company ID"
 //	@Param			solutionId		path		string	true	"Solution ID"
 //	@Success		200				{object}	respond.SuccessBody{data=dto.EntitlementsResponse}
 //	@Failure		401,403,404,422	{object}	respond.ErrorBody
-//	@Router			/api/v1/tenants/{tenantId}/solutions/{solutionId}/entitlements [get]
+//	@Router			/api/v1/companies/{companyId}/solutions/{solutionId}/entitlements [get]
 func (h *EntitlementHandler) List(c *gin.Context) {
-	var param dto.TenantSolutionParam
+	var param dto.CompanySolutionParam
 	if err := c.ShouldBindUri(&param); err != nil {
 		httperror.Handle(c, err)
 		return
 	}
 	actor, _ := middleware.PrincipalFrom(c)
-	resp, err := h.useCase.List(c.Request.Context(), actor, param.TenantID, param.SolutionID)
+	resp, err := h.useCase.List(c.Request.Context(), actor, param.CompanyID, param.SolutionID)
 	if err != nil {
 		httperror.Handle(c, err)
 		return
@@ -51,12 +51,12 @@ func (h *EntitlementHandler) List(c *gin.Context) {
 //	@Tags		Entitlements
 //	@Security	BearerAuth
 //	@Produce	json
-//	@Param		tenantId		path		string	true	"Tenant ID"
+//	@Param		companyId		path		string	true	"Company ID"
 //	@Param		solutionId		path		string	true	"Solution ID"
 //	@Param		benefitCode		path		string	true	"Benefit code"
 //	@Success	200				{object}	respond.SuccessBody{data=dto.EntitlementResponse}
 //	@Failure	401,403,404,422	{object}	respond.ErrorBody
-//	@Router		/api/v1/tenants/{tenantId}/solutions/{solutionId}/entitlements/{benefitCode} [get]
+//	@Router		/api/v1/companies/{companyId}/solutions/{solutionId}/entitlements/{benefitCode} [get]
 func (h *EntitlementHandler) Get(c *gin.Context) {
 	var param dto.EntitlementBenefitParam
 	if err := c.ShouldBindUri(&param); err != nil {
@@ -64,7 +64,7 @@ func (h *EntitlementHandler) Get(c *gin.Context) {
 		return
 	}
 	actor, _ := middleware.PrincipalFrom(c)
-	resp, err := h.useCase.Get(c.Request.Context(), actor, param.TenantID, param.SolutionID, param.BenefitCode)
+	resp, err := h.useCase.Get(c.Request.Context(), actor, param.CompanyID, param.SolutionID, param.BenefitCode)
 	if err != nil {
 		httperror.Handle(c, err)
 		return

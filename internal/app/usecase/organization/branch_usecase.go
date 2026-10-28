@@ -9,7 +9,7 @@ import (
 	"platform-service/internal/app/principal"
 	"platform-service/internal/domain/organization/entity"
 	"platform-service/internal/domain/organization/event"
-	"platform-service/internal/domain/tenant/service"
+	"platform-service/internal/domain/organization/service"
 )
 
 type BranchUseCase struct {
@@ -22,9 +22,10 @@ func NewBranchUseCase(deps OrganizationDeps) *BranchUseCase {
 	return &BranchUseCase{deps: deps, access: service.NewAccessPolicy(deps.Members, deps.Subscriptions), now: time.Now}
 }
 
-// Create membuat branch di company. Company tenant lain diperlakukan sebagai tidak ada (404).
+// Create membuat branch di company. Company yang tidak boleh diakses dilaporkan 403/404
+// sesuai AccessPolicy (tidak membocorkan data lintas company).
 //
-// Required — auth: user (platform admin, atau member active dengan tid = tenant pemilik company) | scope: -
+// Required — auth: user (platform admin, atau member active dengan cid = companyId) | scope: -
 func (uc *BranchUseCase) Create(ctx context.Context, actor *principal.Principal, companyID string, req dto.CreateOrgUnitRequest) (*dto.BranchResponse, error) {
 	company, err := accessibleCompany(ctx, uc.access, uc.deps.Companies, actor, companyID)
 	if err != nil {
@@ -32,7 +33,7 @@ func (uc *BranchUseCase) Create(ctx context.Context, actor *principal.Principal,
 	}
 	b, err := entity.NewBranch(company.ID, entity.OrgUnitParams{Name: req.Name, Code: req.Code, Status: req.Status}, uc.now())
 	if err != nil {
-		return nil, mapOrgDomainError(err)
+		return nil, mapCompanyDomainError(err)
 	}
 
 	err = uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
@@ -41,15 +42,15 @@ func (uc *BranchUseCase) Create(ctx context.Context, actor *principal.Principal,
 		}
 		return uc.deps.Outbox.Append(ctx, port.OutboxEvent{
 			EventType: event.TypeBranchCreated,
-			TenantID:  &company.TenantID,
+			CompanyID: &company.ID,
 			Payload: event.BranchPayload{
-				ID: b.ID, TenantID: company.TenantID, CompanyID: b.CompanyID, Code: b.Code.Value(), Name: b.Name,
+				ID: b.ID, CompanyID: b.CompanyID, Code: b.Code.Value(), Name: b.Name,
 				Status: b.Status.String(), UpdatedAt: b.UpdatedAt,
 			},
 		})
 	})
 	if err != nil {
-		return nil, mapOrgDomainError(err)
+		return nil, mapCompanyDomainError(err)
 	}
 	resp := toBranchResponse(b)
 	return &resp, nil
@@ -57,17 +58,17 @@ func (uc *BranchUseCase) Create(ctx context.Context, actor *principal.Principal,
 
 // List menampilkan branch (belum dihapus) milik company.
 //
-// Required — auth: user (platform admin, atau member active dengan tid = tenant pemilik company) | scope: -
+// Required — auth: user (platform admin, atau member active dengan cid = companyId) | scope: -
 func (uc *BranchUseCase) List(ctx context.Context, actor *principal.Principal, companyID string, req dto.ListOrgUnitQuery) ([]dto.BranchResponse, dto.Meta, error) {
 	company, err := accessibleCompany(ctx, uc.access, uc.deps.Companies, actor, companyID)
 	if err != nil {
 		return nil, dto.Meta{}, err
 	}
-	items, meta, err := uc.deps.Query.ListBranches(ctx, port.OrgUnitListReadQuery{
+	items, meta, err := uc.deps.BranchQuery.ListBranches(ctx, port.OrgUnitListReadQuery{
 		ParentID: company.ID, Status: req.Status, Search: req.Search, PaginationParams: req.PaginationParams,
 	})
 	if err != nil {
-		return nil, dto.Meta{}, mapOrgDomainError(err)
+		return nil, dto.Meta{}, mapCompanyDomainError(err)
 	}
 	out := make([]dto.BranchResponse, 0, len(items))
 	for _, it := range items {

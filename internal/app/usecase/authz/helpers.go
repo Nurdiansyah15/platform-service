@@ -7,8 +7,8 @@ import (
 	"platform-service/internal/app/principal"
 	"platform-service/internal/domain/authz/constant"
 	domainerr "platform-service/internal/domain/errors"
-	tenantconstant "platform-service/internal/domain/tenant/constant"
-	tenantservice "platform-service/internal/domain/tenant/service"
+	orgconstant "platform-service/internal/domain/organization/constant"
+	orgservice "platform-service/internal/domain/organization/service"
 )
 
 func mapAuthzDomainError(err error) error {
@@ -17,11 +17,11 @@ func mapAuthzDomainError(err error) error {
 		return apperror.Internal(string(apperror.CodeInternal), err)
 	}
 	switch de.Code {
-	case tenantconstant.CodeTenantNotFound:
+	case orgconstant.CodeCompanyNotFound:
 		return apperror.NotFound(string(de.Code))
-	case tenantconstant.CodeTenantNotSelected:
-		return apperror.Forbidden(apperror.MsgTenantNotSelected)
-	case tenantconstant.CodeTenantAccessDenied, constant.CodeAssignmentNotSubscribed:
+	case orgconstant.CodeCompanyNotSelected:
+		return apperror.Forbidden(apperror.MsgCompanyNotSelected)
+	case orgconstant.CodeCompanyAccessDenied, constant.CodeAssignmentNotSubscribed:
 		return apperror.Forbidden(string(de.Code))
 	case constant.CodeAssignmentDuplicate:
 		return apperror.Conflict(string(de.Code), err)
@@ -38,8 +38,8 @@ func isDomainCode(err error, code domainerr.Code) bool {
 	return errors.As(err, &de) && de.Code == code
 }
 
-func accessorOf(p *principal.Principal) tenantservice.Accessor {
-	a := tenantservice.Accessor{UserID: p.UserID, ActiveTenantID: p.TenantID, IsPlatformAdmin: p.IsUser() && p.IsPlatformAdmin}
+func accessorOf(p *principal.Principal) orgservice.Accessor {
+	a := orgservice.Accessor{UserID: p.UserID, ActiveCompanyID: p.CompanyID, IsPlatformAdmin: p.IsUser() && p.IsPlatformAdmin}
 	if p.IsService() {
 		a.ServiceSolutionID = p.SolutionID
 	}

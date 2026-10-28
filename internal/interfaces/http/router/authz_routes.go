@@ -9,7 +9,7 @@ const scopeAuthzCheck = "authz:check"
 
 // RegisterAuthzRoutes — User Role Assignments (spec §3.14) & Authorization Check (spec §3.15).
 func RegisterAuthzRoutes(r Routes, h *api.AuthzHandler) {
-	r.Authenticated.POST("/tenants/:tenantId/users/:userId/role-assignments",
+	r.Authenticated.POST("/companies/:companyId/users/:userId/role-assignments",
 		middleware.RequireUserOrService(scopeRolesWrite), h.AssignRole)
 
 	check := r.Authenticated.Group("/authz", middleware.RequireUserOrService(scopeAuthzCheck))

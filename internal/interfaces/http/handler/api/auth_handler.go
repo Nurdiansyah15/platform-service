@@ -106,49 +106,49 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	respond.OK(c, "me", resp)
 }
 
-// Tenants godoc
+// Companies godoc
 //
-//	@Summary		Tenants selectable for the session's solution
-//	@Description	Tenant tempat user member active, tenant active, dan subscribe solution sesi (trialing / active).
+//	@Summary		Companies selectable for the session's solution
+//	@Description	Company tempat user member active, company active, dan subscribe solution sesi (trialing / active).
 //	@Tags			Auth
 //	@Security		BearerAuth
 //	@Produce		json
-//	@Success		200		{object}	respond.SuccessBody{data=[]dto.SelectableTenantResponse}
+//	@Success		200		{object}	respond.SuccessBody{data=[]dto.SelectableCompanyResponse}
 //	@Failure		401,403	{object}	respond.ErrorBody
-//	@Router			/api/v1/auth/tenants [get]
-func (h *AuthHandler) Tenants(c *gin.Context) {
+//	@Router			/api/v1/auth/companies [get]
+func (h *AuthHandler) Companies(c *gin.Context) {
 	actor, _ := middleware.PrincipalFrom(c)
-	items, err := h.useCase.Tenants(c.Request.Context(), actor)
+	items, err := h.useCase.Companies(c.Request.Context(), actor)
 	if err != nil {
 		httperror.Handle(c, err)
 		return
 	}
-	respond.OK(c, "selectable tenants", items)
+	respond.OK(c, "selectable companies", items)
 }
 
-// SwitchTenant godoc
+// SwitchCompany godoc
 //
-//	@Summary		Switch active tenant
-//	@Description	Mengganti tenant aktif sesi dan menerbitkan access & refresh token baru; refresh token lama tidak berlaku.
+//	@Summary		Switch active company
+//	@Description	Mengganti company aktif sesi dan menerbitkan access & refresh token baru; refresh token lama tidak berlaku.
 //	@Tags			Auth
 //	@Security		BearerAuth
 //	@Accept			json
 //	@Produce		json
-//	@Param			body			body		dto.SwitchTenantRequest	true	"Tenant tujuan"
+//	@Param			body			body		dto.SwitchCompanyRequest	true	"Company tujuan"
 //	@Success		200				{object}	respond.SuccessBody{data=dto.AuthTokenResponse}
 //	@Failure		401,403,422		{object}	respond.ErrorBody
-//	@Router			/api/v1/auth/switch-tenant [post]
-func (h *AuthHandler) SwitchTenant(c *gin.Context) {
-	var req dto.SwitchTenantRequest
+//	@Router			/api/v1/auth/switch-company [post]
+func (h *AuthHandler) SwitchCompany(c *gin.Context) {
+	var req dto.SwitchCompanyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httperror.Handle(c, err)
 		return
 	}
 	actor, _ := middleware.PrincipalFrom(c)
-	resp, err := h.useCase.SwitchTenant(c.Request.Context(), actor, req)
+	resp, err := h.useCase.SwitchCompany(c.Request.Context(), actor, req)
 	if err != nil {
 		httperror.Handle(c, err)
 		return
 	}
-	respond.OK(c, "tenant switched", resp)
+	respond.OK(c, "company switched", resp)
 }

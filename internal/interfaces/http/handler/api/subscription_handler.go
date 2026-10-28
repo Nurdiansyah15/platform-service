@@ -21,18 +21,18 @@ func NewSubscriptionHandler(useCase *subscription.SubscriptionUseCase) *Subscrip
 // Create godoc
 //
 //	@Summary		Create subscription
-//	@Description	Membekukan benefit plan ke snapshot. Maksimal satu subscription hidup (trialing/active/past_due) per tenant per solution.
+//	@Description	Membekukan benefit plan ke snapshot. Maksimal satu subscription hidup (trialing/active/past_due) per company per solution.
 //	@Tags			Subscriptions
 //	@Security		BearerAuth
 //	@Accept			json
 //	@Produce		json
-//	@Param			tenantId			path		string							true	"Tenant ID"
+//	@Param			companyId			path		string							true	"Company ID"
 //	@Param			body				body		dto.CreateSubscriptionRequest	true	"Subscription"
 //	@Success		201					{object}	respond.SuccessBody{data=dto.SubscriptionResponse}
 //	@Failure		401,403,404,409,422	{object}	respond.ErrorBody
-//	@Router			/api/v1/tenants/{tenantId}/subscriptions [post]
+//	@Router			/api/v1/companies/{companyId}/subscriptions [post]
 func (h *SubscriptionHandler) Create(c *gin.Context) {
-	var param dto.TenantIDParam
+	var param dto.CompanyIDParam
 	if err := c.ShouldBindUri(&param); err != nil {
 		httperror.Handle(c, err)
 		return
@@ -42,7 +42,7 @@ func (h *SubscriptionHandler) Create(c *gin.Context) {
 		httperror.Handle(c, err)
 		return
 	}
-	resp, err := h.useCase.Create(c.Request.Context(), param.TenantID, req)
+	resp, err := h.useCase.Create(c.Request.Context(), param.CompanyID, req)
 	if err != nil {
 		httperror.Handle(c, err)
 		return
@@ -52,12 +52,12 @@ func (h *SubscriptionHandler) Create(c *gin.Context) {
 
 // List godoc
 //
-//	@Summary		List tenant subscriptions
+//	@Summary		List company subscriptions
 //	@Description	Token service hanya melihat subscription solution miliknya.
 //	@Tags			Subscriptions
 //	@Security		BearerAuth
 //	@Produce		json
-//	@Param			tenantId		path		string	true	"Tenant ID"
+//	@Param			companyId		path		string	true	"Company ID"
 //	@Param			status			query		string	false	"trialing | active | past_due | canceled | expired"
 //	@Param			page			query		int		false	"Halaman"
 //	@Param			limit			query		int		false	"Jumlah per halaman (maks 100)"
@@ -65,9 +65,9 @@ func (h *SubscriptionHandler) Create(c *gin.Context) {
 //	@Param			sort_type		query		string	false	"asc | desc"
 //	@Success		200				{object}	respond.SuccessBody{data=[]dto.SubscriptionResponse,meta=dto.Meta}
 //	@Failure		401,403,404,422	{object}	respond.ErrorBody
-//	@Router			/api/v1/tenants/{tenantId}/subscriptions [get]
+//	@Router			/api/v1/companies/{companyId}/subscriptions [get]
 func (h *SubscriptionHandler) List(c *gin.Context) {
-	var param dto.TenantIDParam
+	var param dto.CompanyIDParam
 	if err := c.ShouldBindUri(&param); err != nil {
 		httperror.Handle(c, err)
 		return
@@ -78,7 +78,7 @@ func (h *SubscriptionHandler) List(c *gin.Context) {
 		return
 	}
 	actor, _ := middleware.PrincipalFrom(c)
-	items, meta, err := h.useCase.List(c.Request.Context(), actor, param.TenantID, req)
+	items, meta, err := h.useCase.List(c.Request.Context(), actor, param.CompanyID, req)
 	if err != nil {
 		httperror.Handle(c, err)
 		return

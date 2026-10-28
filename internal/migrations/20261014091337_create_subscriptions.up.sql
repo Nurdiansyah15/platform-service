@@ -1,7 +1,7 @@
--- Subscription tenant ke solution (spec §2.5).
+-- Subscription company ke solution (spec §2.5).
 CREATE TABLE subscriptions (
     id                   UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id            UUID          NOT NULL REFERENCES tenants (id),
+    company_id           UUID          NOT NULL REFERENCES companies (id),
     solution_id          UUID          NOT NULL REFERENCES solutions (id),
     plan_id              UUID          NOT NULL,
     status               VARCHAR(30)   NOT NULL DEFAULT 'active',
@@ -19,10 +19,10 @@ CREATE TABLE subscriptions (
     CONSTRAINT ck_subscriptions_billing_cycle CHECK (billing_cycle IN ('monthly', 'yearly'))
 );
 
--- Keputusan Fase 10: maksimal satu subscription "hidup" per tenant per solution.
-CREATE UNIQUE INDEX uq_subscriptions_live_tenant_solution ON subscriptions (tenant_id, solution_id)
+-- Keputusan Fase 10: maksimal satu subscription "hidup" per company per solution.
+CREATE UNIQUE INDEX uq_subscriptions_live_company_solution ON subscriptions (company_id, solution_id)
     WHERE status IN ('trialing', 'active', 'past_due');
-CREATE INDEX idx_subscriptions_tenant_id ON subscriptions (tenant_id);
+CREATE INDEX idx_subscriptions_company_id ON subscriptions (company_id);
 CREATE INDEX idx_subscriptions_solution_id ON subscriptions (solution_id);
 
 CREATE TRIGGER trg_subscriptions_updated_at

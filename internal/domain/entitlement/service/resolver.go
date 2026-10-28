@@ -12,7 +12,7 @@ import (
 	subrepo "platform-service/internal/domain/subscription/repository"
 )
 
-// Resolver mengumpulkan bahan perhitungan entitlement tenant untuk satu solution:
+// Resolver mengumpulkan bahan perhitungan entitlement company untuk satu solution:
 // subscription usable (trialing / active) dan snapshot efektifnya per benefit.
 type Resolver struct {
 	subscriptions subrepo.SubscriptionRepository
@@ -23,15 +23,15 @@ func NewResolver(subscriptions subrepo.SubscriptionRepository, snapshots reposit
 	return &Resolver{subscriptions: subscriptions, snapshots: snapshots}
 }
 
-// Source adalah hasil Resolver. Subscription nil = tenant tidak berlangganan (semua benefit tidak granted).
+// Source adalah hasil Resolver. Subscription nil = company tidak berlangganan (semua benefit tidak granted).
 type Source struct {
 	Subscription *subentity.Subscription
 	ByBenefit    map[string][]entity.SnapshotValue
 }
 
-func (r *Resolver) Resolve(ctx context.Context, tenantID, solutionID string) (*Source, error) {
+func (r *Resolver) Resolve(ctx context.Context, companyID, solutionID string) (*Source, error) {
 	src := &Source{ByBenefit: map[string][]entity.SnapshotValue{}}
-	sub, err := r.subscriptions.FindUsable(ctx, tenantID, solutionID)
+	sub, err := r.subscriptions.FindUsable(ctx, companyID, solutionID)
 	if err != nil {
 		var de *domainerr.DomainError
 		if errors.As(err, &de) && de.Code == subconstant.CodeSubscriptionNotFound {

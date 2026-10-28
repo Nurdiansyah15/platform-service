@@ -8,19 +8,19 @@ import (
 	"platform-service/internal/domain/authz/valueobject"
 )
 
-// RoleAssignment — role diberikan ke user dalam tenant pada scope tertentu.
+// RoleAssignment — role diberikan ke user dalam company pada scope tertentu.
 type RoleAssignment struct {
 	ID        string
-	TenantID  string
+	CompanyID string
 	UserID    string
 	RoleID    string
 	Scope     valueobject.Scope
 	CreatedAt time.Time
 }
 
-func NewRoleAssignment(tenantID, userID, roleID string, scope valueobject.Scope, now time.Time) *RoleAssignment {
+func NewRoleAssignment(companyID, userID, roleID string, scope valueobject.Scope, now time.Time) *RoleAssignment {
 	return &RoleAssignment{
-		ID: uuid.NewString(), TenantID: tenantID, UserID: userID, RoleID: roleID, Scope: scope, CreatedAt: now.UTC(),
+		ID: uuid.NewString(), CompanyID: companyID, UserID: userID, RoleID: roleID, Scope: scope, CreatedAt: now.UTC(),
 	}
 }
 

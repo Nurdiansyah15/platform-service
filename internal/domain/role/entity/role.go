@@ -13,13 +13,13 @@ import (
 )
 
 // Role adalah kumpulan permission dalam satu solution (spec §2.6):
-//   - system role: tenant_id nil, is_system true — dibuat platform, tidak bisa diubah
-//   - global template: tenant_id nil, is_system false — dibuat platform admin
-//   - custom tenant role: tenant_id terisi — dikelola tenant pemilik
+//   - system role: company_id nil, is_system true — dibuat platform, tidak bisa diubah
+//   - global template: company_id nil, is_system false — dibuat platform admin
+//   - custom company role: company_id terisi — dikelola company pemilik
 type Role struct {
 	ID          string
 	SolutionID  string
-	TenantID    *string
+	CompanyID   *string
 	Code        valueobject.RoleCode
 	Name        string
 	Description *string
@@ -31,7 +31,7 @@ type Role struct {
 
 type NewRoleParams struct {
 	SolutionID  string
-	TenantID    *string // nil = global
+	CompanyID   *string // nil = global
 	Code        string
 	Name        string
 	Description *string
@@ -48,16 +48,16 @@ func NewRole(p NewRoleParams, now time.Time) (*Role, error) {
 	}
 	now = now.UTC()
 	return &Role{
-		ID: uuid.NewString(), SolutionID: p.SolutionID, TenantID: p.TenantID, Code: code, Name: name,
+		ID: uuid.NewString(), SolutionID: p.SolutionID, CompanyID: p.CompanyID, Code: code, Name: name,
 		Description: trimOptional(p.Description), CreatedAt: now, UpdatedAt: now,
 	}, nil
 }
 
-func (r *Role) IsGlobal() bool { return r.TenantID == nil }
+func (r *Role) IsGlobal() bool { return r.CompanyID == nil }
 
-// IsOwnedBy — custom role milik tenant tersebut.
-func (r *Role) IsOwnedBy(tenantID string) bool {
-	return r.TenantID != nil && *r.TenantID == tenantID
+// IsOwnedBy — custom role milik company tersebut.
+func (r *Role) IsOwnedBy(companyID string) bool {
+	return r.CompanyID != nil && *r.CompanyID == companyID
 }
 
 // EnsureEditable — role sistem tidak boleh diubah.

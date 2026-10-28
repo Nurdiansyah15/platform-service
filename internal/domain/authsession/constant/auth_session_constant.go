@@ -12,9 +12,9 @@ const (
 	CodeSessionQueryFailed       domainerr.Code = "DOMAIN_AUTH_SESSION_QUERY_FAILED"
 
 	// Error alur autentikasi (dipetakan ke 401/403/422 oleh usecase auth).
-	CodeInvalidCredentials  domainerr.Code = "DOMAIN_AUTH_INVALID_CREDENTIALS"
-	CodeUserNotActive       domainerr.Code = "DOMAIN_AUTH_USER_NOT_ACTIVE"
-	CodeSolutionUnavailable domainerr.Code = "DOMAIN_AUTH_SOLUTION_UNAVAILABLE"
-	CodeRefreshTokenInvalid domainerr.Code = "DOMAIN_AUTH_REFRESH_TOKEN_INVALID"
-	CodeTenantNotSelectable domainerr.Code = "DOMAIN_AUTH_TENANT_NOT_SELECTABLE"
+	CodeInvalidCredentials   domainerr.Code = "DOMAIN_AUTH_INVALID_CREDENTIALS"
+	CodeUserNotActive        domainerr.Code = "DOMAIN_AUTH_USER_NOT_ACTIVE"
+	CodeSolutionUnavailable  domainerr.Code = "DOMAIN_AUTH_SOLUTION_UNAVAILABLE"
+	CodeRefreshTokenInvalid  domainerr.Code = "DOMAIN_AUTH_REFRESH_TOKEN_INVALID"
+	CodeCompanyNotSelectable domainerr.Code = "DOMAIN_AUTH_COMPANY_NOT_SELECTABLE"
 )

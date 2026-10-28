@@ -35,7 +35,7 @@ type Delivery struct {
 	EndpointID      string
 	AttemptCount    int
 	EventType       string
-	TenantID        *string
+	CompanyID       *string
 	SolutionID      *string
 	Payload         []byte
 	OccurredAt      time.Time

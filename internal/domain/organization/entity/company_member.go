@@ -4,30 +4,30 @@ import (
 	"time"
 
 	domainerr "platform-service/internal/domain/errors"
-	"platform-service/internal/domain/tenant/constant"
-	"platform-service/internal/domain/tenant/valueobject"
+	"platform-service/internal/domain/organization/constant"
+	"platform-service/internal/domain/organization/valueobject"
 )
 
-type TenantMember struct {
-	TenantID string
-	UserID   string
-	Status   valueobject.MemberStatus
-	JoinedAt time.Time
+type CompanyMember struct {
+	CompanyID string
+	UserID    string
+	Status    valueobject.MemberStatus
+	JoinedAt  time.Time
 }
 
-// NewTenantMember membuat keanggotaan baru. status kosong → active; inactive
+// NewCompanyMember membuat keanggotaan baru. status kosong → active; inactive
 // tidak boleh dipakai saat menambahkan member.
-func NewTenantMember(tenantID, userID, status string, now time.Time) (*TenantMember, error) {
+func NewCompanyMember(companyID, userID, status string, now time.Time) (*CompanyMember, error) {
 	st, err := initialStatus(status)
 	if err != nil {
 		return nil, err
 	}
-	return &TenantMember{TenantID: tenantID, UserID: userID, Status: st, JoinedAt: now.UTC()}, nil
+	return &CompanyMember{CompanyID: companyID, UserID: userID, Status: st, JoinedAt: now.UTC()}, nil
 }
 
 // Rejoin mengaktifkan kembali member yang sebelumnya dikeluarkan (inactive).
 // Member yang masih active / invited → CodeMemberAlreadyExists.
-func (m *TenantMember) Rejoin(status string, now time.Time) error {
+func (m *CompanyMember) Rejoin(status string, now time.Time) error {
 	if m.Status != valueobject.MemberStatusInactive {
 		return domainerr.New(constant.CodeMemberAlreadyExists)
 	}
@@ -40,7 +40,7 @@ func (m *TenantMember) Rejoin(status string, now time.Time) error {
 	return nil
 }
 
-func (m *TenantMember) IsActive() bool {
+func (m *CompanyMember) IsActive() bool {
 	return m.Status == valueobject.MemberStatusActive
 }
 

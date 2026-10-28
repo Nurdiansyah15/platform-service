@@ -12,6 +12,7 @@ import (
 func TestLoad_Defaults(t *testing.T) {
 	t.Chdir(t.TempDir()) // tanpa .env
 	t.Setenv("DB_PASS", "p@ss word")
+	t.Setenv("DB_PORT", "5432")
 
 	cfg, err := config.Load()
 

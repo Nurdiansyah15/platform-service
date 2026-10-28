@@ -15,11 +15,39 @@ import (
 )
 
 func TestNewCompany(t *testing.T) {
-	c, err := entity.NewCompany("t1", entity.OrgUnitParams{Name: " Kantor Pusat ", Code: " hq-01 "}, time.Now())
+	c, err := entity.NewCompany(" PT Contoh ", " PT-Contoh ", time.Now())
 	require.NoError(t, err)
-	assert.Equal(t, "Kantor Pusat", c.Name)
-	assert.Equal(t, "HQ-01", c.Code.Value())
-	assert.Equal(t, valueobject.OrgStatusActive, c.Status)
+	assert.Equal(t, "PT Contoh", c.Name)
+	assert.Equal(t, "pt-contoh", c.Slug.Value())
+	assert.True(t, c.IsActive())
+
+	_, err = entity.NewCompany("", "x", time.Now())
+	testhelper.AssertDomainError(t, err, constant.CodeCompanyNameInvalid)
+	_, err = entity.NewCompany("X", "pt contoh", time.Now())
+	testhelper.AssertDomainError(t, err, constant.CodeCompanySlugInvalid)
+}
+
+func TestNewCompanyMember(t *testing.T) {
+	m, err := entity.NewCompanyMember("c", "u", "", time.Now())
+	require.NoError(t, err)
+	assert.True(t, m.IsActive())
+
+	m, err = entity.NewCompanyMember("c", "u", "invited", time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, valueobject.MemberStatusInvited, m.Status)
+
+	_, err = entity.NewCompanyMember("c", "u", "inactive", time.Now())
+	testhelper.AssertDomainError(t, err, constant.CodeMemberStatusInvalid)
+}
+
+func TestCompanyMember_Rejoin(t *testing.T) {
+	m, err := entity.NewCompanyMember("c", "u", "", time.Now())
+	require.NoError(t, err)
+	testhelper.AssertDomainError(t, m.Rejoin("", time.Now()), constant.CodeMemberAlreadyExists)
+
+	m.Status = valueobject.MemberStatusInactive
+	require.NoError(t, m.Rejoin("invited", time.Now()))
+	assert.Equal(t, valueobject.MemberStatusInvited, m.Status)
 }
 
 func TestNewBranch_Invalid(t *testing.T) {

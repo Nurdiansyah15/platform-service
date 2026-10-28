@@ -69,7 +69,7 @@ func toPrincipal(c *parsedClaims) (*principal.Principal, error) {
 			Kind:         principal.KindUser,
 			UserID:       c.Subject,
 			SessionID:    c.Sid,
-			TenantID:     c.Tid,
+			CompanyID:    c.Cid,
 			SolutionCode: aud,
 		}, nil
 

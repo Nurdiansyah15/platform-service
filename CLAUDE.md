@@ -9,7 +9,7 @@ Panduan ini dibaca otomatis oleh Claude Code setiap sesi. Isinya arsitektur, kon
 
 ## 0. Teori Umum DDD (Ringkas)
 
-- **Ubiquitous Language**: istilah domain di spec, diskusi, dan kode harus sama (tenant, solution, plan, add-on, benefit, entitlement, snapshot, dst).
+- **Ubiquitous Language**: istilah domain di spec, diskusi, dan kode harus sama (company, solution, plan, add-on, benefit, entitlement, snapshot, dst).
 - **Bounded Context**: batas model domain agar istilah dan aturan tidak bercampur.
 - **Entity**: objek domain dengan identitas dan siklus hidup.
 - **Value Object**: objek tanpa identitas, dibandingkan berdasarkan nilai.
@@ -62,7 +62,7 @@ Langkah membuat endpoint baru:
 3. Persistence: implementasi repository (dan query model bila perlu).
 4. Usecase: tambahkan method baru di `<Ctx>UseCase` pada `usecase/<ctx>/<ctx>_usecase.go` (tambah dependency di `<Ctx>Deps` bila perlu).
 5. DTO request/response di `app/dto/<ctx>_dto.go`.
-6. Handler + swag annotation (`@Router` pakai path penuh, mis. `/api/v1/tenants [post]`), lalu:
+6. Handler + swag annotation (`@Router` pakai path penuh, mis. `/api/v1/companies [post]`), lalu:
    - tambah field handler di `router.Handlers`,
    - buat `router/<ctx>_routes.go` berisi `RegisterXxxRoutes(r Routes, h *api.XxxHandler)` dan panggil dari `registerDomainRoutes`,
    - wiring repo → usecase → handler di `internal/bootstrap/bootstrap.go` (`bootstrap.New` → `App`). Tugas startup (mis. `EnsureActiveKey`) juga dijalankan di sana.
@@ -84,25 +84,27 @@ Langkah membuat endpoint baru:
 - **Usecase dikelompokkan per domain**, bukan satu file per usecase. Satu domain = satu struct `<Ctx>UseCase` dengan satu method per operasi:
 
   ```go
-  // internal/app/usecase/tenant/tenant_usecase.go
-  type TenantDeps struct {
-      Tx         port.Transactor
-      TenantRepo tenantrepo.TenantRepository
-      MemberRepo tenantrepo.TenantMemberRepository
-      Query      port.TenantQueryReadModel
-      Outbox     port.EventOutbox
+  // internal/app/usecase/organization/company_usecase.go
+  type OrganizationDeps struct {
+      Tx           port.Transactor
+      Companies    orgrepo.CompanyRepository
+      Members      orgrepo.CompanyMemberRepository
+      Branches     orgrepo.BranchRepository
+      CompanyQuery port.CompanyQueryReadModel
+      BranchQuery  port.OrganizationQueryReadModel
+      Outbox       port.EventOutbox
   }
 
-  type TenantUseCase struct{ deps TenantDeps }
+  type CompanyUseCase struct{ deps OrganizationDeps }
 
-  func NewTenantUseCase(deps TenantDeps) *TenantUseCase { return &TenantUseCase{deps: deps} }
+  func NewCompanyUseCase(deps OrganizationDeps) *CompanyUseCase { return &CompanyUseCase{deps: deps} }
 
   // Required — auth: user | scope: -
-  func (uc *TenantUseCase) Create(ctx context.Context, actor *principal.Principal, req dto.CreateTenantRequest) (*dto.TenantResponse, error)
+  func (uc *CompanyUseCase) Create(ctx context.Context, actor *principal.Principal, req dto.CreateCompanyRequest) (*dto.CompanyResponse, error)
   // Required — auth: user (member / platform admin) | scope: -
-  func (uc *TenantUseCase) List(ctx context.Context, actor *principal.Principal, q dto.ListTenantQuery) ([]dto.TenantItem, dto.Meta, error)
+  func (uc *CompanyUseCase) List(ctx context.Context, actor *principal.Principal, q dto.ListCompanyQuery) ([]dto.CompanyResponse, dto.Meta, error)
   ```
-- Bila satu file domain terlalu besar (> ~500 baris) atau domain punya beberapa aggregate, boleh dipecah per sub-domain dalam paket yang sama, mis. `tenant_usecase.go` + `member_usecase.go` (`TenantUseCase`, `MemberUseCase`). Jangan kembali ke satu file per operasi.
+- Bila satu file domain terlalu besar (> ~500 baris) atau domain punya beberapa aggregate, boleh dipecah per sub-domain dalam paket yang sama, mis. `company_usecase.go` + `company_member_usecase.go` (`CompanyUseCase`, `CompanyMemberUseCase`). Jangan kembali ke satu file per operasi.
 - Helper bersama paket (`mapXxxDomainError`, mapper domain → DTO) di `helpers.go`.
 - Tidak berisi SQL atau detail driver DB.
 - **Wajib** memetakan domain object ke DTO sebelum return. Handler tidak boleh menerima domain object.
@@ -215,8 +217,9 @@ type Meta struct {
 Tabel `plans`, `addons`, `benefits`, `subscriptions`, `permissions`, `roles` punya `UNIQUE (id, solution_id)`. Tabel relasi menyimpan `solution_id` dan FK ke `(xxx_id, solution_id)`. Jangan hilangkan kolom/constraint ini demi "menyederhanakan" — DB yang menolak relasi lintas solution. Usecase tetap memvalidasi lebih awal agar pesan error jelas.
 
 ### 8.2 Soft delete
-- `companies`, `branches`, `plans`, `addons`, `roles`: set `deleted_at`; semua query default `WHERE deleted_at IS NULL`.
-- `tenant_members`: `status = 'inactive'` + hapus role assignment user di tenant itu.
+- `branches`, `plans`, `addons`, `roles`: set `deleted_at`; semua query default `WHERE deleted_at IS NULL`.
+- `companies` (entitas tertinggi): tidak di-soft delete; status `active`/`suspended`/`closed`.
+- `company_members`: `status = 'inactive'` + hapus role assignment user di company itu.
 - `subscription_addons`: `status = 'canceled'` + hapus snapshot benefit add-on.
 
 ### 8.3 Snapshot benefit
@@ -227,22 +230,22 @@ Perhitungan memakai `entitlement/service.Calculate` + `Resolver` — jangan meng
 ### 8.4 Outbox
 Setiap perubahan yang ada di katalog event (spec §2.9) menulis baris `events` di transaksi yang sama dengan perubahan data, lewat `port.EventOutbox.Append`. Implementasinya menolak (`ErrOutboxRequiresTx`) bila dipanggil di luar `Transactor.WithTx`. Jangan kirim webhook langsung dari usecase.
 - Pengiriman dilakukan `cmd/worker` (`webhook.Dispatcher`, dirangkai `bootstrap.NewDispatcher`). Aturan routing event → solution ada di satu tempat (`eventRoutedToSolution` di `postgres_webhook_repository.go`) dan dipakai fan-out maupun `GET /events` — ubah keduanya bersamaan.
-- Event user (tanpa tenant & solution) wajib memuat `user_id` di payload agar bisa di-route.
+- Event user (tanpa company & solution) wajib memuat `user_id` di payload agar bisa di-route.
 - Test dispatcher: `testSrv.NewDispatcher()` + `httptest.Server`; endpoint webhook di test lain pakai URL yang langsung menolak koneksi (`http://127.0.0.1:1/...`), jangan domain publik.
 
 ### 8.5 Autentikasi & otorisasi
-- Token user: `typ=user`, `aud = solutions.code`, `tid` boleh kosong. Token service: `typ=service`, `aud=platform`, `sol`, `scope`.
-- Endpoint per-tenant (path `/tenants/{tenantId}/...`) wajib lewat domain service `tenant/service.AccessPolicy.EnsureCanAccess` di usecase: platform admin bebas; token service hanya untuk tenant yang subscribe (`trialing`/`active`) solution client-nya; user lain wajib `tid` = tenantId dan member `active`. Route-nya memakai `RequireUserOrService(scope)` (users:*, org:*, entitlements:read). Endpoint identitas & pemilihan tenant (`/auth/*`, `GET/POST /tenants`) boleh tanpa `tid`.
-- Resource anak tenant yang diakses lewat ID-nya sendiri (mis. `/companies/{companyId}`): muat resource, cek `AccessPolicy` terhadap tenant pemiliknya, dan laporkan **404** bila akses ditolak (jangan bocorkan keberadaan data tenant lain). `tid` kosong tetap 403.
-- Administrasi tenant (member, company/branch, role custom, role assignment) terbuka untuk semua member aktif — platform tidak menegakkan RBAC di sini; RBAC dievaluasi lewat `authz/check` (`authz/service.Evaluate`, hierarki scope tenant ⊇ company ⊇ branch).
-- Service client hanya boleh akses data `solution_id`-nya dan tenant yang subscribe solution tersebut. Data per-solution (subscription, entitlement, usage) wajib difilter ke `principal.SolutionID` untuk token service.
-- Subscription: maksimal satu yang live per tenant per solution; "usable" = `trialing`/`active` (`valueobject.UsableStatuses`).
+- Token user: `typ=user`, `aud = solutions.code`, `cid` boleh kosong. Token service: `typ=service`, `aud=platform`, `sol`, `scope`.
+- Endpoint per-company (path `/companies/{companyId}/...`) wajib lewat domain service `organization/service.AccessPolicy.EnsureCanAccess` di usecase: platform admin bebas; token service hanya untuk company yang subscribe (`trialing`/`active`) solution client-nya; user lain wajib `cid` = companyId dan member `active`. Route-nya memakai `RequireUserOrService(scope)` (users:*, org:*, entitlements:read). Endpoint identitas & pemilihan company (`/auth/*`, `GET/POST /companies`) boleh tanpa `cid`.
+- Resource anak company yang diakses lewat ID-nya sendiri (mis. `/branches/{branchId}`): muat resource, cek `AccessPolicy` terhadap company pemiliknya, dan laporkan **404** bila akses ditolak (jangan bocorkan keberadaan data company lain). `cid` kosong tetap 403.
+- Administrasi company (member, branch, role custom, role assignment) terbuka untuk semua member aktif — platform tidak menegakkan RBAC di sini; RBAC dievaluasi lewat `authz/check` (`authz/service.Evaluate`, hierarki scope company ⊇ branch).
+- Service client hanya boleh akses data `solution_id`-nya dan company yang subscribe solution tersebut. Data per-solution (subscription, entitlement, usage) wajib difilter ke `principal.SolutionID` untuk token service.
+- Subscription: maksimal satu yang live per company per solution; "usable" = `trialing`/`active` (`valueobject.UsableStatuses`).
 - Endpoint idempotent (mis. usage): insert record ber-unique key di dalam transaksi; unique violation → baca record asli di luar transaksi, payload sama = replay (200), beda = 409. Penghitung memakai upsert atomik (`used = used + EXCLUDED.used`), bukan read-modify-write.
 - Platform admin = `users.is_platform_admin` → `RequirePlatformAdmin`.
-- Middleware (`interfaces/http/middleware/auth.go`): `Authenticate(port.TokenAuthenticator)` menyimpan `*principal.Principal` di gin context (ambil dengan `middleware.PrincipalFrom(c)`), lalu guard `RequireUser`, `RequireService(scope)`, `RequireUserOrService(scope)`, `RequirePlatformAdmin`, `RequireActiveTenant`. Handler meneruskan principal ke usecase; usecase tidak membaca gin context.
+- Middleware (`interfaces/http/middleware/auth.go`): `Authenticate(port.TokenAuthenticator)` menyimpan `*principal.Principal` di gin context (ambil dengan `middleware.PrincipalFrom(c)`), lalu guard `RequireUser`, `RequireService(scope)`, `RequireUserOrService(scope)`, `RequirePlatformAdmin`, `RequireActiveCompany`. Handler meneruskan principal ke usecase; usecase tidak membaca gin context.
 - Route terproteksi didaftarkan di `Routes.Authenticated` (sudah memasang `Authenticate`); route publik di `Routes.V1`.
 - Token JWT RS256 diterbitkan lewat `port.TokenIssuer` dan diverifikasi `jwttoken.Authenticator` (key dari `signing_keys` + `port.KeyStore`). Private key tidak pernah disimpan di DB maupun di-log.
-- Token user selalu divalidasi ulang ke DB oleh `AuthUseCase.ResolveUserPrincipal` (dirangkai di `bootstrap`): sesi aktif, user & solution `active`, `tid` sama dengan sesi. Jangan mempercayai `IsPlatformAdmin` dari sumber lain.
+- Token user selalu divalidasi ulang ke DB oleh `AuthUseCase.ResolveUserPrincipal` (dirangkai di `bootstrap`): sesi aktif, user & solution `active`, `cid` sama dengan sesi. Jangan mempercayai `IsPlatformAdmin` dari sumber lain.
 - Token service juga divalidasi ulang ke DB oleh `SolutionClientUseCase.ResolveServicePrincipal`: client & solution `active`, `sol` cocok, scope di-intersect dengan scope client terkini. Guard `RequireService(scope)` karenanya selalu memakai scope terbaru.
 - Pesan error login / token endpoint tidak boleh membedakan "akun/client tidak ada" dan "password/secret salah".
 - Secret (client secret, refresh token) hanya disimpan sebagai hash; webhook secret dienkripsi. Secret mentah hanya ditampilkan sekali di respons create/rotate.
@@ -265,25 +268,25 @@ Setiap perubahan yang ada di katalog event (spec §2.9) menulis baris `events` d
 ### Gaya
 - **Black-box integration test, tanpa mock usecase/repository.** Server dibangun lengkap (repo Postgres nyata via testcontainers); hanya adapter eksternal yang diganti fake di `testhelper/noop.go`.
 - Package `api_test` di `internal/interfaces/http/handler/api/`.
-- Satu fungsi per skenario: `Test<Domain>_<Endpoint>_<Scenario>`, contoh `TestTenant_CreateMember_Forbidden`. Pisahkan grup endpoint dengan banner komentar `// ── Members ──────`.
+- Satu fungsi per skenario: `Test<Domain>_<Endpoint>_<Scenario>`, contoh `TestCompany_CreateMember_Forbidden`. Pisahkan grup endpoint dengan banner komentar `// ── Members ──────`.
 - `require` untuk setup/prasyarat, `assert` untuk pengecekan. Decode respons ke anonymous struct `struct{ Data struct{...} \`json:"data"\` }`.
 - Data unik per test (`uniqueEmail`, `uniqueCode`, `uniqueSlug`) — DB dipakai bersama tanpa truncate.
 - Efek samping (outbox event, snapshot, soft delete) dicek lewat SQL langsung: `testSrv.DB.QueryRowContext(...)`.
 - Helper setup via API diberi prefix `must` dan memanggil `t.Helper()`.
 
 ```go
-func TestTenant_Create_Unauthenticated(t *testing.T) {
-	w := testSrv.POST("/api/v1/tenants", map[string]any{"name": "Acme", "slug": uniqueSlug("acme")})
+func TestCompany_Create_Unauthenticated(t *testing.T) {
+	w := testSrv.POST("/api/v1/companies", map[string]any{"name": "Acme", "slug": uniqueSlug("acme")})
 	assert.Equal(t, 401, w.Code)
 }
 
-func TestTenant_Create_Success(t *testing.T) {
-	token := mustLoginNewUser(t)
+func TestCompany_Create_Success(t *testing.T) {
+	tok, _, _ := mustLoginNewUser(t)
 	slug := uniqueSlug("acme")
 
-	w := testSrv.POST("/api/v1/tenants", map[string]any{"name": "Acme", "slug": slug},
-		testhelper.BearerHeader(token))
-	require.Equal(t, 201, w.Code, "create tenant: %s", w.Body.String())
+	w := testSrv.POST("/api/v1/companies", map[string]any{"name": "Acme", "slug": slug},
+		testhelper.BearerHeader(tok.AccessToken))
+	require.Equal(t, 201, w.Code, "create company: %s", w.Body.String())
 
 	var resp struct {
 		Data struct {
@@ -298,7 +301,7 @@ func TestTenant_Create_Success(t *testing.T) {
 
 ### Skenario wajib per endpoint
 - `Unauthenticated` → 401 untuk semua endpoint terproteksi
-- `Forbidden` → 403 (bukan platform admin / bukan member / scope service kurang / tenant tidak subscribe / `LICENSE_MANAGED`)
+- `Forbidden` → 403 (bukan platform admin / bukan member / scope service kurang / company tidak subscribe / `LICENSE_MANAGED`)
 - `InvalidPayload` → 400/422 untuk endpoint ber-body (missing required dari Gin = 422; boleh `assert.True(t, w.Code == 400 || w.Code == 422)`)
 - `NotFound` → 404 untuk endpoint by ID
 - `Duplicate` / `Conflict` → 409 bila ada unique constraint
@@ -325,11 +328,11 @@ internal/testhelper/
 
 internal/interfaces/http/handler/api/
   main_test.go      → TestMain, var testSrv, testOnPremSrv, testAdminTok (login admin sungguhan via seeder)
-  mustTenantOwner   → token ASLI ber-tid lewat alur login → tenant → subscribe → switch-tenant
+  mustCompanyOwner   → token ASLI ber-cid lewat alur login → company → subscribe → switch-company
   testutil_test.go  → adminHeader, userHeader (fake), mustCreateSolution, mustCreateUser, mustLogin,
-                      mustLoginNewUser, mustCreateClient, mustServiceToken, mustCreateTenant,
-                      mustTenantOwner, tenantToken (fake, kasus khusus), principalUser, mustCreateCompany,
-                      mustCreateBenefit, mustCreatePlan, mustCreateAddon, mustSubscribe, mustSwitchTenant,
+                      mustLoginNewUser, mustCreateClient, mustServiceToken, mustCreateCompany,
+                      mustCreateBranch, mustCompanyOwner, companyToken (fake, kasus khusus), principalUser,
+                      mustCreateBenefit, mustCreatePlan, mustCreateAddon, mustSubscribe, mustSwitchCompany,
                       countEvents, ...
                       (helper lewat API, prefix must)
   Catatan: FakeAuthenticator.ServiceToken tidak melewati validasi client di DB — untuk skenario
@@ -344,10 +347,10 @@ internal/interfaces/http/handler/api/
 ### Menjalankan test
 ```bash
 go test ./internal/interfaces/http/handler/api/... -count=1 -timeout 300s
-go test ./internal/interfaces/http/handler/api/ -run "TestTenant" -v -timeout 120s
+go test ./internal/interfaces/http/handler/api/ -run "TestCompany" -v -timeout 120s
 go test ./... -count=1
 # atau via Makefile
-make test-handler RUN=TestTenant
+make test-handler RUN=TestCompany
 make test            # semua
 make lint            # golangci-lint v2 via Docker
 ```
@@ -363,9 +366,9 @@ Docker harus jalan (testcontainers).
 ## 10. Penamaan File Migrasi (Wajib Timestamp)
 
 ```bash
-make migrate-create NAME=create_tenants
-# internal/migrations/20261014120000_create_tenants.up.sql
-# internal/migrations/20261014120000_create_tenants.down.sql
+make migrate-create NAME=create_companies
+# internal/migrations/20261014120000_create_companies.up.sql
+# internal/migrations/20261014120000_create_companies.down.sql
 ```
 
 - Jangan buat file migrasi manual dengan nomor urut; selalu pakai `make migrate-create`.

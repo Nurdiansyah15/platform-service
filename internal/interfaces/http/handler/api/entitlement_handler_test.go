@@ -12,8 +12,8 @@ import (
 	"platform-service/internal/testhelper"
 )
 
-func entitlementsPath(tenantID, solutionID string) string {
-	return "/api/v1/tenants/" + tenantID + "/solutions/" + solutionID + "/entitlements"
+func entitlementsPath(companyID, solutionID string) string {
+	return "/api/v1/companies/" + companyID + "/solutions/" + solutionID + "/entitlements"
 }
 
 type entitlementData struct {
@@ -35,9 +35,9 @@ type entitlementsData struct {
 	Entitlements []entitlementData `json:"entitlements"`
 }
 
-func getEntitlements(t *testing.T, tenantID, solutionID string, h map[string]string) (entitlementsData, map[string]entitlementData) {
+func getEntitlements(t *testing.T, companyID, solutionID string, h map[string]string) (entitlementsData, map[string]entitlementData) {
 	t.Helper()
-	w := testSrv.GET(entitlementsPath(tenantID, solutionID), h)
+	w := testSrv.GET(entitlementsPath(companyID, solutionID), h)
 	require.Equal(t, 200, w.Code, w.Body.String())
 	var got entitlementsData
 	testhelper.DecodeBody(t, w, &got)
@@ -56,24 +56,24 @@ func TestEntitlement_List_Unauthenticated(t *testing.T) {
 
 func TestEntitlement_List_Forbidden(t *testing.T) {
 	f := newSubFixture(t)
-	mustSubscribe(t, f.tenantID, f.basicPlan)
+	mustSubscribe(t, f.companyID, f.basicPlan)
 
-	strangerH, _, _ := mustTenantOwner(t)
-	assert.Equal(t, 403, testSrv.GET(entitlementsPath(f.tenantID, f.solutionID), strangerH).Code, "user tenant lain")
+	strangerH, _, _ := mustCompanyOwner(t)
+	assert.Equal(t, 403, testSrv.GET(entitlementsPath(f.companyID, f.solutionID), strangerH).Code, "user company lain")
 
 	other := newSubFixture(t)
 	foreign := testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, other.solutionID, "entitlements:read"), ""))
-	assert.Equal(t, 403, testSrv.GET(entitlementsPath(f.tenantID, f.solutionID), foreign).Code, "service solution lain")
+	assert.Equal(t, 403, testSrv.GET(entitlementsPath(f.companyID, f.solutionID), foreign).Code, "service solution lain")
 
 	noScope := testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, f.solutionID, "usage:write"), ""))
-	assert.Equal(t, 403, testSrv.GET(entitlementsPath(f.tenantID, f.solutionID), noScope).Code, "tanpa entitlements:read")
+	assert.Equal(t, 403, testSrv.GET(entitlementsPath(f.companyID, f.solutionID), noScope).Code, "tanpa entitlements:read")
 }
 
 func TestEntitlement_List_NotFound(t *testing.T) {
 	f := newSubFixture(t)
-	assert.Equal(t, 404, testSrv.GET(entitlementsPath(uuid.NewString(), f.solutionID), adminHeader()).Code, "tenant")
-	assert.Equal(t, 404, testSrv.GET(entitlementsPath(f.tenantID, uuid.NewString()), adminHeader()).Code, "solution")
-	assert.Equal(t, 404, testSrv.GET(entitlementsPath(f.tenantID, f.solutionID)+"/tidak_ada", adminHeader()).Code, "benefit")
+	assert.Equal(t, 404, testSrv.GET(entitlementsPath(uuid.NewString(), f.solutionID), adminHeader()).Code, "company")
+	assert.Equal(t, 404, testSrv.GET(entitlementsPath(f.companyID, uuid.NewString()), adminHeader()).Code, "solution")
+	assert.Equal(t, 404, testSrv.GET(entitlementsPath(f.companyID, f.solutionID)+"/tidak_ada", adminHeader()).Code, "benefit")
 	assert.Equal(t, 422, testSrv.GET(entitlementsPath("bukan-uuid", f.solutionID), adminHeader()).Code)
 }
 
@@ -81,7 +81,7 @@ func TestEntitlement_List_NotFound(t *testing.T) {
 
 func TestEntitlement_List_NoSubscription(t *testing.T) {
 	f := newSubFixture(t)
-	got, byCode := getEntitlements(t, f.tenantID, f.solutionID, adminHeader())
+	got, byCode := getEntitlements(t, f.companyID, f.solutionID, adminHeader())
 	assert.Nil(t, got.Subscription)
 	require.Len(t, got.Entitlements, 2)
 	assert.False(t, byCode["max_employees"].Granted)
@@ -90,11 +90,11 @@ func TestEntitlement_List_NoSubscription(t *testing.T) {
 
 func TestEntitlement_List_PlanPlusAddonQuantity(t *testing.T) {
 	f := newSubFixture(t)
-	subID := mustSubscribe(t, f.tenantID, f.basicPlan) // basic: max_employees=10, tanpa payroll
-	addonID := addonFixture(t, f)                      // extra-employees: max_employees=50
+	subID := mustSubscribe(t, f.companyID, f.basicPlan) // basic: max_employees=10, tanpa payroll
+	addonID := addonFixture(t, f)                       // extra-employees: max_employees=50
 	require.Equal(t, 201, testSrv.POST(subscriptionPath(subID, "addons"), map[string]any{"addon_id": addonID, "quantity": 2}, adminHeader()).Code)
 
-	got, byCode := getEntitlements(t, f.tenantID, f.solutionID, adminHeader())
+	got, byCode := getEntitlements(t, f.companyID, f.solutionID, adminHeader())
 	require.NotNil(t, got.Subscription)
 	assert.Equal(t, subID, got.Subscription.ID)
 
@@ -105,7 +105,7 @@ func TestEntitlement_List_PlanPlusAddonQuantity(t *testing.T) {
 	// Add-on dibatalkan → tidak dihitung lagi.
 	_, err := testSrv.DB.ExecContext(context.Background(), `UPDATE subscription_addons SET status = 'canceled' WHERE subscription_id = $1`, subID)
 	require.NoError(t, err)
-	_, byCode = getEntitlements(t, f.tenantID, f.solutionID, adminHeader())
+	_, byCode = getEntitlements(t, f.companyID, f.solutionID, adminHeader())
 	assert.JSONEq(t, `10`, string(byCode["max_employees"].Value))
 }
 
@@ -113,9 +113,9 @@ func TestEntitlement_List_Unlimited(t *testing.T) {
 	f := newSubFixture(t)
 	enterprise := mustCreatePlan(t, f.solutionID, "enterprise", nil)
 	mustReplacePlanBenefits(t, enterprise, map[string]any{f.maxEmp: -1, f.payroll: true})
-	mustSubscribe(t, f.tenantID, enterprise)
+	mustSubscribe(t, f.companyID, enterprise)
 
-	_, byCode := getEntitlements(t, f.tenantID, f.solutionID, adminHeader())
+	_, byCode := getEntitlements(t, f.companyID, f.solutionID, adminHeader())
 	assert.True(t, byCode["max_employees"].Unlimited)
 	assert.JSONEq(t, `-1`, string(byCode["max_employees"].Value))
 	assert.Nil(t, byCode["max_employees"].Limit)
@@ -124,23 +124,23 @@ func TestEntitlement_List_Unlimited(t *testing.T) {
 
 func TestEntitlement_List_CanceledSubscriptionNotGranted(t *testing.T) {
 	f := newSubFixture(t)
-	subID := mustSubscribe(t, f.tenantID, f.proPlan)
+	subID := mustSubscribe(t, f.companyID, f.proPlan)
 	require.Equal(t, 200, testSrv.POST(subscriptionPath(subID, "cancel"), nil, adminHeader()).Code)
 
-	got, byCode := getEntitlements(t, f.tenantID, f.solutionID, adminHeader())
+	got, byCode := getEntitlements(t, f.companyID, f.solutionID, adminHeader())
 	assert.Nil(t, got.Subscription)
 	assert.False(t, byCode["payroll_module"].Granted)
 }
 
 func TestEntitlement_AccessibleByMemberAndService(t *testing.T) {
-	h, _, tenantID := mustTenantOwner(t)
+	h, _, companyID := mustCompanyOwner(t)
 	var solutionID string
 	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
-		`SELECT solution_id FROM subscriptions WHERE tenant_id = $1`, tenantID).Scan(&solutionID))
+		`SELECT solution_id FROM subscriptions WHERE company_id = $1`, companyID).Scan(&solutionID))
 
-	assert.Equal(t, 200, testSrv.GET(entitlementsPath(tenantID, solutionID), h).Code)
+	assert.Equal(t, 200, testSrv.GET(entitlementsPath(companyID, solutionID), h).Code)
 	svc := testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, solutionID, "entitlements:read"), ""))
-	assert.Equal(t, 200, testSrv.GET(entitlementsPath(tenantID, solutionID), svc).Code)
+	assert.Equal(t, 200, testSrv.GET(entitlementsPath(companyID, solutionID), svc).Code)
 }
 
 // ── Metered: limit / used / remaining & usage.limit_reached ──────────────────
@@ -152,11 +152,11 @@ func TestEntitlement_Metered_UsedRemainingAndLimitReachedEvent(t *testing.T) {
 	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
 		`SELECT id FROM benefits WHERE solution_id = $1 AND code = 'api_calls'`, f.solutionID).Scan(&apiCallsID))
 	mustReplacePlanBenefits(t, f.basicPlan, map[string]any{f.maxEmp: 10, apiCallsID: 100})
-	mustSubscribe(t, f.tenantID, f.basicPlan)
+	mustSubscribe(t, f.companyID, f.basicPlan)
 
 	svc := testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, f.solutionID, "usage:write", "entitlements:read"), ""))
 	report := func(qty int) usageData {
-		w := testSrv.POST(usagePath(f.tenantID, f.solutionID), map[string]any{
+		w := testSrv.POST(usagePath(f.companyID, f.solutionID), map[string]any{
 			"benefit_code": "api_calls", "quantity": qty, "idempotency_key": uuid.NewString(),
 		}, svc)
 		require.Equal(t, 201, w.Code, w.Body.String())
@@ -175,7 +175,7 @@ func TestEntitlement_Metered_UsedRemainingAndLimitReachedEvent(t *testing.T) {
 	}
 
 	report(30)
-	w := testSrv.GET(entitlementsPath(f.tenantID, f.solutionID)+"/api_calls", svc)
+	w := testSrv.GET(entitlementsPath(f.companyID, f.solutionID)+"/api_calls", svc)
 	require.Equal(t, 200, w.Code, w.Body.String())
 	var ent entitlementData
 	testhelper.DecodeBody(t, w, &ent)
@@ -183,13 +183,13 @@ func TestEntitlement_Metered_UsedRemainingAndLimitReachedEvent(t *testing.T) {
 	assert.Equal(t, "30", *ent.Used)
 	assert.Equal(t, "70", *ent.Remaining)
 	assert.False(t, ent.LimitReached)
-	assert.Equal(t, 0, countEvents(t, "usage.limit_reached", f.tenantID))
+	assert.Equal(t, 0, countEvents(t, "usage.limit_reached", f.companyID))
 
 	report(70) // tepat mencapai limit → event
 	report(5)  // sudah di atas limit → tidak ada event baru
-	assert.Equal(t, 1, countEvents(t, "usage.limit_reached", f.tenantID))
+	assert.Equal(t, 1, countEvents(t, "usage.limit_reached", f.companyID))
 
-	_, byCode := getEntitlements(t, f.tenantID, f.solutionID, svc)
+	_, byCode := getEntitlements(t, f.companyID, f.solutionID, svc)
 	assert.Equal(t, "105", *byCode["api_calls"].Used)
 	assert.Equal(t, "0", *byCode["api_calls"].Remaining)
 	assert.True(t, byCode["api_calls"].LimitReached)

@@ -29,7 +29,6 @@ import (
 	"platform-service/internal/app/usecase/solutionclient"
 	"platform-service/internal/app/usecase/subscription"
 	"platform-service/internal/app/usecase/system"
-	"platform-service/internal/app/usecase/tenant"
 	"platform-service/internal/app/usecase/usage"
 	"platform-service/internal/app/usecase/user"
 	"platform-service/internal/app/usecase/webhook"
@@ -108,10 +107,9 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	userRepo := persistence.NewPostgresUserRepository(opts.DB)
 	sessionRepo := persistence.NewPostgresAuthSessionRepository(opts.DB)
 	clientRepo := persistence.NewPostgresSolutionClientRepository(opts.DB)
-	tenantRepo := persistence.NewPostgresTenantRepository(opts.DB)
-	memberRepo := persistence.NewPostgresTenantMemberRepository(opts.DB)
-	tenantQuery := persistence.NewPostgresTenantQuery(opts.DB)
 	companyRepo := persistence.NewPostgresCompanyRepository(opts.DB)
+	memberRepo := persistence.NewPostgresCompanyMemberRepository(opts.DB)
+	companyQuery := persistence.NewPostgresCompanyQuery(opts.DB)
 	branchRepo := persistence.NewPostgresBranchRepository(opts.DB)
 	orgQuery := persistence.NewPostgresOrganizationQuery(opts.DB)
 	benefitRepo := persistence.NewPostgresBenefitRepository(opts.DB)
@@ -128,7 +126,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	benefitValueSource := persistence.NewPostgresBenefitValueSource(opts.DB)
 	subscriptionQuery := persistence.NewPostgresSubscriptionQuery(opts.DB)
 	usageRecordRepo := persistence.NewPostgresUsageRecordRepository(opts.DB)
-	tenantUsageRepo := persistence.NewPostgresTenantUsageRepository(opts.DB)
+	companyUsageRepo := persistence.NewPostgresCompanyUsageRepository(opts.DB)
 	snapshotReader := persistence.NewPostgresSnapshotReader(opts.DB)
 	permissionRepo := persistence.NewPostgresPermissionRepository(opts.DB)
 	permissionQuery := persistence.NewPostgresPermissionQuery(opts.DB)
@@ -166,7 +164,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Users:           userRepo,
 		Solutions:       solutionRepo,
 		Sessions:        sessionRepo,
-		Tenants:         tenantRepo,
+		Companies:       companyRepo,
 		Members:         memberRepo,
 		Subscriptions:   subscriptionRepo,
 		Selectable:      subscriptionQuery,
@@ -185,30 +183,20 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Logger:    opts.Logger,
 	})
 
-	tenantDeps := tenant.TenantDeps{
-		Tx:      transactor,
-		Outbox:  outbox,
-		Tenants: tenantRepo,
-		Members: memberRepo,
-		Users:   userRepo,
-		Query:   tenantQuery,
-		// AccessPolicy: token service hanya untuk tenant yang subscribe solution-nya.
-		Subscriptions: subscriptionRepo,
-	}
-	tenantUC := tenant.NewTenantUseCase(tenantDeps)
-	memberUC := tenant.NewMemberUseCase(tenantDeps)
 	orgDeps := organization.OrganizationDeps{
-		Tx:        transactor,
-		Outbox:    outbox,
-		Tenants:   tenantRepo,
-		Members:   memberRepo,
-		Companies: companyRepo,
-		Branches:  branchRepo,
-		Query:     orgQuery,
-		// AccessPolicy: token service hanya untuk tenant yang subscribe solution-nya.
+		Tx:           transactor,
+		Outbox:       outbox,
+		Companies:    companyRepo,
+		Members:      memberRepo,
+		Branches:     branchRepo,
+		Users:        userRepo,
+		CompanyQuery: companyQuery,
+		BranchQuery:  orgQuery,
+		// AccessPolicy: token service hanya untuk company yang subscribe solution-nya.
 		Subscriptions: subscriptionRepo,
 	}
 	companyUC := organization.NewCompanyUseCase(orgDeps)
+	memberUC := organization.NewCompanyMemberUseCase(orgDeps)
 	branchUC := organization.NewBranchUseCase(orgDeps)
 	benefitUC := benefit.NewBenefitUseCase(benefit.BenefitDeps{Repo: benefitRepo, Query: benefitQuery, Solutions: solutionRepo})
 	planUC := plan.NewPlanUseCase(plan.PlanDeps{
@@ -234,7 +222,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		SubscriptionAddons: subscriptionAddonRepo,
 		Snapshots:          snapshotRepo,
 		BenefitValues:      benefitValueSource,
-		Tenants:            tenantRepo,
+		Companies:          companyRepo,
 		Members:            memberRepo,
 		Plans:              planRepo,
 		Addons:             addonRepo,
@@ -251,7 +239,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		RolePermissions: rolePermissionRepo,
 		Permissions:     permissionRepo,
 		Solutions:       solutionRepo,
-		Tenants:         tenantRepo,
+		Companies:       companyRepo,
 		Members:         memberRepo,
 		Subscriptions:   subscriptionRepo,
 		Query:           roleQuery,
@@ -261,7 +249,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Outbox:        outbox,
 		Assignments:   assignmentRepo,
 		Grants:        grantReader,
-		Scopes:        authzservice.NewScopeValidator(companyRepo, branchRepo),
+		Scopes:        authzservice.NewScopeValidator(branchRepo),
 		Roles:         roleRepo,
 		Members:       memberRepo,
 		Subscriptions: subscriptionRepo,
@@ -271,18 +259,18 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	entitlementUC := entitlement.NewEntitlementUseCase(entitlement.EntitlementDeps{
 		Benefits:      benefitRepo,
 		Solutions:     solutionRepo,
-		Tenants:       tenantRepo,
+		Companies:     companyRepo,
 		Members:       memberRepo,
 		Subscriptions: subscriptionRepo,
 		Resolver:      entitlementResolver,
-		TenantUsage:   tenantUsageRepo,
+		CompanyUsage:  companyUsageRepo,
 	})
 	usageUC := usage.NewUsageUseCase(usage.UsageDeps{
 		Tx:            transactor,
 		Outbox:        outbox,
 		Resolver:      entitlementResolver,
 		Records:       usageRecordRepo,
-		TenantUsage:   tenantUsageRepo,
+		CompanyUsage:  companyUsageRepo,
 		Benefits:      benefitRepo,
 		Clients:       clientRepo,
 		Subscriptions: subscriptionRepo,
@@ -328,8 +316,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 			Auth:     api.NewAuthHandler(authUC),
 			User:     api.NewUserHandler(userUC),
 			Client:   api.NewSolutionClientHandler(clientUC),
-			Tenant:   api.NewTenantHandler(tenantUC, memberUC),
-			Org:      api.NewOrganizationHandler(companyUC, branchUC),
+			Org:      api.NewOrganizationHandler(companyUC, memberUC, branchUC),
 			Benefit:  api.NewBenefitHandler(benefitUC),
 			Plan:     api.NewPlanHandler(planUC),
 			Addon:    api.NewAddonHandler(addonUC),

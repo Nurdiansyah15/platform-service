@@ -10,9 +10,9 @@ import (
 	ententity "platform-service/internal/domain/entitlement/entity"
 	entservice "platform-service/internal/domain/entitlement/service"
 	domainerr "platform-service/internal/domain/errors"
+	orgconstant "platform-service/internal/domain/organization/constant"
+	orgservice "platform-service/internal/domain/organization/service"
 	solutionconstant "platform-service/internal/domain/solution/constant"
-	tenantconstant "platform-service/internal/domain/tenant/constant"
-	tenantservice "platform-service/internal/domain/tenant/service"
 )
 
 func mapEntitlementDomainError(err error) error {
@@ -21,19 +21,19 @@ func mapEntitlementDomainError(err error) error {
 		return apperror.Internal(string(apperror.CodeInternal), err)
 	}
 	switch de.Code {
-	case benefitconstant.CodeBenefitNotFound, solutionconstant.CodeSolutionNotFound, tenantconstant.CodeTenantNotFound:
+	case benefitconstant.CodeBenefitNotFound, solutionconstant.CodeSolutionNotFound, orgconstant.CodeCompanyNotFound:
 		return apperror.NotFound(string(de.Code))
-	case tenantconstant.CodeTenantNotSelected:
-		return apperror.Forbidden(apperror.MsgTenantNotSelected)
-	case tenantconstant.CodeTenantAccessDenied:
+	case orgconstant.CodeCompanyNotSelected:
+		return apperror.Forbidden(apperror.MsgCompanyNotSelected)
+	case orgconstant.CodeCompanyAccessDenied:
 		return apperror.Forbidden(string(de.Code))
 	default:
 		return apperror.Internal(string(de.Code), err)
 	}
 }
 
-func accessorOf(p *principal.Principal) tenantservice.Accessor {
-	a := tenantservice.Accessor{UserID: p.UserID, ActiveTenantID: p.TenantID, IsPlatformAdmin: p.IsUser() && p.IsPlatformAdmin}
+func accessorOf(p *principal.Principal) orgservice.Accessor {
+	a := orgservice.Accessor{UserID: p.UserID, ActiveCompanyID: p.CompanyID, IsPlatformAdmin: p.IsUser() && p.IsPlatformAdmin}
 	if p.IsService() {
 		a.ServiceSolutionID = p.SolutionID
 	}

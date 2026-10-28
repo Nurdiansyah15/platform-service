@@ -64,7 +64,7 @@ func TestNewUsageRecord_Rules(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := entity.NewUsageRecord(entity.NewUsageRecordParams{
-				TenantID: "t", Benefit: benefit(t, tt.metering, ""), Mode: tt.mode, Quantity: qty(t, tt.quantity), IdempotencyKey: key,
+				CompanyID: "t", Benefit: benefit(t, tt.metering, ""), Mode: tt.mode, Quantity: qty(t, tt.quantity), IdempotencyKey: key,
 			}, time.Now())
 			if tt.want == "" {
 				assert.NoError(t, err)

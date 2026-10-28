@@ -22,7 +22,7 @@ func NewPostgresRoleRepository(db *sql.DB) *PostgresRoleRepository {
 
 func (r *PostgresRoleRepository) Save(ctx context.Context, role *entity.Role) error {
 	const q = `
-		INSERT INTO roles (id, solution_id, tenant_id, code, name, description, is_system, created_at, updated_at, deleted_at)
+		INSERT INTO roles (id, solution_id, company_id, code, name, description, is_system, created_at, updated_at, deleted_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (id) DO UPDATE SET
 			code = EXCLUDED.code,
@@ -33,7 +33,7 @@ func (r *PostgresRoleRepository) Save(ctx context.Context, role *entity.Role) er
 		RETURNING created_at, updated_at`
 
 	err := execFromContext(ctx, r.db).QueryRowContext(ctx, q,
-		role.ID, role.SolutionID, role.TenantID, role.Code.Value(), role.Name, role.Description, role.IsSystem,
+		role.ID, role.SolutionID, role.CompanyID, role.Code.Value(), role.Name, role.Description, role.IsSystem,
 		role.CreatedAt, role.UpdatedAt, role.DeletedAt,
 	).Scan(&role.CreatedAt, &role.UpdatedAt)
 	if err != nil {
@@ -51,9 +51,9 @@ func (r *PostgresRoleRepository) FindByID(ctx context.Context, id string) (*enti
 		code string
 	)
 	err := execFromContext(ctx, r.db).QueryRowContext(ctx, `
-		SELECT id, solution_id, tenant_id, code, name, description, is_system, created_at, updated_at, deleted_at
+		SELECT id, solution_id, company_id, code, name, description, is_system, created_at, updated_at, deleted_at
 		FROM roles WHERE id = $1 AND deleted_at IS NULL`, id,
-	).Scan(&role.ID, &role.SolutionID, &role.TenantID, &code, &role.Name, &role.Description, &role.IsSystem,
+	).Scan(&role.ID, &role.SolutionID, &role.CompanyID, &code, &role.Name, &role.Description, &role.IsSystem,
 		&role.CreatedAt, &role.UpdatedAt, &role.DeletedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

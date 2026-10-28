@@ -7,13 +7,13 @@ import (
 )
 
 type SubscriptionRepository interface {
-	// Save insert/update. Subscription live kedua untuk tenant+solution → CodeSubscriptionAlreadyLive.
+	// Save insert/update. Subscription live kedua untuk company+solution → CodeSubscriptionAlreadyLive.
 	Save(ctx context.Context, s *entity.Subscription) error
 	FindByID(ctx context.Context, id string) (*entity.Subscription, error)
-	// HasUsable — tenant punya subscription trialing / active untuk solution.
-	HasUsable(ctx context.Context, tenantID, solutionID string) (bool, error)
-	// FindUsable mengembalikan subscription trialing / active tenant untuk solution.
-	FindUsable(ctx context.Context, tenantID, solutionID string) (*entity.Subscription, error)
+	// HasUsable — company punya subscription trialing / active untuk solution.
+	HasUsable(ctx context.Context, companyID, solutionID string) (bool, error)
+	// FindUsable mengembalikan subscription trialing / active company untuk solution.
+	FindUsable(ctx context.Context, companyID, solutionID string) (*entity.Subscription, error)
 }
 
 type SubscriptionAddonRepository interface {

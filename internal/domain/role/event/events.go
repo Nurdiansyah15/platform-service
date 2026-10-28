@@ -11,7 +11,7 @@ const (
 type RolePayload struct {
 	ID              string    `json:"id"`
 	SolutionID      string    `json:"solution_id"`
-	TenantID        *string   `json:"tenant_id"`
+	CompanyID       *string   `json:"company_id"`
 	Code            string    `json:"code"`
 	Name            string    `json:"name"`
 	IsSystem        bool      `json:"is_system"`

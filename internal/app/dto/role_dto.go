@@ -17,9 +17,9 @@ type RoleIDParam struct {
 	RoleID string `uri:"roleId" binding:"required,uuid"`
 }
 
-type TenantRoleParam struct {
-	TenantID string `uri:"tenantId" binding:"required,uuid"`
-	RoleID   string `uri:"roleId" binding:"required,uuid"`
+type CompanyRoleParam struct {
+	CompanyID string `uri:"companyId" binding:"required,uuid"`
+	RoleID    string `uri:"roleId" binding:"required,uuid"`
 }
 
 // ReplaceRolePermissionsRequest — replace-all: daftar ini menjadi seluruh permission role.
@@ -30,12 +30,12 @@ type ReplaceRolePermissionsRequest struct {
 type RoleResponse struct {
 	ID          string  `json:"id"`
 	SolutionID  string  `json:"solution_id"`
-	TenantID    *string `json:"tenant_id"`
+	CompanyID   *string `json:"company_id"`
 	Code        string  `json:"code"`
 	Name        string  `json:"name"`
 	Description *string `json:"description"`
 	IsSystem    bool    `json:"is_system"`
-	// Scope — "system" | "global" | "tenant".
+	// Scope — "system" | "global" | "company".
 	Scope     string    `json:"scope"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

@@ -9,21 +9,21 @@ import (
 	"platform-service/internal/app/dto"
 	"platform-service/internal/app/port"
 	domainerr "platform-service/internal/domain/errors"
-	"platform-service/internal/domain/tenant/constant"
+	"platform-service/internal/domain/organization/constant"
 )
 
-// PostgresTenantQuery implements port.TenantQueryReadModel.
-type PostgresTenantQuery struct {
+// PostgresCompanyQuery implements port.CompanyQueryReadModel.
+type PostgresCompanyQuery struct {
 	db *sql.DB
 }
 
-func NewPostgresTenantQuery(db *sql.DB) *PostgresTenantQuery {
-	return &PostgresTenantQuery{db: db}
+func NewPostgresCompanyQuery(db *sql.DB) *PostgresCompanyQuery {
+	return &PostgresCompanyQuery{db: db}
 }
 
 var (
-	tenantSortable = map[string]string{"name": "t.name", "slug": "t.slug", "created_at": "t.created_at"}
-	memberSortable = map[string]string{"email": "u.email", "name": "u.name", "joined_at": "m.joined_at"}
+	companySortable = map[string]string{"name": "c.name", "slug": "c.slug", "created_at": "c.created_at"}
+	memberSortable  = map[string]string{"email": "u.email", "name": "u.name", "joined_at": "m.joined_at"}
 )
 
 // whereBuilder mengumpulkan kondisi WHERE dengan placeholder berurutan.
@@ -53,85 +53,85 @@ func likePattern(s string) string {
 	return "%" + r.Replace(strings.TrimSpace(s)) + "%"
 }
 
-func (r *PostgresTenantQuery) ListTenants(ctx context.Context, q port.TenantListReadQuery) ([]port.TenantReadItem, dto.Meta, error) {
-	limit, offset, page, sortColumn, sortType := resolvePaginationParams(q.PaginationParams, 20, 100, tenantSortable, "t.name", "asc")
+func (r *PostgresCompanyQuery) ListCompanies(ctx context.Context, q port.CompanyListReadQuery) ([]port.CompanyReadItem, dto.Meta, error) {
+	limit, offset, page, sortColumn, sortType := resolvePaginationParams(q.PaginationParams, 20, 100, companySortable, "c.name", "asc")
 
 	var w whereBuilder
 	if q.MemberUserID != nil {
-		w.add(`EXISTS (SELECT 1 FROM tenant_members m WHERE m.tenant_id = t.id AND m.user_id = $%d AND m.status = 'active')`, *q.MemberUserID)
+		w.add(`EXISTS (SELECT 1 FROM company_members m WHERE m.company_id = c.id AND m.user_id = $%d AND m.status = 'active')`, *q.MemberUserID)
 	}
 	if q.Status != nil {
-		w.add(`t.status = $%d`, *q.Status)
+		w.add(`c.status = $%d`, *q.Status)
 	}
 	if q.Search != nil && strings.TrimSpace(*q.Search) != "" {
-		w.add(`(t.name ILIKE $%d OR t.slug ILIKE $%d)`, likePattern(*q.Search), likePattern(*q.Search))
+		w.add(`(c.name ILIKE $%d OR c.slug ILIKE $%d)`, likePattern(*q.Search), likePattern(*q.Search))
 	}
 
 	exec := execFromContext(ctx, r.db)
 	var total int64
-	if err := exec.QueryRowContext(ctx, `SELECT COUNT(*) FROM tenants t `+w.sql(), w.args...).Scan(&total); err != nil {
-		return nil, dto.Meta{}, domainerr.Wrap(constant.CodeTenantQueryFailed, err)
+	if err := exec.QueryRowContext(ctx, `SELECT COUNT(*) FROM companies c `+w.sql(), w.args...).Scan(&total); err != nil {
+		return nil, dto.Meta{}, domainerr.Wrap(constant.CodeCompanyQueryFailed, err)
 	}
 
 	rows, err := exec.QueryContext(ctx, fmt.Sprintf(
-		`SELECT t.id, t.name, t.slug, t.status, t.created_at, t.updated_at FROM tenants t %s
-		 ORDER BY %s %s, t.id LIMIT %d OFFSET %d`, w.sql(), sortColumn, sortType, limit, offset), w.args...)
+		`SELECT c.id, c.name, c.slug, c.status, c.created_at, c.updated_at FROM companies c %s
+		 ORDER BY %s %s, c.id LIMIT %d OFFSET %d`, w.sql(), sortColumn, sortType, limit, offset), w.args...)
 	if err != nil {
-		return nil, dto.Meta{}, domainerr.Wrap(constant.CodeTenantQueryFailed, err)
+		return nil, dto.Meta{}, domainerr.Wrap(constant.CodeCompanyQueryFailed, err)
 	}
 	defer rows.Close()
 
-	items := make([]port.TenantReadItem, 0, limit)
+	items := make([]port.CompanyReadItem, 0, limit)
 	for rows.Next() {
-		var it port.TenantReadItem
+		var it port.CompanyReadItem
 		if err := rows.Scan(&it.ID, &it.Name, &it.Slug, &it.Status, &it.CreatedAt, &it.UpdatedAt); err != nil {
-			return nil, dto.Meta{}, domainerr.Wrap(constant.CodeTenantQueryFailed, err)
+			return nil, dto.Meta{}, domainerr.Wrap(constant.CodeCompanyQueryFailed, err)
 		}
 		items = append(items, it)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, dto.Meta{}, domainerr.Wrap(constant.CodeTenantQueryFailed, err)
+		return nil, dto.Meta{}, domainerr.Wrap(constant.CodeCompanyQueryFailed, err)
 	}
 	return items, dto.NewMeta(page, limit, total), nil
 }
 
-func (r *PostgresTenantQuery) ListMembers(ctx context.Context, q port.TenantMemberListReadQuery) ([]port.TenantMemberReadItem, dto.Meta, error) {
+func (r *PostgresCompanyQuery) ListMembers(ctx context.Context, q port.CompanyMemberListReadQuery) ([]port.CompanyMemberReadItem, dto.Meta, error) {
 	limit, offset, page, sortColumn, sortType := resolvePaginationParams(q.PaginationParams, 20, 100, memberSortable, "m.joined_at", "asc")
 
 	var w whereBuilder
-	w.add(`m.tenant_id = $%d`, q.TenantID)
+	w.add(`m.company_id = $%d`, q.CompanyID)
 	if q.Status != nil {
 		w.add(`m.status = $%d`, *q.Status)
 	}
 	if q.Search != nil && strings.TrimSpace(*q.Search) != "" {
 		w.add(`(u.email ILIKE $%d OR u.name ILIKE $%d)`, likePattern(*q.Search), likePattern(*q.Search))
 	}
-	from := `FROM tenant_members m JOIN users u ON u.id = m.user_id ` + w.sql()
+	from := `FROM company_members m JOIN users u ON u.id = m.user_id ` + w.sql()
 
 	exec := execFromContext(ctx, r.db)
 	var total int64
 	if err := exec.QueryRowContext(ctx, `SELECT COUNT(*) `+from, w.args...).Scan(&total); err != nil {
-		return nil, dto.Meta{}, domainerr.Wrap(constant.CodeTenantQueryFailed, err)
+		return nil, dto.Meta{}, domainerr.Wrap(constant.CodeCompanyQueryFailed, err)
 	}
 
 	rows, err := exec.QueryContext(ctx, fmt.Sprintf(
 		`SELECT m.user_id, u.email, u.name, m.status, m.joined_at %s ORDER BY %s %s, m.user_id LIMIT %d OFFSET %d`,
 		from, sortColumn, sortType, limit, offset), w.args...)
 	if err != nil {
-		return nil, dto.Meta{}, domainerr.Wrap(constant.CodeTenantQueryFailed, err)
+		return nil, dto.Meta{}, domainerr.Wrap(constant.CodeCompanyQueryFailed, err)
 	}
 	defer rows.Close()
 
-	items := make([]port.TenantMemberReadItem, 0, limit)
+	items := make([]port.CompanyMemberReadItem, 0, limit)
 	for rows.Next() {
-		var it port.TenantMemberReadItem
+		var it port.CompanyMemberReadItem
 		if err := rows.Scan(&it.UserID, &it.Email, &it.Name, &it.Status, &it.JoinedAt); err != nil {
-			return nil, dto.Meta{}, domainerr.Wrap(constant.CodeTenantQueryFailed, err)
+			return nil, dto.Meta{}, domainerr.Wrap(constant.CodeCompanyQueryFailed, err)
 		}
 		items = append(items, it)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, dto.Meta{}, domainerr.Wrap(constant.CodeTenantQueryFailed, err)
+		return nil, dto.Meta{}, domainerr.Wrap(constant.CodeCompanyQueryFailed, err)
 	}
 	return items, dto.NewMeta(page, limit, total), nil
 }

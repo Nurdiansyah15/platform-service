@@ -38,7 +38,7 @@ func isDomainCode(err error, code domainerr.Code) bool {
 	return errors.As(err, &de) && de.Code == code
 }
 
-func toResponse(b *benefitentity.Benefit, r *entity.UsageRecord, tu *entity.TenantUsage, limit *big.Rat, replayed bool) *dto.UsageReportResponse {
+func toResponse(b *benefitentity.Benefit, r *entity.UsageRecord, tu *entity.CompanyUsage, limit *big.Rat, replayed bool) *dto.UsageReportResponse {
 	resp := &dto.UsageReportResponse{
 		BenefitCode: b.Code.Value(),
 		Mode:        string(r.Mode),

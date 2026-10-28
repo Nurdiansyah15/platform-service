@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	companyentity "platform-service/internal/domain/organization/entity"
 	permentity "platform-service/internal/domain/permission/entity"
 	"platform-service/internal/domain/role/constant"
 	"platform-service/internal/domain/role/entity"
-	tenantentity "platform-service/internal/domain/tenant/entity"
 	"platform-service/internal/infrastructure/persistence"
 	"platform-service/internal/testhelper"
 )
@@ -28,9 +28,9 @@ func TestPostgresRoleRepositories(t *testing.T) {
 		}
 
 		solA, solB := seedSolutionTx(t, ctx), seedSolutionTx(t, ctx)
-		tn, err := tenantentity.NewTenant("R", testhelper.UniqueCode("r"), time.Now())
+		tn, err := companyentity.NewCompany("R", testhelper.UniqueCode("r"), time.Now())
 		require.NoError(t, err)
-		require.NoError(t, persistence.NewPostgresTenantRepository(testDB).Save(ctx, tn))
+		require.NoError(t, persistence.NewPostgresCompanyRepository(testDB).Save(ctx, tn))
 
 		roles := persistence.NewPostgresRoleRepository(testDB)
 		rolePerms := persistence.NewPostgresRolePermissionRepository(testDB)
@@ -39,18 +39,18 @@ func TestPostgresRoleRepositories(t *testing.T) {
 		global, err := entity.NewRole(entity.NewRoleParams{SolutionID: solA, Code: "viewer", Name: "Viewer"}, time.Now())
 		require.NoError(t, err)
 		require.NoError(t, roles.Save(ctx, global))
-		custom, err := entity.NewRole(entity.NewRoleParams{SolutionID: solA, TenantID: &tn.ID, Code: "viewer", Name: "Viewer"}, time.Now())
+		custom, err := entity.NewRole(entity.NewRoleParams{SolutionID: solA, CompanyID: &tn.ID, Code: "viewer", Name: "Viewer"}, time.Now())
 		require.NoError(t, err)
-		require.NoError(t, roles.Save(ctx, custom), "code sama boleh: global vs custom tenant")
+		require.NoError(t, roles.Save(ctx, custom), "code sama boleh: global vs custom company")
 
 		savepoint("dup_global", func() {
 			dup, err := entity.NewRole(entity.NewRoleParams{SolutionID: solA, Code: "viewer", Name: "Dup"}, time.Now())
 			require.NoError(t, err)
 			testhelper.AssertDomainError(t, roles.Save(ctx, dup), constant.CodeRoleCodeDuplicate)
 		})
-		savepoint("system_tenant", func() {
+		savepoint("system_company", func() {
 			_, err := tx.ExecContext(ctx, `UPDATE roles SET is_system = TRUE WHERE id = $1`, custom.ID)
-			assert.Error(t, err, "CHECK: role sistem tidak boleh milik tenant")
+			assert.Error(t, err, "CHECK: role sistem tidak boleh milik company")
 		})
 
 		mkPerm := func(solutionID, code string) *permentity.Permission {

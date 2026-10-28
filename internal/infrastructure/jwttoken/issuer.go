@@ -33,7 +33,7 @@ func (i *Issuer) IssueUserToken(ctx context.Context, c port.UserTokenClaims) (po
 		Sub: c.UserID,
 		Aud: c.SolutionCode,
 		Typ: typUser,
-		Tid: c.TenantID,
+		Cid: c.CompanyID,
 		Sid: c.SessionID,
 	})
 }

@@ -12,11 +12,11 @@ import (
 	"platform-service/internal/domain/authsession/entity"
 	sessionrepo "platform-service/internal/domain/authsession/repository"
 	domainerr "platform-service/internal/domain/errors"
+	orgconstant "platform-service/internal/domain/organization/constant"
+	orgrepo "platform-service/internal/domain/organization/repository"
 	solutionentity "platform-service/internal/domain/solution/entity"
 	solutionrepo "platform-service/internal/domain/solution/repository"
 	subrepo "platform-service/internal/domain/subscription/repository"
-	tenantconstant "platform-service/internal/domain/tenant/constant"
-	tenantrepo "platform-service/internal/domain/tenant/repository"
 	userrepo "platform-service/internal/domain/user/repository"
 )
 
@@ -24,8 +24,8 @@ type AuthDeps struct {
 	Users           userrepo.UserRepository
 	Solutions       solutionrepo.SolutionRepository
 	Sessions        sessionrepo.AuthSessionRepository
-	Tenants         tenantrepo.TenantRepository
-	Members         tenantrepo.TenantMemberRepository
+	Companies       orgrepo.CompanyRepository
+	Members         orgrepo.CompanyMemberRepository
 	Subscriptions   subrepo.SubscriptionRepository
 	Selectable      port.SubscriptionQueryReadModel
 	Hasher          port.PasswordHasher
@@ -78,21 +78,21 @@ func (uc *AuthUseCase) Login(ctx context.Context, req dto.LoginRequest, client d
 	if err != nil {
 		return nil, mapAuthDomainError(err)
 	}
-	// Spec §2.7: bila user hanya punya satu tenant yang bisa dipilih untuk solution
-	// ini, tenant tersebut langsung menjadi tenant aktif sesi.
-	selectable, err := uc.deps.Selectable.ListSelectableTenants(ctx, u.ID, sol.ID)
+	// Spec §2.7: bila user hanya punya satu company yang bisa dipilih untuk solution
+	// ini, company tersebut langsung menjadi company aktif sesi.
+	selectable, err := uc.deps.Selectable.ListSelectableCompanies(ctx, u.ID, sol.ID)
 	if err != nil {
 		return nil, mapAuthDomainError(err)
 	}
-	var tenantID *string
+	var companyID *string
 	if len(selectable) == 1 {
-		tenantID = &selectable[0].ID
+		companyID = &selectable[0].ID
 	}
 
 	session, err := entity.NewAuthSession(entity.NewAuthSessionParams{
 		UserID:           u.ID,
 		SolutionID:       sol.ID,
-		TenantID:         tenantID,
+		CompanyID:        companyID,
 		RefreshTokenHash: refreshHash,
 		UserAgent:        client.UserAgent,
 		IPAddress:        client.IPAddress,
@@ -133,9 +133,9 @@ func (uc *AuthUseCase) Refresh(ctx context.Context, req dto.RefreshTokenRequest)
 	if err != nil || !sol.IsActive() {
 		return nil, invalid
 	}
-	// Spec §2.7: refresh ditolak bila membership atau tenant aktif sesi tidak lagi active.
-	if session.TenantID != nil {
-		if ok, err := uc.tenantStillAccessible(ctx, u.ID, *session.TenantID); err != nil {
+	// Spec §2.7: refresh ditolak bila membership atau company aktif sesi tidak lagi active.
+	if session.CompanyID != nil {
+		if ok, err := uc.companyStillAccessible(ctx, u.ID, *session.CompanyID); err != nil {
 			return nil, mapAuthDomainError(err)
 		} else if !ok {
 			return nil, invalid
@@ -196,40 +196,40 @@ func (uc *AuthUseCase) Me(ctx context.Context, actor *principal.Principal) (*dto
 		Session: dto.SessionResponse{
 			ID:        session.ID,
 			Solution:  dto.SolutionSummary{ID: sol.ID, Code: sol.Code.Value(), Name: sol.Name},
-			TenantID:  session.TenantID,
+			CompanyID: session.CompanyID,
 			ExpiresAt: session.ExpiresAt,
 			CreatedAt: session.CreatedAt,
 		},
 	}, nil
 }
 
-// Tenants menampilkan tenant yang bisa dipilih untuk solution sesi: user member active,
-// tenant active, dan tenant subscribe solution (trialing / active).
+// Companies menampilkan company yang bisa dipilih untuk solution sesi: user member active,
+// company active, dan company subscribe solution (trialing / active).
 //
-// Required — auth: user (tid boleh kosong) | scope: -
-func (uc *AuthUseCase) Tenants(ctx context.Context, actor *principal.Principal) ([]dto.SelectableTenantResponse, error) {
+// Required — auth: user (cid boleh kosong) | scope: -
+func (uc *AuthUseCase) Companies(ctx context.Context, actor *principal.Principal) ([]dto.SelectableCompanyResponse, error) {
 	session, err := uc.deps.Sessions.FindByID(ctx, actor.SessionID)
 	if err != nil {
 		return nil, mapAuthDomainError(err)
 	}
-	items, err := uc.deps.Selectable.ListSelectableTenants(ctx, actor.UserID, session.SolutionID)
+	items, err := uc.deps.Selectable.ListSelectableCompanies(ctx, actor.UserID, session.SolutionID)
 	if err != nil {
 		return nil, mapAuthDomainError(err)
 	}
-	out := make([]dto.SelectableTenantResponse, 0, len(items))
+	out := make([]dto.SelectableCompanyResponse, 0, len(items))
 	for _, it := range items {
-		out = append(out, dto.SelectableTenantResponse{
-			ID: it.ID, Name: it.Name, Slug: it.Slug, Status: it.Status, IsActive: it.ID == actor.TenantID,
+		out = append(out, dto.SelectableCompanyResponse{
+			ID: it.ID, Name: it.Name, Slug: it.Slug, Status: it.Status, IsActive: it.ID == actor.CompanyID,
 		})
 	}
 	return out, nil
 }
 
-// SwitchTenant mengganti tenant aktif sesi lalu menerbitkan access & refresh token baru
+// SwitchCompany mengganti company aktif sesi lalu menerbitkan access & refresh token baru
 // (spec §2.7). Refresh token lama tidak berlaku lagi.
 //
-// Required — auth: user (tid boleh kosong) | scope: -
-func (uc *AuthUseCase) SwitchTenant(ctx context.Context, actor *principal.Principal, req dto.SwitchTenantRequest) (*dto.AuthTokenResponse, error) {
+// Required — auth: user (cid boleh kosong) | scope: -
+func (uc *AuthUseCase) SwitchCompany(ctx context.Context, actor *principal.Principal, req dto.SwitchCompanyRequest) (*dto.AuthTokenResponse, error) {
 	session, err := uc.deps.Sessions.FindByID(ctx, actor.SessionID)
 	if err != nil {
 		return nil, mapAuthDomainError(err)
@@ -239,15 +239,15 @@ func (uc *AuthUseCase) SwitchTenant(ctx context.Context, actor *principal.Princi
 		return nil, mapAuthDomainError(err)
 	}
 
-	notSelectable := mapAuthDomainError(domainerr.New(constant.CodeTenantNotSelectable))
-	ok, err := uc.tenantStillAccessible(ctx, actor.UserID, req.TenantID)
+	notSelectable := mapAuthDomainError(domainerr.New(constant.CodeCompanyNotSelectable))
+	ok, err := uc.companyStillAccessible(ctx, actor.UserID, req.CompanyID)
 	if err != nil {
 		return nil, mapAuthDomainError(err)
 	}
 	if !ok {
 		return nil, notSelectable
 	}
-	usable, err := uc.deps.Subscriptions.HasUsable(ctx, req.TenantID, session.SolutionID)
+	usable, err := uc.deps.Subscriptions.HasUsable(ctx, req.CompanyID, session.SolutionID)
 	if err != nil {
 		return nil, mapAuthDomainError(err)
 	}
@@ -259,7 +259,7 @@ func (uc *AuthUseCase) SwitchTenant(ctx context.Context, actor *principal.Princi
 	if err != nil {
 		return nil, mapAuthDomainError(err)
 	}
-	previousHash, err := session.SwitchTenant(req.TenantID, refreshHash, uc.deps.RefreshTokenTTL, uc.now())
+	previousHash, err := session.SwitchCompany(req.CompanyID, refreshHash, uc.deps.RefreshTokenTTL, uc.now())
 	if err != nil {
 		return nil, mapAuthDomainError(err)
 	}
@@ -272,11 +272,11 @@ func (uc *AuthUseCase) SwitchTenant(ctx context.Context, actor *principal.Princi
 	return uc.issueTokens(ctx, session, sol.Code.Value(), refreshToken)
 }
 
-// tenantStillAccessible — tenant ada & active dan user member active-nya.
-func (uc *AuthUseCase) tenantStillAccessible(ctx context.Context, userID, tenantID string) (bool, error) {
-	t, err := uc.deps.Tenants.FindByID(ctx, tenantID)
+// companyStillAccessible — company ada & active dan user member active-nya.
+func (uc *AuthUseCase) companyStillAccessible(ctx context.Context, userID, companyID string) (bool, error) {
+	t, err := uc.deps.Companies.FindByID(ctx, companyID)
 	if err != nil {
-		if isDomainCode(err, tenantconstant.CodeTenantNotFound) {
+		if isDomainCode(err, orgconstant.CodeCompanyNotFound) {
 			return false, nil
 		}
 		return false, err
@@ -284,9 +284,9 @@ func (uc *AuthUseCase) tenantStillAccessible(ctx context.Context, userID, tenant
 	if !t.IsActive() {
 		return false, nil
 	}
-	m, err := uc.deps.Members.Find(ctx, tenantID, userID)
+	m, err := uc.deps.Members.Find(ctx, companyID, userID)
 	if err != nil {
-		if isDomainCode(err, tenantconstant.CodeMemberNotFound) {
+		if isDomainCode(err, orgconstant.CodeMemberNotFound) {
 			return false, nil
 		}
 		return false, err
@@ -310,7 +310,7 @@ func (uc *AuthUseCase) ResolveUserPrincipal(ctx context.Context, p *principal.Pr
 	if err := session.EnsureUsable(uc.now()); err != nil {
 		return nil, err
 	}
-	if session.UserID != p.UserID || derefString(session.TenantID) != p.TenantID {
+	if session.UserID != p.UserID || derefString(session.CompanyID) != p.CompanyID {
 		return nil, invalid
 	}
 
@@ -353,7 +353,7 @@ func (uc *AuthUseCase) issueTokens(ctx context.Context, s *entity.AuthSession, s
 	access, err := uc.deps.Tokens.IssueUserToken(ctx, port.UserTokenClaims{
 		UserID:       s.UserID,
 		SolutionCode: solutionCode,
-		TenantID:     derefString(s.TenantID),
+		CompanyID:    derefString(s.CompanyID),
 		SessionID:    s.ID,
 	})
 	if err != nil {
@@ -367,6 +367,6 @@ func (uc *AuthUseCase) issueTokens(ctx context.Context, s *entity.AuthSession, s
 		RefreshToken:          refreshToken,
 		RefreshTokenExpiresAt: s.ExpiresAt,
 		SessionID:             s.ID,
-		TenantID:              s.TenantID,
+		CompanyID:             s.CompanyID,
 	}, nil
 }

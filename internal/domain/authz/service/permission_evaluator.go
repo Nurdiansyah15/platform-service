@@ -1,4 +1,3 @@
-// Package service berisi domain service otorisasi.
 package service
 
 import (
@@ -9,13 +8,12 @@ import (
 )
 
 // Evaluate menentukan apakah grants memberi permission pada scope yang ditanyakan.
-// Hierarki scope (keputusan Fase 15):
-//   - assignment tenant  → berlaku di seluruh tenant (tenant, company, branch apa pun)
+// Hierarki scope (keputusan Fase 15; company = entitas tertinggi):
 //   - assignment company → berlaku untuk company itu dan branch-branch di bawahnya
 //   - assignment branch  → hanya branch itu
 //
-// Cek di level tenant hanya dipenuhi assignment level tenant. Mengembalikan code role
-// (unik, terurut) yang memberi izin.
+// Cek di level company hanya dipenuhi assignment level company. Mengembalikan code
+// role (unik, terurut) yang memberi izin.
 func Evaluate(grants []entity.Grant, permission string, check entity.CheckScope) (bool, []string) {
 	roles := map[string]bool{}
 	for _, g := range grants {
@@ -36,8 +34,6 @@ func Evaluate(grants []entity.Grant, permission string, check entity.CheckScope)
 
 func covers(granted valueobject.Scope, check entity.CheckScope) bool {
 	switch granted.Type {
-	case valueobject.ScopeTenant:
-		return true
 	case valueobject.ScopeCompany:
 		switch check.Scope.Type {
 		case valueobject.ScopeCompany:

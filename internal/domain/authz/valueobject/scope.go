@@ -8,18 +8,17 @@ import (
 type ScopeType string
 
 const (
-	ScopeTenant  ScopeType = "tenant"
 	ScopeCompany ScopeType = "company"
 	ScopeBranch  ScopeType = "branch"
 )
 
-// NewScopeType — kosong → tenant.
+// NewScopeType — kosong → company.
 func NewScopeType(raw string) (ScopeType, error) {
 	if raw == "" {
-		return ScopeTenant, nil
+		return ScopeCompany, nil
 	}
 	switch s := ScopeType(raw); s {
-	case ScopeTenant, ScopeCompany, ScopeBranch:
+	case ScopeCompany, ScopeBranch:
 		return s, nil
 	default:
 		return "", domainerr.New(constant.CodeScopeTypeInvalid)

@@ -27,8 +27,8 @@ type AuthTokenResponse struct {
 	RefreshToken          string    `json:"refresh_token"`
 	RefreshTokenExpiresAt time.Time `json:"refresh_token_expires_at"`
 	SessionID             string    `json:"session_id"`
-	// TenantID tenant aktif; null bila user belum memilih tenant (diisi mulai Fase 10).
-	TenantID *string `json:"tenant_id"`
+	// CompanyID company aktif; null bila user belum memilih company (diisi mulai Fase 10).
+	CompanyID *string `json:"company_id"`
 }
 
 type MeResponse struct {
@@ -39,7 +39,7 @@ type MeResponse struct {
 type SessionResponse struct {
 	ID        string          `json:"id"`
 	Solution  SolutionSummary `json:"solution"`
-	TenantID  *string         `json:"tenant_id"`
+	CompanyID *string         `json:"company_id"`
 	ExpiresAt time.Time       `json:"expires_at"`
 	CreatedAt time.Time       `json:"created_at"`
 }
@@ -50,15 +50,15 @@ type SolutionSummary struct {
 	Name string `json:"name"`
 }
 
-type SwitchTenantRequest struct {
-	TenantID string `json:"tenant_id" binding:"required,uuid"`
+type SwitchCompanyRequest struct {
+	CompanyID string `json:"company_id" binding:"required,uuid"`
 }
 
-type SelectableTenantResponse struct {
+type SelectableCompanyResponse struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Slug   string `json:"slug"`
 	Status string `json:"status"`
-	// IsActive — tenant ini adalah tenant aktif token saat ini.
+	// IsActive — company ini adalah company aktif token saat ini.
 	IsActive bool `json:"is_active"`
 }

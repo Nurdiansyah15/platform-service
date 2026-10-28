@@ -20,7 +20,7 @@ type payload struct {
 	Exp   int64  `json:"exp"`
 	Jti   string `json:"jti"`
 	Typ   string `json:"typ"`
-	Tid   string `json:"tid,omitempty"`
+	Cid   string `json:"cid,omitempty"`
 	Sid   string `json:"sid,omitempty"`
 	Sol   string `json:"sol,omitempty"`
 	Scope string `json:"scope,omitempty"`
@@ -30,7 +30,7 @@ type payload struct {
 type parsedClaims struct {
 	jwt.RegisteredClaims
 	Typ   string `json:"typ"`
-	Tid   string `json:"tid"`
+	Cid   string `json:"cid"`
 	Sid   string `json:"sid"`
 	Sol   string `json:"sol"`
 	Scope string `json:"scope"`

@@ -8,7 +8,7 @@ const (
 	CodeRoleCodeInvalid          domainerr.Code = "DOMAIN_ROLE_CODE_INVALID"
 	CodeRoleNameInvalid          domainerr.Code = "DOMAIN_ROLE_NAME_INVALID"
 	CodeRoleSystemImmutable      domainerr.Code = "DOMAIN_ROLE_SYSTEM_IMMUTABLE"
-	CodeRoleTenantNotSubscribed  domainerr.Code = "DOMAIN_ROLE_TENANT_NOT_SUBSCRIBED"
+	CodeRoleCompanyNotSubscribed domainerr.Code = "DOMAIN_ROLE_COMPANY_NOT_SUBSCRIBED"
 	CodeRolePermissionUnknown    domainerr.Code = "DOMAIN_ROLE_PERMISSION_UNKNOWN"
 	CodeRolePermissionDuplicate  domainerr.Code = "DOMAIN_ROLE_PERMISSION_DUPLICATE"
 	CodeRolePermissionDeprecated domainerr.Code = "DOMAIN_ROLE_PERMISSION_DEPRECATED"

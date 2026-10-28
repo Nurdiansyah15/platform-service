@@ -5,13 +5,13 @@ import (
 	"time"
 )
 
-type TenantSolutionParam struct {
-	TenantID   string `uri:"tenantId" binding:"required,uuid"`
+type CompanySolutionParam struct {
+	CompanyID  string `uri:"companyId" binding:"required,uuid"`
 	SolutionID string `uri:"solutionId" binding:"required,uuid"`
 }
 
-type TenantSolutionBenefitParam struct {
-	TenantID    string `uri:"tenantId" binding:"required,uuid"`
+type CompanySolutionBenefitParam struct {
+	CompanyID   string `uri:"companyId" binding:"required,uuid"`
 	SolutionID  string `uri:"solutionId" binding:"required,uuid"`
 	BenefitCode string `uri:"benefitCode" binding:"required,max=100"`
 }

@@ -88,7 +88,7 @@ func (d *Dispatcher) send(ctx context.Context, dl *entity.Delivery) (int, error)
 	if err != nil {
 		return 0, fmt.Errorf("webhook: dekripsi secret: %w", err)
 	}
-	body, err := json.Marshal(toEventItem(dl.EventID, dl.EventType, dl.TenantID, dl.SolutionID, dl.OccurredAt, dl.Payload))
+	body, err := json.Marshal(toEventItem(dl.EventID, dl.EventType, dl.CompanyID, dl.SolutionID, dl.OccurredAt, dl.Payload))
 	if err != nil {
 		return 0, fmt.Errorf("webhook: marshal body: %w", err)
 	}

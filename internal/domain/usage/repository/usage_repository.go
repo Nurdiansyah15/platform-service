@@ -14,11 +14,11 @@ type UsageRecordRepository interface {
 	FindByIdempotencyKey(ctx context.Context, solutionID, key string) (*entity.UsageRecord, error)
 }
 
-type TenantUsageRepository interface {
+type CompanyUsageRepository interface {
 	// AddDelta menambah used secara atomik (upsert) dan mengembalikan hasilnya.
-	AddDelta(ctx context.Context, r *entity.UsageRecord, period entity.Period) (*entity.TenantUsage, error)
+	AddDelta(ctx context.Context, r *entity.UsageRecord, period entity.Period) (*entity.CompanyUsage, error)
 	// SetAbsolute menimpa used, kecuali laporan lebih lama dari last_occurred_at.
-	SetAbsolute(ctx context.Context, r *entity.UsageRecord, period entity.Period) (*entity.TenantUsage, error)
+	SetAbsolute(ctx context.Context, r *entity.UsageRecord, period entity.Period) (*entity.CompanyUsage, error)
 	// Get mengembalikan (nil, nil) bila belum ada pemakaian pada periode tersebut.
-	Get(ctx context.Context, tenantID, benefitID string, periodStart time.Time) (*entity.TenantUsage, error)
+	Get(ctx context.Context, companyID, benefitID string, periodStart time.Time) (*entity.CompanyUsage, error)
 }

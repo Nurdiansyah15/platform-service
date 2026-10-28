@@ -8,6 +8,9 @@ import (
 	"platform-service/internal/app/port"
 	"platform-service/internal/app/principal"
 	domainerr "platform-service/internal/domain/errors"
+	orgconstant "platform-service/internal/domain/organization/constant"
+	orgrepo "platform-service/internal/domain/organization/repository"
+	orgservice "platform-service/internal/domain/organization/service"
 	permrepo "platform-service/internal/domain/permission/repository"
 	"platform-service/internal/domain/role/constant"
 	"platform-service/internal/domain/role/entity"
@@ -17,9 +20,6 @@ import (
 	solutionconstant "platform-service/internal/domain/solution/constant"
 	solutionrepo "platform-service/internal/domain/solution/repository"
 	subrepo "platform-service/internal/domain/subscription/repository"
-	tenantconstant "platform-service/internal/domain/tenant/constant"
-	tenantrepo "platform-service/internal/domain/tenant/repository"
-	tenantservice "platform-service/internal/domain/tenant/service"
 )
 
 type RoleDeps struct {
@@ -29,25 +29,25 @@ type RoleDeps struct {
 	RolePermissions rolerepo.RolePermissionRepository
 	Permissions     permrepo.PermissionRepository
 	Solutions       solutionrepo.SolutionRepository
-	Tenants         tenantrepo.TenantRepository
-	Members         tenantrepo.TenantMemberRepository
+	Companies       orgrepo.CompanyRepository
+	Members         orgrepo.CompanyMemberRepository
 	Subscriptions   subrepo.SubscriptionRepository
 	Query           port.RoleQueryReadModel
 }
 
 type RoleUseCase struct {
 	deps   RoleDeps
-	access *tenantservice.AccessPolicy
+	access *orgservice.AccessPolicy
 	now    func() time.Time
 }
 
 func NewRoleUseCase(deps RoleDeps) *RoleUseCase {
-	return &RoleUseCase{deps: deps, access: tenantservice.NewAccessPolicy(deps.Members, deps.Subscriptions), now: time.Now}
+	return &RoleUseCase{deps: deps, access: orgservice.NewAccessPolicy(deps.Members, deps.Subscriptions), now: time.Now}
 }
 
 // ── Role global (platform) ───────────────────────────────────────────────────
 
-// ListGlobal menampilkan role global solution (tenant_id NULL).
+// ListGlobal menampilkan role global solution (company_id NULL).
 //
 // Required — auth: user / service (token valid apa pun) | scope: -
 func (uc *RoleUseCase) ListGlobal(ctx context.Context, actor *principal.Principal, solutionID string, req dto.ListRoleQuery) ([]dto.RoleResponse, dto.Meta, error) {
@@ -67,7 +67,7 @@ func (uc *RoleUseCase) CreateGlobal(ctx context.Context, solutionID string, req 
 	return uc.create(ctx, entity.NewRoleParams{SolutionID: solutionID, Code: req.Code, Name: req.Name, Description: req.Description})
 }
 
-// ListPermissions menampilkan permission role. Custom role hanya untuk tenant pemilik
+// ListPermissions menampilkan permission role. Custom role hanya untuk company pemilik
 // (selain itu 404).
 //
 // Required — auth: user / service | scope: -
@@ -80,14 +80,14 @@ func (uc *RoleUseCase) ListPermissions(ctx context.Context, actor *principal.Pri
 		if err := uc.ensureSolutionVisible(ctx, actor, r.SolutionID); err != nil {
 			return nil, mapRoleDomainError(domainerr.New(constant.CodeRoleNotFound))
 		}
-	} else if err := uc.ensureTenantRoleAccess(ctx, actor, *r.TenantID, r); err != nil {
+	} else if err := uc.ensureCompanyRoleAccess(ctx, actor, *r.CompanyID, r); err != nil {
 		return nil, err
 	}
 	return uc.permissions(ctx, r.ID)
 }
 
 // ReplaceGlobalPermissions mengganti seluruh permission role global. Role sistem tidak
-// bisa diubah; custom role tenant harus lewat endpoint tenant (404 di sini).
+// bisa diubah; custom role company harus lewat endpoint company (404 di sini).
 //
 // Required — auth: user (platform admin) | scope: -
 func (uc *RoleUseCase) ReplaceGlobalPermissions(ctx context.Context, roleID string, req dto.ReplaceRolePermissionsRequest) ([]dto.RolePermissionResponse, error) {
@@ -101,49 +101,49 @@ func (uc *RoleUseCase) ReplaceGlobalPermissions(ctx context.Context, roleID stri
 	return uc.replacePermissions(ctx, r, req.PermissionCodes)
 }
 
-// ── Role custom tenant ───────────────────────────────────────────────────────
+// ── Role custom company ───────────────────────────────────────────────────────
 
-// ListForTenant menampilkan role global + custom role milik tenant untuk solution.
+// ListForCompany menampilkan role global + custom role milik company untuk solution.
 //
 // Required — auth: user (platform admin / member dengan tid) atau service milik solution | scope: roles:write
-func (uc *RoleUseCase) ListForTenant(ctx context.Context, actor *principal.Principal, tenantID, solutionID string, req dto.ListRoleQuery) ([]dto.RoleResponse, dto.Meta, error) {
-	if err := uc.ensureTenantSolutionAccess(ctx, actor, tenantID, solutionID); err != nil {
+func (uc *RoleUseCase) ListForCompany(ctx context.Context, actor *principal.Principal, companyID, solutionID string, req dto.ListRoleQuery) ([]dto.RoleResponse, dto.Meta, error) {
+	if err := uc.ensureCompanySolutionAccess(ctx, actor, companyID, solutionID); err != nil {
 		return nil, dto.Meta{}, err
 	}
-	return uc.list(ctx, port.RoleListReadQuery{SolutionID: solutionID, TenantID: &tenantID, Search: req.Search, PaginationParams: req.PaginationParams})
+	return uc.list(ctx, port.RoleListReadQuery{SolutionID: solutionID, CompanyID: &companyID, Search: req.Search, PaginationParams: req.PaginationParams})
 }
 
-// CreateForTenant membuat custom role milik tenant. Tenant wajib subscribe solution
+// CreateForCompany membuat custom role milik company. Company wajib subscribe solution
 // (trialing / active).
 //
 // Required — auth: user (platform admin / member dengan tid) atau service milik solution | scope: roles:write
-func (uc *RoleUseCase) CreateForTenant(ctx context.Context, actor *principal.Principal, tenantID, solutionID string, req dto.CreateRoleRequest) (*dto.RoleResponse, error) {
-	if err := uc.ensureTenantSolutionAccess(ctx, actor, tenantID, solutionID); err != nil {
+func (uc *RoleUseCase) CreateForCompany(ctx context.Context, actor *principal.Principal, companyID, solutionID string, req dto.CreateRoleRequest) (*dto.RoleResponse, error) {
+	if err := uc.ensureCompanySolutionAccess(ctx, actor, companyID, solutionID); err != nil {
 		return nil, err
 	}
-	ok, err := uc.deps.Subscriptions.HasUsable(ctx, tenantID, solutionID)
+	ok, err := uc.deps.Subscriptions.HasUsable(ctx, companyID, solutionID)
 	if err != nil {
 		return nil, mapRoleDomainError(err)
 	}
 	if !ok {
-		return nil, mapRoleDomainError(domainerr.New(constant.CodeRoleTenantNotSubscribed))
+		return nil, mapRoleDomainError(domainerr.New(constant.CodeRoleCompanyNotSubscribed))
 	}
-	return uc.create(ctx, entity.NewRoleParams{SolutionID: solutionID, TenantID: &tenantID, Code: req.Code, Name: req.Name, Description: req.Description})
+	return uc.create(ctx, entity.NewRoleParams{SolutionID: solutionID, CompanyID: &companyID, Code: req.Code, Name: req.Name, Description: req.Description})
 }
 
-// ReplaceTenantRolePermissions mengganti permission custom role milik tenant. Role global
-// atau milik tenant lain → 404.
+// ReplaceCompanyRolePermissions mengganti permission custom role milik company. Role global
+// atau milik company lain → 404.
 //
 // Required — auth: user (platform admin / member dengan tid) atau service milik solution | scope: roles:write
-func (uc *RoleUseCase) ReplaceTenantRolePermissions(ctx context.Context, actor *principal.Principal, tenantID, roleID string, req dto.ReplaceRolePermissionsRequest) ([]dto.RolePermissionResponse, error) {
-	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), tenantID); err != nil {
+func (uc *RoleUseCase) ReplaceCompanyRolePermissions(ctx context.Context, actor *principal.Principal, companyID, roleID string, req dto.ReplaceRolePermissionsRequest) ([]dto.RolePermissionResponse, error) {
+	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), companyID); err != nil {
 		return nil, mapRoleDomainError(err)
 	}
 	r, err := uc.deps.Roles.FindByID(ctx, roleID)
 	if err != nil {
 		return nil, mapRoleDomainError(err)
 	}
-	if !r.IsOwnedBy(tenantID) || (actor.IsService() && actor.SolutionID != r.SolutionID) {
+	if !r.IsOwnedBy(companyID) || (actor.IsService() && actor.SolutionID != r.SolutionID) {
 		return nil, mapRoleDomainError(domainerr.New(constant.CodeRoleNotFound))
 	}
 	return uc.replacePermissions(ctx, r, req.PermissionCodes)
@@ -211,8 +211,8 @@ func (uc *RoleUseCase) list(ctx context.Context, q port.RoleListReadQuery) ([]dt
 	out := make([]dto.RoleResponse, 0, len(items))
 	for _, it := range items {
 		out = append(out, dto.RoleResponse{
-			ID: it.ID, SolutionID: it.SolutionID, TenantID: it.TenantID, Code: it.Code, Name: it.Name,
-			Description: it.Description, IsSystem: it.IsSystem, Scope: roleScope(it.TenantID, it.IsSystem),
+			ID: it.ID, SolutionID: it.SolutionID, CompanyID: it.CompanyID, Code: it.Code, Name: it.Name,
+			Description: it.Description, IsSystem: it.IsSystem, Scope: roleScope(it.CompanyID, it.IsSystem),
 			CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt,
 		})
 	}
@@ -243,29 +243,29 @@ func (uc *RoleUseCase) ensureSolutionVisible(ctx context.Context, actor *princip
 	return nil
 }
 
-// ensureTenantSolutionAccess — token service hanya untuk solution miliknya; akses tenant
-// via AccessPolicy; tenant & solution harus ada.
-func (uc *RoleUseCase) ensureTenantSolutionAccess(ctx context.Context, actor *principal.Principal, tenantID, solutionID string) error {
+// ensureCompanySolutionAccess — token service hanya untuk solution miliknya; akses company
+// via AccessPolicy; company & solution harus ada.
+func (uc *RoleUseCase) ensureCompanySolutionAccess(ctx context.Context, actor *principal.Principal, companyID, solutionID string) error {
 	if actor.IsService() && actor.SolutionID != solutionID {
-		return mapRoleDomainError(domainerr.New(tenantconstant.CodeTenantAccessDenied))
+		return mapRoleDomainError(domainerr.New(orgconstant.CodeCompanyAccessDenied))
 	}
-	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), tenantID); err != nil {
+	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), companyID); err != nil {
 		return mapRoleDomainError(err)
 	}
-	if _, err := uc.deps.Tenants.FindByID(ctx, tenantID); err != nil {
+	if _, err := uc.deps.Companies.FindByID(ctx, companyID); err != nil {
 		return mapRoleDomainError(err)
 	}
 	return uc.ensureSolutionVisible(ctx, actor, solutionID)
 }
 
-// ensureTenantRoleAccess — akses custom role lewat ID: ditolak → 404.
-func (uc *RoleUseCase) ensureTenantRoleAccess(ctx context.Context, actor *principal.Principal, tenantID string, r *entity.Role) error {
+// ensureCompanyRoleAccess — akses custom role lewat ID: ditolak → 404.
+func (uc *RoleUseCase) ensureCompanyRoleAccess(ctx context.Context, actor *principal.Principal, companyID string, r *entity.Role) error {
 	notFound := mapRoleDomainError(domainerr.New(constant.CodeRoleNotFound))
 	if actor.IsService() && actor.SolutionID != r.SolutionID {
 		return notFound
 	}
-	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), tenantID); err != nil {
-		if isDomainCode(err, tenantconstant.CodeTenantAccessDenied) {
+	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), companyID); err != nil {
+		if isDomainCode(err, orgconstant.CodeCompanyAccessDenied) {
 			return notFound
 		}
 		return mapRoleDomainError(err)

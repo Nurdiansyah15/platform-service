@@ -15,10 +15,10 @@ import (
 	entevent "platform-service/internal/domain/entitlement/event"
 	entservice "platform-service/internal/domain/entitlement/service"
 	domainerr "platform-service/internal/domain/errors"
+	orgrepo "platform-service/internal/domain/organization/repository"
+	orgservice "platform-service/internal/domain/organization/service"
 	clientrepo "platform-service/internal/domain/solutionclient/repository"
 	subrepo "platform-service/internal/domain/subscription/repository"
-	tenantrepo "platform-service/internal/domain/tenant/repository"
-	tenantservice "platform-service/internal/domain/tenant/service"
 	"platform-service/internal/domain/usage/constant"
 	"platform-service/internal/domain/usage/entity"
 	usagerepo "platform-service/internal/domain/usage/repository"
@@ -31,47 +31,47 @@ type UsageDeps struct {
 	Outbox        port.EventOutbox
 	Resolver      *entservice.Resolver
 	Records       usagerepo.UsageRecordRepository
-	TenantUsage   usagerepo.TenantUsageRepository
+	CompanyUsage  usagerepo.CompanyUsageRepository
 	Benefits      benefitrepo.BenefitRepository
 	Clients       clientrepo.SolutionClientRepository
 	Subscriptions subrepo.SubscriptionRepository
-	Members       tenantrepo.TenantMemberRepository
+	Members       orgrepo.CompanyMemberRepository
 }
 
 type UsageUseCase struct {
 	deps   UsageDeps
-	access *tenantservice.AccessPolicy
+	access *orgservice.AccessPolicy
 	now    func() time.Time
 }
 
 func NewUsageUseCase(deps UsageDeps) *UsageUseCase {
-	return &UsageUseCase{deps: deps, access: tenantservice.NewAccessPolicy(deps.Members, deps.Subscriptions), now: time.Now}
+	return &UsageUseCase{deps: deps, access: orgservice.NewAccessPolicy(deps.Members, deps.Subscriptions), now: time.Now}
 }
 
 // ReportDelta mencatat pemakaian benefit counter (used = used + quantity).
 // Idempotent per (solution, idempotency_key).
 //
 // Required — auth: service | scope: usage:write
-func (uc *UsageUseCase) ReportDelta(ctx context.Context, actor *principal.Principal, tenantID, solutionID string, req dto.ReportUsageDeltaRequest) (*dto.UsageReportResponse, error) {
-	return uc.report(ctx, actor, tenantID, solutionID, req.BenefitCode, valueobject.ModeDelta, req.Quantity, req.IdempotencyKey, req.OccurredAt)
+func (uc *UsageUseCase) ReportDelta(ctx context.Context, actor *principal.Principal, companyID, solutionID string, req dto.ReportUsageDeltaRequest) (*dto.UsageReportResponse, error) {
+	return uc.report(ctx, actor, companyID, solutionID, req.BenefitCode, valueobject.ModeDelta, req.Quantity, req.IdempotencyKey, req.OccurredAt)
 }
 
 // ReportAbsolute mencatat nilai pemakaian terkini benefit gauge (used = quantity).
 // Laporan dengan occurred_at lebih lama dari yang sudah diterapkan diabaikan.
 //
 // Required — auth: service | scope: usage:write
-func (uc *UsageUseCase) ReportAbsolute(ctx context.Context, actor *principal.Principal, tenantID, solutionID, benefitCode string, req dto.ReportUsageAbsoluteRequest) (*dto.UsageReportResponse, error) {
-	return uc.report(ctx, actor, tenantID, solutionID, benefitCode, valueobject.ModeAbsolute, req.Quantity, req.IdempotencyKey, req.OccurredAt)
+func (uc *UsageUseCase) ReportAbsolute(ctx context.Context, actor *principal.Principal, companyID, solutionID, benefitCode string, req dto.ReportUsageAbsoluteRequest) (*dto.UsageReportResponse, error) {
+	return uc.report(ctx, actor, companyID, solutionID, benefitCode, valueobject.ModeAbsolute, req.Quantity, req.IdempotencyKey, req.OccurredAt)
 }
 
-func (uc *UsageUseCase) report(ctx context.Context, actor *principal.Principal, tenantID, solutionID, benefitCode string,
+func (uc *UsageUseCase) report(ctx context.Context, actor *principal.Principal, companyID, solutionID, benefitCode string,
 	mode valueobject.Mode, rawQty json.RawMessage, rawKey string, occurredAt *time.Time) (*dto.UsageReportResponse, error) {
 
-	// Client hanya boleh melaporkan usage solution miliknya, untuk tenant yang subscribe.
+	// Client hanya boleh melaporkan usage solution miliknya, untuk company yang subscribe.
 	if actor.SolutionID != solutionID {
 		return nil, mapUsageDomainError(domainerr.New(constant.CodeUsageSolutionMismatch))
 	}
-	if err := uc.access.EnsureCanAccess(ctx, tenantservice.Accessor{ServiceSolutionID: actor.SolutionID}, tenantID); err != nil {
+	if err := uc.access.EnsureCanAccess(ctx, orgservice.Accessor{ServiceSolutionID: actor.SolutionID}, companyID); err != nil {
 		return nil, mapUsageDomainError(domainerr.New(constant.CodeUsageNoSubscription))
 	}
 
@@ -94,7 +94,7 @@ func (uc *UsageUseCase) report(ctx context.Context, actor *principal.Principal, 
 
 	now := uc.now()
 	params := entity.NewUsageRecordParams{
-		TenantID: tenantID, Benefit: b, Mode: mode, Quantity: qty, IdempotencyKey: key, ReportedByClientID: client.ID,
+		CompanyID: companyID, Benefit: b, Mode: mode, Quantity: qty, IdempotencyKey: key, ReportedByClientID: client.ID,
 	}
 	if occurredAt != nil {
 		params.OccurredAt = *occurredAt
@@ -103,18 +103,18 @@ func (uc *UsageUseCase) report(ctx context.Context, actor *principal.Principal, 
 	if err != nil {
 		return nil, mapUsageDomainError(err)
 	}
-	period, err := uc.period(ctx, b, tenantID, record.OccurredAt)
+	period, err := uc.period(ctx, b, companyID, record.OccurredAt)
 	if err != nil {
 		return nil, mapUsageDomainError(err)
 	}
 	// Limit efektif benefit ini (untuk event usage.limit_reached).
-	src, err := uc.deps.Resolver.Resolve(ctx, tenantID, solutionID)
+	src, err := uc.deps.Resolver.Resolve(ctx, companyID, solutionID)
 	if err != nil {
 		return nil, mapUsageDomainError(err)
 	}
 	limit := entservice.Calculate(b, src.ByBenefit[b.ID]).Limit
 
-	var current *entity.TenantUsage
+	var current *entity.CompanyUsage
 	err = uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
 		if err := uc.deps.Records.Insert(ctx, record); err != nil {
 			return err
@@ -124,9 +124,9 @@ func (uc *UsageUseCase) report(ctx context.Context, actor *principal.Principal, 
 			return err
 		}
 		if mode == valueobject.ModeDelta {
-			current, err = uc.deps.TenantUsage.AddDelta(ctx, record, period)
+			current, err = uc.deps.CompanyUsage.AddDelta(ctx, record, period)
 		} else {
-			current, err = uc.deps.TenantUsage.SetAbsolute(ctx, record, period)
+			current, err = uc.deps.CompanyUsage.SetAbsolute(ctx, record, period)
 		}
 		if err != nil {
 			return err
@@ -152,16 +152,16 @@ func (uc *UsageUseCase) replay(ctx context.Context, attempted *entity.UsageRecor
 	if !original.SamePayload(attempted) {
 		return nil, mapUsageDomainError(domainerr.New(constant.CodeUsageIdempotencyConflict))
 	}
-	period, err := uc.period(ctx, b, original.TenantID, original.OccurredAt)
+	period, err := uc.period(ctx, b, original.CompanyID, original.OccurredAt)
 	if err != nil {
 		return nil, mapUsageDomainError(err)
 	}
-	current, err := uc.deps.TenantUsage.Get(ctx, original.TenantID, original.BenefitID, period.Start)
+	current, err := uc.deps.CompanyUsage.Get(ctx, original.CompanyID, original.BenefitID, period.Start)
 	if err != nil {
 		return nil, mapUsageDomainError(err)
 	}
 	if current == nil {
-		current = &entity.TenantUsage{Period: period, Used: "0.0000"}
+		current = &entity.CompanyUsage{Period: period, Used: "0.0000"}
 	}
 	return toResponse(b, original, current, limit, true), nil
 }
@@ -169,7 +169,7 @@ func (uc *UsageUseCase) replay(ctx context.Context, attempted *entity.UsageRecor
 // previousUsed membaca pemakaian sebelum laporan diterapkan (di dalam transaksi).
 func (uc *UsageUseCase) previousUsed(ctx context.Context, r *entity.UsageRecord, period entity.Period) (*big.Rat, error) {
 	prev := new(big.Rat)
-	tu, err := uc.deps.TenantUsage.Get(ctx, r.TenantID, r.BenefitID, period.Start)
+	tu, err := uc.deps.CompanyUsage.Get(ctx, r.CompanyID, r.BenefitID, period.Start)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +181,7 @@ func (uc *UsageUseCase) previousUsed(ctx context.Context, r *entity.UsageRecord,
 
 // emitLimitReached menulis usage.limit_reached hanya saat pemakaian melewati limit
 // (sebelumnya < limit, sekarang >= limit), agar tidak dikirim berulang setiap laporan.
-func (uc *UsageUseCase) emitLimitReached(ctx context.Context, b *benefitentity.Benefit, r *entity.UsageRecord, current *entity.TenantUsage, previous, limit *big.Rat) error {
+func (uc *UsageUseCase) emitLimitReached(ctx context.Context, b *benefitentity.Benefit, r *entity.UsageRecord, current *entity.CompanyUsage, previous, limit *big.Rat) error {
 	if limit == nil {
 		return nil
 	}
@@ -191,20 +191,20 @@ func (uc *UsageUseCase) emitLimitReached(ctx context.Context, b *benefitentity.B
 	}
 	return uc.deps.Outbox.Append(ctx, port.OutboxEvent{
 		EventType:  entevent.TypeUsageLimitReached,
-		TenantID:   &r.TenantID,
+		CompanyID:  &r.CompanyID,
 		SolutionID: &r.SolutionID,
 		Payload: entevent.UsageLimitReachedPayload{
-			TenantID: r.TenantID, SolutionID: r.SolutionID, BenefitCode: b.Code.Value(),
+			CompanyID: r.CompanyID, SolutionID: r.SolutionID, BenefitCode: b.Code.Value(),
 			Limit: entservice.FormatRat(limit), Used: entservice.FormatRat(used),
 			PeriodStart: current.Period.Start, PeriodEnd: current.Period.End, OccurredAt: r.OccurredAt,
 		},
 	})
 }
 
-func (uc *UsageUseCase) period(ctx context.Context, b *benefitentity.Benefit, tenantID string, occurredAt time.Time) (entity.Period, error) {
+func (uc *UsageUseCase) period(ctx context.Context, b *benefitentity.Benefit, companyID string, occurredAt time.Time) (entity.Period, error) {
 	var start, end *time.Time
 	if b.UsageReset == benefitvo.UsageResetBillingPeriod {
-		s, err := uc.deps.Subscriptions.FindUsable(ctx, tenantID, b.SolutionID)
+		s, err := uc.deps.Subscriptions.FindUsable(ctx, companyID, b.SolutionID)
 		if err != nil {
 			return entity.Period{}, err
 		}

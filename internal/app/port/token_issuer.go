@@ -5,11 +5,11 @@ import (
 	"time"
 )
 
-// UserTokenClaims — isi token user (spec §2.8). Permission & entitlement tidak dimasukkan.
+// UserTokenClaims — isi token user (spec §2.8). Permission & entitlement cidak dimasukkan.
 type UserTokenClaims struct {
 	UserID       string // sub
 	SolutionCode string // aud
-	TenantID     string // tid, boleh kosong sebelum pilih tenant
+	CompanyID    string // cid, boleh kosong sebelum pilih company
 	SessionID    string // sid
 }
 

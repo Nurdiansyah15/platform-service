@@ -20,11 +20,11 @@ func check(t vo.ScopeType, id, branchCompany string) entity.CheckScope {
 
 func TestEvaluate(t *testing.T) {
 	grants := []entity.Grant{
-		grant("hr_admin", "employee.write", vo.ScopeTenant, "T"),
+		grant("hr_admin", "employee.write", vo.ScopeCompany, "C1"),
 		grant("manager", "leave.approve", vo.ScopeCompany, "C1"),
 		grant("supervisor", "attendance.edit", vo.ScopeBranch, "B1"),
 		grant("viewer", "employee.read", vo.ScopeCompany, "C1"),
-		grant("hr_admin", "employee.read", vo.ScopeTenant, "T"),
+		grant("hr_admin", "employee.read", vo.ScopeCompany, "C1"),
 	}
 
 	tests := []struct {
@@ -34,17 +34,16 @@ func TestEvaluate(t *testing.T) {
 		allowed    bool
 		roles      []string
 	}{
-		{"tenant grant, cek tenant", "employee.write", check(vo.ScopeTenant, "T", ""), true, []string{"hr_admin"}},
-		{"tenant grant berlaku di branch", "employee.write", check(vo.ScopeBranch, "B9", "C9"), true, []string{"hr_admin"}},
+		{"company grant, cek company", "employee.write", check(vo.ScopeCompany, "C1", ""), true, []string{"hr_admin"}},
+		{"company grant berlaku di branch", "employee.write", check(vo.ScopeBranch, "B9", "C1"), true, []string{"hr_admin"}},
 		{"company grant, company sama", "leave.approve", check(vo.ScopeCompany, "C1", ""), true, []string{"manager"}},
 		{"company grant, branch di bawahnya", "leave.approve", check(vo.ScopeBranch, "B1", "C1"), true, []string{"manager"}},
 		{"company grant, company lain", "leave.approve", check(vo.ScopeCompany, "C2", ""), false, nil},
-		{"company grant, cek level tenant", "leave.approve", check(vo.ScopeTenant, "T", ""), false, nil},
 		{"branch grant, branch sama", "attendance.edit", check(vo.ScopeBranch, "B1", "C1"), true, []string{"supervisor"}},
 		{"branch grant, branch lain", "attendance.edit", check(vo.ScopeBranch, "B2", "C1"), false, nil},
 		{"branch grant, cek company induk", "attendance.edit", check(vo.ScopeCompany, "C1", ""), false, nil},
 		{"beberapa role memberi izin", "employee.read", check(vo.ScopeCompany, "C1", ""), true, []string{"hr_admin", "viewer"}},
-		{"permission tidak dimiliki", "payroll.run", check(vo.ScopeTenant, "T", ""), false, nil},
+		{"permission tidak dimiliki", "payroll.run", check(vo.ScopeCompany, "C1", ""), false, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

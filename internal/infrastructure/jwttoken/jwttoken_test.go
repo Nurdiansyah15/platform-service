@@ -94,7 +94,7 @@ func decodeSegment(t *testing.T, token string, idx int) map[string]any {
 func TestUserToken_RoundTrip(t *testing.T) {
 	f := newFixture(t, 15*time.Minute)
 	issued, err := f.issuer.IssueUserToken(context.Background(), port.UserTokenClaims{
-		UserID: "u-1", SolutionCode: "easy-hr", TenantID: "t-1", SessionID: "s-1",
+		UserID: "u-1", SolutionCode: "easy-hr", CompanyID: "t-1", SessionID: "s-1",
 	})
 	require.NoError(t, err)
 	assert.WithinDuration(t, time.Now().Add(15*time.Minute), issued.ExpiresAt, 5*time.Second)
@@ -113,19 +113,19 @@ func TestUserToken_RoundTrip(t *testing.T) {
 	p, err := f.authn.Authenticate(context.Background(), issued.Token)
 	require.NoError(t, err)
 	assert.Equal(t, &principal.Principal{
-		Kind: principal.KindUser, UserID: "u-1", SessionID: "s-1", TenantID: "t-1", SolutionCode: "easy-hr",
+		Kind: principal.KindUser, UserID: "u-1", SessionID: "s-1", CompanyID: "t-1", SolutionCode: "easy-hr",
 	}, p)
 }
 
-func TestUserToken_WithoutTenant(t *testing.T) {
+func TestUserToken_WithoutCompany(t *testing.T) {
 	f := newFixture(t, time.Minute)
 	issued, err := f.issuer.IssueUserToken(context.Background(), port.UserTokenClaims{UserID: "u-1", SolutionCode: "easy-hr", SessionID: "s-1"})
 	require.NoError(t, err)
-	assert.NotContains(t, decodeSegment(t, issued.Token, 1), "tid")
+	assert.NotContains(t, decodeSegment(t, issued.Token, 1), "cid")
 
 	p, err := f.authn.Authenticate(context.Background(), issued.Token)
 	require.NoError(t, err)
-	assert.False(t, p.HasActiveTenant())
+	assert.False(t, p.HasActiveCompany())
 }
 
 func TestServiceToken_RoundTrip(t *testing.T) {

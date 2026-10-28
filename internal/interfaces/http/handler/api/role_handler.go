@@ -85,7 +85,7 @@ func (h *RoleHandler) CreateGlobal(c *gin.Context) {
 // ListPermissions godoc
 //
 //	@Summary		List role permissions
-//	@Description	Custom role hanya terlihat oleh tenant pemiliknya (selain itu 404).
+//	@Description	Custom role hanya terlihat oleh company pemiliknya (selain itu 404).
 //	@Tags			Roles
 //	@Security		BearerAuth
 //	@Produce		json
@@ -140,23 +140,23 @@ func (h *RoleHandler) ReplaceGlobalPermissions(c *gin.Context) {
 	respond.OK(c, "role permissions replaced", items)
 }
 
-// ListForTenant godoc
+// ListForCompany godoc
 //
-//	@Summary	List roles available to a tenant
-//	@Description	Role global + custom role milik tenant untuk solution.
+//	@Summary	List roles available to a company
+//	@Description	Role global + custom role milik company untuk solution.
 //	@Tags		Roles
 //	@Security	BearerAuth
 //	@Produce	json
-//	@Param		tenantId		path		string	true	"Tenant ID"
+//	@Param		companyId		path		string	true	"Company ID"
 //	@Param		solutionId		path		string	true	"Solution ID"
 //	@Param		search			query		string	false	"Cari di code / name"
 //	@Param		page			query		int		false	"Halaman"
 //	@Param		limit			query		int		false	"Jumlah per halaman (default 50, maks 200)"
 //	@Success	200				{object}	respond.SuccessBody{data=[]dto.RoleResponse,meta=dto.Meta}
 //	@Failure	401,403,404,422	{object}	respond.ErrorBody
-//	@Router		/api/v1/tenants/{tenantId}/solutions/{solutionId}/roles [get]
-func (h *RoleHandler) ListForTenant(c *gin.Context) {
-	var param dto.TenantSolutionParam
+//	@Router		/api/v1/companies/{companyId}/solutions/{solutionId}/roles [get]
+func (h *RoleHandler) ListForCompany(c *gin.Context) {
+	var param dto.CompanySolutionParam
 	if err := c.ShouldBindUri(&param); err != nil {
 		httperror.Handle(c, err)
 		return
@@ -167,7 +167,7 @@ func (h *RoleHandler) ListForTenant(c *gin.Context) {
 		return
 	}
 	actor, _ := middleware.PrincipalFrom(c)
-	items, meta, err := h.useCase.ListForTenant(c.Request.Context(), actor, param.TenantID, param.SolutionID, req)
+	items, meta, err := h.useCase.ListForCompany(c.Request.Context(), actor, param.CompanyID, param.SolutionID, req)
 	if err != nil {
 		httperror.Handle(c, err)
 		return
@@ -175,22 +175,22 @@ func (h *RoleHandler) ListForTenant(c *gin.Context) {
 	respond.SuccessWithMeta(c, 200, "roles", items, meta)
 }
 
-// CreateForTenant godoc
+// CreateForCompany godoc
 //
-//	@Summary		Create tenant custom role
-//	@Description	Tenant wajib subscribe solution (trialing / active).
+//	@Summary		Create company custom role
+//	@Description	Company wajib subscribe solution (trialing / active).
 //	@Tags			Roles
 //	@Security		BearerAuth
 //	@Accept			json
 //	@Produce		json
-//	@Param			tenantId			path		string					true	"Tenant ID"
+//	@Param			companyId			path		string					true	"Company ID"
 //	@Param			solutionId			path		string					true	"Solution ID"
 //	@Param			body				body		dto.CreateRoleRequest	true	"Role"
 //	@Success		201					{object}	respond.SuccessBody{data=dto.RoleResponse}
 //	@Failure		401,403,404,409,422	{object}	respond.ErrorBody
-//	@Router			/api/v1/tenants/{tenantId}/solutions/{solutionId}/roles [post]
-func (h *RoleHandler) CreateForTenant(c *gin.Context) {
-	var param dto.TenantSolutionParam
+//	@Router			/api/v1/companies/{companyId}/solutions/{solutionId}/roles [post]
+func (h *RoleHandler) CreateForCompany(c *gin.Context) {
+	var param dto.CompanySolutionParam
 	if err := c.ShouldBindUri(&param); err != nil {
 		httperror.Handle(c, err)
 		return
@@ -201,7 +201,7 @@ func (h *RoleHandler) CreateForTenant(c *gin.Context) {
 		return
 	}
 	actor, _ := middleware.PrincipalFrom(c)
-	resp, err := h.useCase.CreateForTenant(c.Request.Context(), actor, param.TenantID, param.SolutionID, req)
+	resp, err := h.useCase.CreateForCompany(c.Request.Context(), actor, param.CompanyID, param.SolutionID, req)
 	if err != nil {
 		httperror.Handle(c, err)
 		return
@@ -209,22 +209,22 @@ func (h *RoleHandler) CreateForTenant(c *gin.Context) {
 	respond.Created(c, "role created", resp)
 }
 
-// ReplaceTenantRolePermissions godoc
+// ReplaceCompanyRolePermissions godoc
 //
-//	@Summary		Replace tenant custom role permissions
-//	@Description	Hanya custom role milik tenant (role global / tenant lain → 404). Permission harus milik solution yang sama.
+//	@Summary		Replace company custom role permissions
+//	@Description	Hanya custom role milik company (role global / company lain → 404). Permission harus milik solution yang sama.
 //	@Tags			Roles
 //	@Security		BearerAuth
 //	@Accept			json
 //	@Produce		json
-//	@Param			tenantId		path		string								true	"Tenant ID"
+//	@Param			companyId		path		string								true	"Company ID"
 //	@Param			roleId			path		string								true	"Role ID"
 //	@Param			body			body		dto.ReplaceRolePermissionsRequest	true	"Permission codes"
 //	@Success		200				{object}	respond.SuccessBody{data=[]dto.RolePermissionResponse}
 //	@Failure		401,403,404,422	{object}	respond.ErrorBody
-//	@Router			/api/v1/tenants/{tenantId}/roles/{roleId}/permissions [put]
-func (h *RoleHandler) ReplaceTenantRolePermissions(c *gin.Context) {
-	var param dto.TenantRoleParam
+//	@Router			/api/v1/companies/{companyId}/roles/{roleId}/permissions [put]
+func (h *RoleHandler) ReplaceCompanyRolePermissions(c *gin.Context) {
+	var param dto.CompanyRoleParam
 	if err := c.ShouldBindUri(&param); err != nil {
 		httperror.Handle(c, err)
 		return
@@ -235,7 +235,7 @@ func (h *RoleHandler) ReplaceTenantRolePermissions(c *gin.Context) {
 		return
 	}
 	actor, _ := middleware.PrincipalFrom(c)
-	items, err := h.useCase.ReplaceTenantRolePermissions(c.Request.Context(), actor, param.TenantID, param.RoleID, req)
+	items, err := h.useCase.ReplaceCompanyRolePermissions(c.Request.Context(), actor, param.CompanyID, param.RoleID, req)
 	if err != nil {
 		httperror.Handle(c, err)
 		return

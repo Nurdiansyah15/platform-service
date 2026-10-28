@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	benefitentity "platform-service/internal/domain/benefit/entity"
-	tenantentity "platform-service/internal/domain/tenant/entity"
+	companyentity "platform-service/internal/domain/organization/entity"
 	"platform-service/internal/domain/usage/constant"
 	"platform-service/internal/domain/usage/entity"
 	"platform-service/internal/domain/usage/service"
@@ -30,15 +30,15 @@ func TestPostgresUsageRepositories(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, persistence.NewPostgresBenefitRepository(testDB).Save(ctx, gauge))
 
-		tn, err := tenantentity.NewTenant("U", testhelper.UniqueCode("u"), time.Now())
+		tn, err := companyentity.NewCompany("U", testhelper.UniqueCode("u"), time.Now())
 		require.NoError(t, err)
-		require.NoError(t, persistence.NewPostgresTenantRepository(testDB).Save(ctx, tn))
+		require.NoError(t, persistence.NewPostgresCompanyRepository(testDB).Save(ctx, tn))
 		var clientID string
 		require.NoError(t, tx.QueryRowContext(ctx, `INSERT INTO solution_clients (solution_id, name, client_id, client_secret_hash)
 			VALUES ($1, 'c', $2, 'h') RETURNING id`, solutionID, "cli_"+uuid.NewString()[:8]).Scan(&clientID))
 
 		records := persistence.NewPostgresUsageRecordRepository(testDB)
-		usage := persistence.NewPostgresTenantUsageRepository(testDB)
+		usage := persistence.NewPostgresCompanyUsageRepository(testDB)
 
 		report := func(qty string, at time.Time, key string) *entity.UsageRecord {
 			q, err := valueobject.ParseQuantityJSON(json.RawMessage(qty))
@@ -46,7 +46,7 @@ func TestPostgresUsageRepositories(t *testing.T) {
 			k, err := valueobject.NewIdempotencyKey(key)
 			require.NoError(t, err)
 			r, err := entity.NewUsageRecord(entity.NewUsageRecordParams{
-				TenantID: tn.ID, Benefit: gauge, Mode: valueobject.ModeAbsolute, Quantity: q, IdempotencyKey: k,
+				CompanyID: tn.ID, Benefit: gauge, Mode: valueobject.ModeAbsolute, Quantity: q, IdempotencyKey: k,
 				ReportedByClientID: clientID, OccurredAt: at,
 			}, time.Now())
 			require.NoError(t, err)

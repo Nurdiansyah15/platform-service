@@ -32,7 +32,7 @@ help:
 	@echo "  Quality:"
 	@echo "    make test                      Semua test (butuh Docker untuk testcontainers)"
 	@echo "    make test-unit                 Test tanpa DB (domain, usecase, middleware, config)"
-	@echo "    make test-handler              Handler test (opsional: RUN=TestTenant)"
+	@echo "    make test-handler              Handler test (opsional: RUN=TestCompany)"
 	@echo "    make test-integration          Test persistence"
 	@echo "    make lint                      golangci-lint (via Docker)"
 	@echo "    make swagger                   Generate OpenAPI ke docs/swagger"
@@ -82,7 +82,7 @@ migrate-force:
 	go run ./cmd/migrate force $(VERSION)
 
 migrate-create:
-	@test -n "$(NAME)" || (echo "NAME wajib diisi, contoh: make migrate-create NAME=create_tenants" && exit 1)
+	@test -n "$(NAME)" || (echo "NAME wajib diisi, contoh: make migrate-create NAME=create_companies" && exit 1)
 	@ts=$$(date -u +%Y%m%d%H%M%S); \
 	up=internal/migrations/$${ts}_$(NAME).up.sql; down=internal/migrations/$${ts}_$(NAME).down.sql; \
 	touch $$up $$down; echo "dibuat: $$up"; echo "dibuat: $$down"

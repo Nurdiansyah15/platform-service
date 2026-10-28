@@ -2,7 +2,7 @@
 -- (solution_id, idempotency_key).
 CREATE TABLE usage_records (
     id                    UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id             UUID          NOT NULL REFERENCES tenants (id),
+    company_id            UUID          NOT NULL REFERENCES companies (id),
     solution_id           UUID          NOT NULL,
     benefit_id            UUID          NOT NULL,
     mode                  VARCHAR(30)   NOT NULL,
@@ -17,4 +17,4 @@ CREATE TABLE usage_records (
     CONSTRAINT ck_usage_records_mode CHECK (mode IN ('delta', 'absolute'))
 );
 
-CREATE INDEX idx_usage_records_tenant_benefit ON usage_records (tenant_id, benefit_id, occurred_at);
+CREATE INDEX idx_usage_records_company_benefit ON usage_records (company_id, benefit_id, occurred_at);

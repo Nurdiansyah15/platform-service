@@ -1,11 +1,11 @@
 -- Sesi login user pada satu solution (spec §2.7). id dipakai sebagai claim sid.
 -- refresh_token_hash = SHA-256 hex dari refresh token opaque; token mentah tidak disimpan.
--- tenant_id: FK ke tenants ditambahkan saat tabel tenants dibuat (Fase 5).
+-- company_id: FK ke companies ditambahkan saat tabel companies dibuat (Fase 5).
 CREATE TABLE auth_sessions (
     id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id            UUID        NOT NULL REFERENCES users (id),
     solution_id        UUID        NOT NULL REFERENCES solutions (id),
-    tenant_id          UUID        NULL,
+    company_id         UUID        NULL,
     refresh_token_hash TEXT        NOT NULL,
     user_agent         TEXT        NULL,
     ip_address         INET        NULL,

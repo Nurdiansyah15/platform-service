@@ -9,7 +9,7 @@ const (
 	CodeSubscriptionStatusInvalid     domainerr.Code = "DOMAIN_SUBSCRIPTION_STATUS_INVALID"
 	CodeSubscriptionSamePlan          domainerr.Code = "DOMAIN_SUBSCRIPTION_SAME_PLAN"
 	CodeSubscriptionPlanUnavailable   domainerr.Code = "DOMAIN_SUBSCRIPTION_PLAN_UNAVAILABLE"
-	CodeSubscriptionTenantInactive    domainerr.Code = "DOMAIN_SUBSCRIPTION_TENANT_INACTIVE"
+	CodeSubscriptionCompanyInactive   domainerr.Code = "DOMAIN_SUBSCRIPTION_COMPANY_INACTIVE"
 	CodeSubscriptionPersistenceFailed domainerr.Code = "DOMAIN_SUBSCRIPTION_PERSISTENCE_FAILED"
 	CodeSubscriptionQueryFailed       domainerr.Code = "DOMAIN_SUBSCRIPTION_QUERY_FAILED"
 

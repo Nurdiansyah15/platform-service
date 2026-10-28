@@ -23,7 +23,7 @@ type PlanTerms struct {
 
 type Subscription struct {
 	ID                 string
-	TenantID           string
+	CompanyID          string
 	SolutionID         string
 	PlanID             string
 	Status             valueobject.SubscriptionStatus
@@ -38,7 +38,7 @@ type Subscription struct {
 
 // NewSubscription membuat subscription baru. status kosong → active; hanya
 // trialing / active yang boleh dipakai saat membuat.
-func NewSubscription(tenantID string, plan PlanTerms, status string, periodStart, now time.Time) (*Subscription, error) {
+func NewSubscription(companyID string, plan PlanTerms, status string, periodStart, now time.Time) (*Subscription, error) {
 	st := valueobject.StatusActive
 	if status != "" {
 		var err error
@@ -52,7 +52,7 @@ func NewSubscription(tenantID string, plan PlanTerms, status string, periodStart
 	now = now.UTC()
 	s := &Subscription{
 		ID:        uuid.NewString(),
-		TenantID:  tenantID,
+		CompanyID: companyID,
 		Status:    st,
 		CreatedAt: now,
 		UpdatedAt: now,

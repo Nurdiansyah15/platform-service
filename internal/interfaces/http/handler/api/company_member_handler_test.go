@@ -12,37 +12,37 @@ import (
 	"platform-service/internal/testhelper"
 )
 
-func membersPath(tenantID string) string {
-	return "/api/v1/tenants/" + tenantID + "/members"
+func membersPath(companyID string) string {
+	return "/api/v1/companies/" + companyID + "/members"
 }
 
 type memberData struct {
-	TenantID string `json:"tenant_id"`
-	UserID   string `json:"user_id"`
-	Email    string `json:"email"`
-	Status   string `json:"status"`
+	CompanyID string `json:"company_id"`
+	UserID    string `json:"user_id"`
+	Email     string `json:"email"`
+	Status    string `json:"status"`
 }
 
 // ── List ─────────────────────────────────────────────────────────────────────
 
-func TestTenantMember_List_Unauthenticated(t *testing.T) {
+func TestCompanyMember_List_Unauthenticated(t *testing.T) {
 	assert.Equal(t, 401, testSrv.GET(membersPath(uuid.NewString())).Code)
 }
 
-func TestTenantMember_List_Forbidden_NonMember(t *testing.T) {
-	_, _, tenantID := mustTenantOwner(t)
-	_, strangerID, _ := mustTenantOwner(t)
-	assert.Equal(t, 403, testSrv.GET(membersPath(tenantID), tenantToken(strangerID, tenantID)).Code)
+func TestCompanyMember_List_Forbidden_NonMember(t *testing.T) {
+	_, _, companyID := mustCompanyOwner(t)
+	_, strangerID, _ := mustCompanyOwner(t)
+	assert.Equal(t, 403, testSrv.GET(membersPath(companyID), companyToken(strangerID, companyID)).Code)
 }
 
-func TestTenantMember_List_NotFound(t *testing.T) {
+func TestCompanyMember_List_NotFound(t *testing.T) {
 	assert.Equal(t, 404, testSrv.GET(membersPath(uuid.NewString()), adminHeader()).Code)
 }
 
-func TestTenantMember_List_Success(t *testing.T) {
-	h, ownerID, tenantID := mustTenantOwner(t)
+func TestCompanyMember_List_Success(t *testing.T) {
+	h, ownerID, companyID := mustCompanyOwner(t)
 
-	w := testSrv.GET(membersPath(tenantID), h)
+	w := testSrv.GET(membersPath(companyID), h)
 	require.Equal(t, 200, w.Code, w.Body.String())
 	var resp struct {
 		Data []memberData `json:"data"`
@@ -60,21 +60,21 @@ func TestTenantMember_List_Success(t *testing.T) {
 
 // ── Add ──────────────────────────────────────────────────────────────────────
 
-func TestTenantMember_Add_Unauthenticated(t *testing.T) {
+func TestCompanyMember_Add_Unauthenticated(t *testing.T) {
 	assert.Equal(t, 401, testSrv.POST(membersPath(uuid.NewString()), map[string]any{"email": "a@b.co"}).Code)
 }
 
-func TestTenantMember_Add_Forbidden_TenantNotSelected(t *testing.T) {
+func TestCompanyMember_Add_Forbidden_CompanyNotSelected(t *testing.T) {
 	tok, _, _ := mustLoginNewUser(t)
 	h := testhelper.BearerHeader(tok.AccessToken)
-	tenantID := mustCreateTenant(t, h)
+	companyID := mustCreateCompany(t, h)
 
-	w := testSrv.POST(membersPath(tenantID), map[string]any{"email": testhelper.UniqueEmail("x")}, h)
+	w := testSrv.POST(membersPath(companyID), map[string]any{"email": testhelper.UniqueEmail("x")}, h)
 	assert.Equal(t, 403, w.Code, w.Body.String())
 }
 
-func TestTenantMember_Add_InvalidPayload(t *testing.T) {
-	h, _, tenantID := mustTenantOwner(t)
+func TestCompanyMember_Add_InvalidPayload(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
 	email := testhelper.UniqueEmail("both")
 	userID := mustCreateUser(t, email)
 
@@ -86,68 +86,68 @@ func TestTenantMember_Add_InvalidPayload(t *testing.T) {
 	}
 	for name, body := range tests {
 		t.Run(name, func(t *testing.T) {
-			w := testSrv.POST(membersPath(tenantID), body, h)
+			w := testSrv.POST(membersPath(companyID), body, h)
 			assert.Equal(t, 422, w.Code, w.Body.String())
 		})
 	}
 }
 
-func TestTenantMember_Add_UserNotFound(t *testing.T) {
-	h, _, tenantID := mustTenantOwner(t)
-	w := testSrv.POST(membersPath(tenantID), map[string]any{"email": testhelper.UniqueEmail("ghost")}, h)
+func TestCompanyMember_Add_UserNotFound(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	w := testSrv.POST(membersPath(companyID), map[string]any{"email": testhelper.UniqueEmail("ghost")}, h)
 	require.Equal(t, 422, w.Code, w.Body.String())
 	assert.Equal(t, "User to add was not found.", errorMessage(t, testhelper.DecodeError(t, w)))
 }
 
-func TestTenantMember_Add_TenantNotFound(t *testing.T) {
+func TestCompanyMember_Add_CompanyNotFound(t *testing.T) {
 	w := testSrv.POST(membersPath(uuid.NewString()), map[string]any{"email": testhelper.UniqueEmail("x")}, adminHeader())
 	assert.Equal(t, 404, w.Code, w.Body.String())
 }
 
-func TestTenantMember_Add_Duplicate(t *testing.T) {
-	h, ownerID, tenantID := mustTenantOwner(t)
-	w := testSrv.POST(membersPath(tenantID), map[string]any{"user_id": ownerID}, h)
+func TestCompanyMember_Add_Duplicate(t *testing.T) {
+	h, ownerID, companyID := mustCompanyOwner(t)
+	w := testSrv.POST(membersPath(companyID), map[string]any{"user_id": ownerID}, h)
 	assert.Equal(t, 409, w.Code, w.Body.String())
 }
 
-func TestTenantMember_Add_Success_ByEmail(t *testing.T) {
-	h, _, tenantID := mustTenantOwner(t)
+func TestCompanyMember_Add_Success_ByEmail(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
 	email := testhelper.UniqueEmail("newmember")
 	userID := mustCreateUser(t, email)
 
-	w := testSrv.POST(membersPath(tenantID), map[string]any{"email": upper(email), "status": "invited"}, h)
+	w := testSrv.POST(membersPath(companyID), map[string]any{"email": upper(email), "status": "invited"}, h)
 	require.Equal(t, 201, w.Code, w.Body.String())
 	var got memberData
 	testhelper.DecodeBody(t, w, &got)
-	assert.Equal(t, tenantID, got.TenantID)
+	assert.Equal(t, companyID, got.CompanyID)
 	assert.Equal(t, userID, got.UserID)
 	assert.Equal(t, lower(email), got.Email)
 	assert.Equal(t, "invited", got.Status)
 
 	// Owner (create) + member baru.
-	assert.Equal(t, 2, countEvents(t, "tenant_member.added", tenantID))
+	assert.Equal(t, 2, countEvents(t, "company_member.added", companyID))
 }
 
-func TestTenantMember_Add_Success_PlatformAdmin(t *testing.T) {
-	tenantID := mustCreateTenant(t, adminHeader())
+func TestCompanyMember_Add_Success_PlatformAdmin(t *testing.T) {
+	companyID := mustCreateCompany(t, adminHeader())
 	userID := mustCreateUser(t, testhelper.UniqueEmail("byadmin"))
 
-	w := testSrv.POST(membersPath(tenantID), map[string]any{"user_id": userID}, adminHeader())
+	w := testSrv.POST(membersPath(companyID), map[string]any{"user_id": userID}, adminHeader())
 	require.Equal(t, 201, w.Code, w.Body.String())
 
-	// Member baru langsung bisa mengakses tenant (dengan tid).
-	assert.Equal(t, 200, testSrv.GET("/api/v1/tenants/"+tenantID, tenantToken(userID, tenantID)).Code)
+	// Member baru langsung bisa mengakses company (dengan tid).
+	assert.Equal(t, 200, testSrv.GET("/api/v1/companies/"+companyID, companyToken(userID, companyID)).Code)
 }
 
-func TestTenantMember_Add_RejoinInactiveMember(t *testing.T) {
-	h, _, tenantID := mustTenantOwner(t)
+func TestCompanyMember_Add_RejoinInactiveMember(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
 	userID := mustCreateUser(t, testhelper.UniqueEmail("rejoin"))
-	require.Equal(t, 201, testSrv.POST(membersPath(tenantID), map[string]any{"user_id": userID}, h).Code)
+	require.Equal(t, 201, testSrv.POST(membersPath(companyID), map[string]any{"user_id": userID}, h).Code)
 	_, err := testSrv.DB.ExecContext(context.Background(),
-		`UPDATE tenant_members SET status = 'inactive' WHERE tenant_id = $1 AND user_id = $2`, tenantID, userID)
+		`UPDATE company_members SET status = 'inactive' WHERE company_id = $1 AND user_id = $2`, companyID, userID)
 	require.NoError(t, err)
 
-	w := testSrv.POST(membersPath(tenantID), map[string]any{"user_id": userID}, h)
+	w := testSrv.POST(membersPath(companyID), map[string]any{"user_id": userID}, h)
 	require.Equal(t, 201, w.Code, w.Body.String())
 	var got memberData
 	testhelper.DecodeBody(t, w, &got)

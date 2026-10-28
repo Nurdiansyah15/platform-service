@@ -66,7 +66,7 @@ type tokenPair struct {
 	ExpiresIn    int64   `json:"expires_in"`
 	RefreshToken string  `json:"refresh_token"`
 	SessionID    string  `json:"session_id"`
-	TenantID     *string `json:"tenant_id"`
+	CompanyID    *string `json:"company_id"`
 }
 
 func decodeTokens(body []byte) tokenPair {
@@ -140,19 +140,19 @@ func mustServiceToken(t *testing.T, c clientCredentials, scope string) string {
 	return resp.AccessToken
 }
 
-// tenantToken menerbitkan token FAKE dengan claim tid sembarang untuk user nyata.
-// Hanya untuk skenario yang tidak bisa dibuat lewat API (mis. tid tenant tempat user
-// bukan member — switch-tenant akan menolaknya). Untuk alur normal pakai mustTenantOwner.
-func tenantToken(userID, tenantID string) map[string]string {
-	return testhelper.BearerHeader(testSrv.Auth.Issue(principalUser(userID, tenantID)))
+// companyToken menerbitkan token FAKE dengan claim cid sembarang untuk user nyata.
+// Hanya untuk skenario yang tidak bisa dibuat lewat API (mis. cid company tempat user
+// bukan member — switch-company akan menolaknya). Untuk alur normal pakai mustCompanyOwner.
+func companyToken(userID, companyID string) map[string]string {
+	return testhelper.BearerHeader(testSrv.Auth.Issue(principalUser(userID, companyID)))
 }
 
-// mustCreateTenant membuat tenant via API dengan token pemanggil dan mengembalikan ID-nya.
-func mustCreateTenant(t *testing.T, headers map[string]string) string {
+// mustCreateCompany membuat company via API dengan token pemanggil dan mengembalikan ID-nya.
+func mustCreateCompany(t *testing.T, headers map[string]string) string {
 	t.Helper()
-	slug := testhelper.UniqueCode("tn")
-	w := testSrv.POST("/api/v1/tenants", map[string]any{"name": "Tenant " + slug, "slug": slug}, headers)
-	require.Equal(t, 201, w.Code, "mustCreateTenant body=%s", w.Body.String())
+	slug := testhelper.UniqueCode("co")
+	w := testSrv.POST("/api/v1/companies", map[string]any{"name": "Company " + slug, "slug": slug}, headers)
+	require.Equal(t, 201, w.Code, "mustCreateCompany body=%s", w.Body.String())
 	var got struct {
 		ID string `json:"id"`
 	}
@@ -160,17 +160,17 @@ func mustCreateTenant(t *testing.T, headers map[string]string) string {
 	return got.ID
 }
 
-// mustTenantOwner menyiapkan user baru yang memiliki tenant siap pakai lewat alur nyata:
-// login ke solution baru → buat tenant (otomatis member) → admin membuat plan & subscription
-// → POST /auth/switch-tenant. Mengembalikan header token ber-tid, ID user, dan ID tenant.
-func mustTenantOwner(t *testing.T) (map[string]string, string, string) {
+// mustCompanyOwner menyiapkan user baru yang memiliki company siap pakai lewat alur nyata:
+// login ke solution baru → buat company (otomatis member) → admin membuat plan & subscription
+// → POST /auth/switch-company. Mengembalikan header token ber-cid, ID user, dan ID company.
+func mustCompanyOwner(t *testing.T) (map[string]string, string, string) {
 	t.Helper()
 	tok, userID, solutionCode := mustLoginNewUser(t)
-	tenantID := mustCreateTenant(t, testhelper.BearerHeader(tok.AccessToken))
+	companyID := mustCreateCompany(t, testhelper.BearerHeader(tok.AccessToken))
 	solutionID := mustSolutionID(t, solutionCode)
-	mustSubscribe(t, tenantID, mustCreatePlan(t, solutionID, "basic", nil))
-	switched := mustSwitchTenant(t, tok.AccessToken, tenantID)
-	return testhelper.BearerHeader(switched.AccessToken), userID, tenantID
+	mustSubscribe(t, companyID, mustCreatePlan(t, solutionID, "basic", nil))
+	switched := mustSwitchCompany(t, tok.AccessToken, companyID)
+	return testhelper.BearerHeader(switched.AccessToken), userID, companyID
 }
 
 // mustSolutionID mencari ID solution berdasarkan code.
@@ -181,10 +181,10 @@ func mustSolutionID(t *testing.T, code string) string {
 	return id
 }
 
-// mustSubscribe membuat subscription tenant ke plan (admin) dan mengembalikan ID-nya.
-func mustSubscribe(t *testing.T, tenantID, planID string) string {
+// mustSubscribe membuat subscription company ke plan (admin) dan mengembalikan ID-nya.
+func mustSubscribe(t *testing.T, companyID, planID string) string {
 	t.Helper()
-	w := testSrv.POST("/api/v1/tenants/"+tenantID+"/subscriptions", map[string]any{"plan_id": planID}, adminHeader())
+	w := testSrv.POST("/api/v1/companies/"+companyID+"/subscriptions", map[string]any{"plan_id": planID}, adminHeader())
 	require.Equal(t, 201, w.Code, "mustSubscribe body=%s", w.Body.String())
 	var got struct {
 		ID string `json:"id"`
@@ -193,27 +193,27 @@ func mustSubscribe(t *testing.T, tenantID, planID string) string {
 	return got.ID
 }
 
-// mustSwitchTenant memilih tenant aktif untuk sesi token tersebut.
-func mustSwitchTenant(t *testing.T, accessToken, tenantID string) tokenPair {
+// mustSwitchCompany memilih company aktif untuk sesi token tersebut.
+func mustSwitchCompany(t *testing.T, accessToken, companyID string) tokenPair {
 	t.Helper()
-	w := testSrv.POST("/api/v1/auth/switch-tenant", map[string]any{"tenant_id": tenantID}, testhelper.BearerHeader(accessToken))
-	require.Equal(t, 200, w.Code, "mustSwitchTenant body=%s", w.Body.String())
+	w := testSrv.POST("/api/v1/auth/switch-company", map[string]any{"company_id": companyID}, testhelper.BearerHeader(accessToken))
+	require.Equal(t, 200, w.Code, "mustSwitchCompany body=%s", w.Body.String())
 	return decodeTokens(w.Body.Bytes())
 }
 
-func countEvents(t *testing.T, eventType, tenantID string) int {
+func countEvents(t *testing.T, eventType, companyID string) int {
 	t.Helper()
 	var n int
 	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
-		`SELECT COUNT(*) FROM events WHERE event_type = $1 AND tenant_id = $2`, eventType, tenantID).Scan(&n))
+		`SELECT COUNT(*) FROM events WHERE event_type = $1 AND company_id = $2`, eventType, companyID).Scan(&n))
 	return n
 }
 
-// mustCreateCompany membuat company via API dan mengembalikan ID-nya.
-func mustCreateCompany(t *testing.T, headers map[string]string, tenantID, code string) string {
+// mustCreateBranch membuat branch di company via API dan mengembalikan ID-nya.
+func mustCreateBranch(t *testing.T, headers map[string]string, companyID, code string) string {
 	t.Helper()
-	w := testSrv.POST("/api/v1/tenants/"+tenantID+"/companies", map[string]any{"name": "Company " + code, "code": code}, headers)
-	require.Equal(t, 201, w.Code, "mustCreateCompany body=%s", w.Body.String())
+	w := testSrv.POST("/api/v1/companies/"+companyID+"/branches", map[string]any{"name": "Branch " + code, "code": code}, headers)
+	require.Equal(t, 201, w.Code, "mustCreateBranch body=%s", w.Body.String())
 	var got struct {
 		ID string `json:"id"`
 	}
@@ -221,8 +221,8 @@ func mustCreateCompany(t *testing.T, headers map[string]string, tenantID, code s
 	return got.ID
 }
 
-func principalUser(userID, tenantID string) principal.Principal {
-	return principal.Principal{Kind: principal.KindUser, UserID: userID, SessionID: uuid.NewString(), TenantID: tenantID}
+func principalUser(userID, companyID string) principal.Principal {
+	return principal.Principal{Kind: principal.KindUser, UserID: userID, SessionID: uuid.NewString(), CompanyID: companyID}
 }
 
 // mustCreateBenefit membuat benefit via API (admin) dengan field minimal dan mengembalikan ID-nya.
@@ -280,4 +280,27 @@ func countEventsBySolution(t *testing.T, eventType, solutionID string) int {
 	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
 		`SELECT COUNT(*) FROM events WHERE event_type = $1 AND solution_id = $2`, eventType, solutionID).Scan(&n))
 	return n
+}
+
+type orgUnitData struct {
+	ID        string `json:"id"`
+	CompanyID string `json:"company_id"`
+	Name      string `json:"name"`
+	Code      string `json:"code"`
+	Status    string `json:"status"`
+}
+
+type orgUnitListResp struct {
+	Data []orgUnitData `json:"data"`
+	Meta struct {
+		Total int64 `json:"total"`
+	} `json:"meta"`
+}
+
+func orgCodes(items []orgUnitData) []string {
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		out = append(out, it.Code)
+	}
+	return out
 }

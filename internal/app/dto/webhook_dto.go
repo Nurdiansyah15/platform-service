@@ -32,7 +32,7 @@ type WebhookWithSecretResponse struct {
 type ListEventsQuery struct {
 	Since     *time.Time `form:"since" time_format:"2006-01-02T15:04:05Z07:00"`
 	EventType *string    `form:"event_type" binding:"omitempty,max=100"`
-	TenantID  *string    `form:"tenant_id" binding:"omitempty,uuid"`
+	CompanyID *string    `form:"company_id" binding:"omitempty,uuid"`
 	Cursor    *string    `form:"cursor" binding:"omitempty,max=200"`
 	Limit     *int       `form:"limit" binding:"omitempty,min=1,max=200"`
 }
@@ -41,7 +41,7 @@ type ListEventsQuery struct {
 type EventItem struct {
 	ID         string          `json:"id"`
 	Type       string          `json:"type"`
-	TenantID   *string         `json:"tenant_id"`
+	CompanyID  *string         `json:"company_id"`
 	SolutionID *string         `json:"solution_id"`
 	OccurredAt time.Time       `json:"occurred_at"`
 	Data       json.RawMessage `json:"data" swaggertype:"object"`

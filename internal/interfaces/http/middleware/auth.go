@@ -88,12 +88,12 @@ func RequirePlatformAdmin() gin.HandlerFunc {
 	})
 }
 
-// RequireActiveTenant menolak token user yang belum memilih tenant (claim tid kosong).
-// Token service lolos; pembatasan tenant-nya dicek di usecase.
-func RequireActiveTenant() gin.HandlerFunc {
+// RequireActiveCompany menolak token user yang belum memilih company (claim cid kosong).
+// Token service lolos; pembatasan company-nya dicek di usecase.
+func RequireActiveCompany() gin.HandlerFunc {
 	return guard(func(p *principal.Principal) *apperror.AppError {
-		if p.IsUser() && !p.HasActiveTenant() {
-			return apperror.Forbidden(apperror.MsgTenantNotSelected)
+		if p.IsUser() && !p.HasActiveCompany() {
+			return apperror.Forbidden(apperror.MsgCompanyNotSelected)
 		}
 		return nil
 	})

@@ -48,25 +48,25 @@ func mustCreateWebhook(t *testing.T, solutionID, hookURL string, eventTypes ...s
 // ── Create webhook ───────────────────────────────────────────────────────────
 
 func TestWebhook_Create_Unauthenticated(t *testing.T) {
-	w := testSrv.POST(webhooksPath(uuid.NewString()), map[string]any{"url": unreachableHookURL, "event_types": []string{"company.created"}})
+	w := testSrv.POST(webhooksPath(uuid.NewString()), map[string]any{"url": unreachableHookURL, "event_types": []string{"branch.created"}})
 	assert.Equal(t, 401, w.Code)
 }
 
 func TestWebhook_Create_Forbidden_NonAdmin(t *testing.T) {
 	solutionID := mustCreateSolution(t, testhelper.UniqueCode("wh"))
-	w := testSrv.POST(webhooksPath(solutionID), map[string]any{"url": unreachableHookURL, "event_types": []string{"company.created"}}, userHeader())
+	w := testSrv.POST(webhooksPath(solutionID), map[string]any{"url": unreachableHookURL, "event_types": []string{"branch.created"}}, userHeader())
 	assert.Equal(t, 403, w.Code)
 }
 
 func TestWebhook_Create_InvalidPayload(t *testing.T) {
 	solutionID := mustCreateSolution(t, testhelper.UniqueCode("wh"))
 	cases := map[string]map[string]any{
-		"missing url":        {"event_types": []string{"company.created"}},
+		"missing url":        {"event_types": []string{"branch.created"}},
 		"missing events":     {"url": unreachableHookURL},
 		"empty events":       {"url": unreachableHookURL, "event_types": []string{}},
 		"unknown event type": {"url": unreachableHookURL, "event_types": []string{"company.exploded"}},
-		"relative url":       {"url": "/hook", "event_types": []string{"company.created"}},
-		"ftp url":            {"url": "ftp://example.com/hook", "event_types": []string{"company.created"}},
+		"relative url":       {"url": "/hook", "event_types": []string{"branch.created"}},
+		"ftp url":            {"url": "ftp://example.com/hook", "event_types": []string{"branch.created"}},
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -77,18 +77,18 @@ func TestWebhook_Create_InvalidPayload(t *testing.T) {
 }
 
 func TestWebhook_Create_SolutionNotFound(t *testing.T) {
-	w := testSrv.POST(webhooksPath(uuid.NewString()), map[string]any{"url": unreachableHookURL, "event_types": []string{"company.created"}}, adminHeader())
+	w := testSrv.POST(webhooksPath(uuid.NewString()), map[string]any{"url": unreachableHookURL, "event_types": []string{"branch.created"}}, adminHeader())
 	assert.Equal(t, 404, w.Code)
 }
 
 func TestWebhook_Create_Success_SecretShownOnceAndEncrypted(t *testing.T) {
 	solutionID := mustCreateSolution(t, testhelper.UniqueCode("wh"))
-	got := mustCreateWebhook(t, solutionID, unreachableHookURL, "subscription.created", "company.created", "company.created")
+	got := mustCreateWebhook(t, solutionID, unreachableHookURL, "subscription.created", "branch.created", "branch.created")
 
 	assert.NotEmpty(t, got.ID)
 	assert.Equal(t, solutionID, got.SolutionID)
 	assert.Equal(t, unreachableHookURL, got.URL)
-	assert.Equal(t, []string{"company.created", "subscription.created"}, got.EventTypes, "unik & terurut")
+	assert.Equal(t, []string{"branch.created", "subscription.created"}, got.EventTypes, "unik & terurut")
 	assert.Equal(t, "active", got.Status)
 	assert.True(t, strings.HasPrefix(got.Secret, "whsec_"), got.Secret)
 
@@ -101,35 +101,35 @@ func TestWebhook_Create_Success_SecretShownOnceAndEncrypted(t *testing.T) {
 
 // ── Events (polling) ─────────────────────────────────────────────────────────
 
-// eventsFixture: solution dengan tenant yang berlangganan + company (event tenant-level),
-// client events:read, dan solution lain yang tidak dilanggani tenant.
+// eventsFixture: solution dengan company yang berlangganan + company (event company-level),
+// client events:read, dan solution lain yang tidak dilanggani company.
 type eventsFixture struct {
 	sub          subFixture
 	token        string
 	otherToken   string
-	otherTenant  string
+	otherCompany string
 	subscription string
 }
 
 func newEventsFixture(t *testing.T) eventsFixture {
 	t.Helper()
 	f := eventsFixture{sub: newSubFixture(t)}
-	f.subscription = mustSubscribe(t, f.sub.tenantID, f.sub.basicPlan)
-	mustCreateCompany(t, adminHeader(), f.sub.tenantID, testhelper.UniqueCode("co"))
+	f.subscription = mustSubscribe(t, f.sub.companyID, f.sub.basicPlan)
+	mustCreateBranch(t, adminHeader(), f.sub.companyID, testhelper.UniqueCode("co"))
 	f.token = mustServiceToken(t, mustCreateClient(t, f.sub.solutionID, "events:read"), "")
 
 	other := mustCreateSolution(t, testhelper.UniqueCode("oth"))
 	f.otherToken = mustServiceToken(t, mustCreateClient(t, other, "events:read"), "")
-	// Tenant lain yang tidak berlangganan solution fixture.
-	f.otherTenant = mustCreateTenant(t, adminHeader())
-	mustCreateCompany(t, adminHeader(), f.otherTenant, testhelper.UniqueCode("co"))
+	// Company lain yang tidak berlangganan solution fixture.
+	f.otherCompany = mustCreateCompany(t, adminHeader())
+	mustCreateBranch(t, adminHeader(), f.otherCompany, testhelper.UniqueCode("co"))
 	return f
 }
 
 type eventData struct {
 	ID         string          `json:"id"`
 	Type       string          `json:"type"`
-	TenantID   *string         `json:"tenant_id"`
+	CompanyID  *string         `json:"company_id"`
 	SolutionID *string         `json:"solution_id"`
 	OccurredAt time.Time       `json:"occurred_at"`
 	Data       json.RawMessage `json:"data"`
@@ -176,7 +176,7 @@ func TestEvent_List_Forbidden(t *testing.T) {
 func TestEvent_List_InvalidQuery(t *testing.T) {
 	solutionID := mustCreateSolution(t, testhelper.UniqueCode("ev"))
 	h := testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, solutionID, "events:read"), ""))
-	for _, q := range []string{"tenant_id=bukan-uuid", "limit=0", "limit=201", "since=kemarin", "cursor=!!!", "cursor=" + url.QueryEscape("YWJj")} {
+	for _, q := range []string{"company_id=bukan-uuid", "limit=0", "limit=201", "since=kemarin", "cursor=!!!", "cursor=" + url.QueryEscape("YWJj")} {
 		w := testSrv.GET("/api/v1/events?"+q, h)
 		assert.True(t, w.Code == 400 || w.Code == 422, "%s → %d %s", q, w.Code, w.Body.String())
 	}
@@ -185,43 +185,43 @@ func TestEvent_List_InvalidQuery(t *testing.T) {
 func TestEvent_List_Success_RoutedToCallerSolution(t *testing.T) {
 	f := newEventsFixture(t)
 
-	page := listEvents(t, f.token, url.Values{"tenant_id": {f.sub.tenantID}})
+	page := listEvents(t, f.token, url.Values{"company_id": {f.sub.companyID}})
 	types := eventTypesOf(page.Data)
 	assert.Contains(t, types, "subscription.created", "event solution sendiri")
-	assert.Contains(t, types, "company.created", "event tenant (solution_id NULL) dari tenant pelanggan")
+	assert.Contains(t, types, "branch.created", "event company (solution_id NULL) dari company pelanggan")
 	for _, e := range page.Data {
-		require.NotNil(t, e.TenantID)
-		assert.Equal(t, f.sub.tenantID, *e.TenantID)
+		require.NotNil(t, e.CompanyID)
+		assert.Equal(t, f.sub.companyID, *e.CompanyID)
 		assert.NotEmpty(t, e.Data)
 	}
 	assert.Equal(t, 50, page.Meta.Limit)
 	assert.Nil(t, page.Meta.NextCursor)
 
-	// Tenant yang tidak berlangganan tidak terlihat.
-	assert.Empty(t, listEvents(t, f.token, url.Values{"tenant_id": {f.otherTenant}}).Data)
-	// Solution lain tidak melihat event tenant fixture.
-	assert.Empty(t, listEvents(t, f.otherToken, url.Values{"tenant_id": {f.sub.tenantID}}).Data)
+	// Company yang tidak berlangganan tidak terlihat.
+	assert.Empty(t, listEvents(t, f.token, url.Values{"company_id": {f.otherCompany}}).Data)
+	// Solution lain tidak melihat event company fixture.
+	assert.Empty(t, listEvents(t, f.otherToken, url.Values{"company_id": {f.sub.companyID}}).Data)
 }
 
 func TestEvent_List_Filters(t *testing.T) {
 	f := newEventsFixture(t)
 
-	page := listEvents(t, f.token, url.Values{"tenant_id": {f.sub.tenantID}, "event_type": {"company.created"}})
+	page := listEvents(t, f.token, url.Values{"company_id": {f.sub.companyID}, "event_type": {"branch.created"}})
 	require.Len(t, page.Data, 1)
-	assert.Equal(t, "company.created", page.Data[0].Type)
+	assert.Equal(t, "branch.created", page.Data[0].Type)
 	assert.Nil(t, page.Data[0].SolutionID)
 
 	future := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
-	assert.Empty(t, listEvents(t, f.token, url.Values{"tenant_id": {f.sub.tenantID}, "since": {future}}).Data)
+	assert.Empty(t, listEvents(t, f.token, url.Values{"company_id": {f.sub.companyID}, "since": {future}}).Data)
 }
 
 func TestEvent_List_CursorPagination(t *testing.T) {
 	f := newEventsFixture(t)
-	all := listEvents(t, f.token, url.Values{"tenant_id": {f.sub.tenantID}}).Data
+	all := listEvents(t, f.token, url.Values{"company_id": {f.sub.companyID}}).Data
 	require.GreaterOrEqual(t, len(all), 3)
 
 	var walked []string
-	q := url.Values{"tenant_id": {f.sub.tenantID}, "limit": {"1"}}
+	q := url.Values{"company_id": {f.sub.companyID}, "limit": {"1"}}
 	for range len(all) + 1 {
 		page := listEvents(t, f.token, q)
 		for _, e := range page.Data {
@@ -308,10 +308,10 @@ func deliveriesFor(t *testing.T, webhookID string) []deliveryRow {
 
 func TestWebhookDispatch_Success_SignedAndDeliveredOnce(t *testing.T) {
 	f := newSubFixture(t)
-	mustSubscribe(t, f.tenantID, f.basicPlan)
+	mustSubscribe(t, f.companyID, f.basicPlan)
 	recv := newHookReceiver(t, 204)
-	hook := mustCreateWebhook(t, f.solutionID, recv.URL+"/hooks", "company.created")
-	companyID := mustCreateCompany(t, adminHeader(), f.tenantID, testhelper.UniqueCode("co"))
+	hook := mustCreateWebhook(t, f.solutionID, recv.URL+"/hooks", "branch.created")
+	companyID := mustCreateBranch(t, adminHeader(), f.companyID, testhelper.UniqueCode("co"))
 
 	d := testSrv.NewDispatcher()
 	_, _, err := d.RunOnce(context.Background())
@@ -320,7 +320,7 @@ func TestWebhookDispatch_Success_SignedAndDeliveredOnce(t *testing.T) {
 	got := recv.all()
 	require.Len(t, got, 1)
 	h := got[0].headers
-	assert.Equal(t, "company.created", h.Get("X-Platform-Event-Type"))
+	assert.Equal(t, "branch.created", h.Get("X-Platform-Event-Type"))
 	assert.Equal(t, "application/json", h.Get("Content-Type"))
 	ts, err := strconv.ParseInt(h.Get("X-Platform-Timestamp"), 10, 64)
 	require.NoError(t, err)
@@ -331,9 +331,9 @@ func TestWebhookDispatch_Success_SignedAndDeliveredOnce(t *testing.T) {
 	var body eventData
 	require.NoError(t, json.Unmarshal(got[0].body, &body))
 	assert.Equal(t, h.Get("X-Platform-Event-Id"), body.ID)
-	assert.Equal(t, "company.created", body.Type)
-	require.NotNil(t, body.TenantID)
-	assert.Equal(t, f.tenantID, *body.TenantID)
+	assert.Equal(t, "branch.created", body.Type)
+	require.NotNil(t, body.CompanyID)
+	assert.Equal(t, f.companyID, *body.CompanyID)
 	var payload struct {
 		ID string `json:"id"`
 	}
@@ -357,10 +357,10 @@ func TestWebhookDispatch_Success_SignedAndDeliveredOnce(t *testing.T) {
 
 func TestWebhookDispatch_RetryBackoffThenDead(t *testing.T) {
 	f := newSubFixture(t)
-	mustSubscribe(t, f.tenantID, f.basicPlan)
+	mustSubscribe(t, f.companyID, f.basicPlan)
 	recv := newHookReceiver(t, 500)
-	hook := mustCreateWebhook(t, f.solutionID, recv.URL, "company.created")
-	mustCreateCompany(t, adminHeader(), f.tenantID, testhelper.UniqueCode("co"))
+	hook := mustCreateWebhook(t, f.solutionID, recv.URL, "branch.created")
+	mustCreateBranch(t, adminHeader(), f.companyID, testhelper.UniqueCode("co"))
 
 	now := time.Now()
 	d := testSrv.NewDispatcher()
@@ -412,10 +412,10 @@ func TestWebhookDispatch_RetryBackoffThenDead(t *testing.T) {
 
 func TestWebhookDispatch_RecoversAfterFailure(t *testing.T) {
 	f := newSubFixture(t)
-	mustSubscribe(t, f.tenantID, f.basicPlan)
+	mustSubscribe(t, f.companyID, f.basicPlan)
 	recv := newHookReceiver(t, 503)
-	hook := mustCreateWebhook(t, f.solutionID, recv.URL, "company.created")
-	mustCreateCompany(t, adminHeader(), f.tenantID, testhelper.UniqueCode("co"))
+	hook := mustCreateWebhook(t, f.solutionID, recv.URL, "branch.created")
+	mustCreateBranch(t, adminHeader(), f.companyID, testhelper.UniqueCode("co"))
 
 	now := time.Now()
 	d := testSrv.NewDispatcher()
@@ -438,21 +438,21 @@ func TestWebhookDispatch_RecoversAfterFailure(t *testing.T) {
 
 func TestWebhookDispatch_OnlyRoutedEvents(t *testing.T) {
 	f := newSubFixture(t)
-	mustSubscribe(t, f.tenantID, f.basicPlan)
+	mustSubscribe(t, f.companyID, f.basicPlan)
 	recv := newHookReceiver(t, 200)
 
-	// Solution lain yang tidak dilanggani tenant fixture.
-	otherHook := mustCreateWebhook(t, mustCreateSolution(t, testhelper.UniqueCode("oth")), recv.URL, "company.created")
-	// Solution fixture, tetapi tidak berlangganan company.created.
-	unsubscribedHook := mustCreateWebhook(t, f.solutionID, recv.URL, "branch.created")
+	// Solution lain yang tidak dilanggani company fixture.
+	otherHook := mustCreateWebhook(t, mustCreateSolution(t, testhelper.UniqueCode("oth")), recv.URL, "branch.created")
+	// Solution fixture, tetapi tidak berlangganan branch.created.
+	unsubscribedHook := mustCreateWebhook(t, f.solutionID, recv.URL, "company.updated")
 	// Event sebelum webhook dibuat tidak dikirim ke webhook baru.
-	mustCreateCompany(t, adminHeader(), f.tenantID, testhelper.UniqueCode("co"))
-	lateHook := mustCreateWebhook(t, f.solutionID, recv.URL, "company.created")
+	mustCreateBranch(t, adminHeader(), f.companyID, testhelper.UniqueCode("co"))
+	lateHook := mustCreateWebhook(t, f.solutionID, recv.URL, "branch.created")
 
 	_, _, err := testSrv.NewDispatcher().RunOnce(context.Background())
 	require.NoError(t, err)
 
-	assert.Empty(t, deliveriesFor(t, otherHook.ID), "tenant tidak subscribe solution")
+	assert.Empty(t, deliveriesFor(t, otherHook.ID), "company tidak subscribe solution")
 	assert.Empty(t, deliveriesFor(t, unsubscribedHook.ID), "event type tidak dilanggani")
 	assert.Empty(t, deliveriesFor(t, lateHook.ID), "event lebih lama dari webhook")
 	assert.Empty(t, recv.all())

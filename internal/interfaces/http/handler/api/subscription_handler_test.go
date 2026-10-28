@@ -12,14 +12,14 @@ import (
 	"platform-service/internal/testhelper"
 )
 
-func subscriptionsPath(tenantID string) string {
-	return "/api/v1/tenants/" + tenantID + "/subscriptions"
+func subscriptionsPath(companyID string) string {
+	return "/api/v1/companies/" + companyID + "/subscriptions"
 }
 func subscriptionPath(id, action string) string { return "/api/v1/subscriptions/" + id + "/" + action }
 
 type subscriptionData struct {
 	ID               string `json:"id"`
-	TenantID         string `json:"tenant_id"`
+	CompanyID        string `json:"company_id"`
 	SolutionID       string `json:"solution_id"`
 	PlanID           string `json:"plan_id"`
 	PlanCode         string `json:"plan_code"`
@@ -30,9 +30,9 @@ type subscriptionData struct {
 }
 
 // subFixture: solution dengan dua benefit, plan basic (max_employees=10) dan pro
-// (max_employees=100, payroll=true), serta tenant kosong milik admin.
+// (max_employees=100, payroll=true), serta company kosong milik admin.
 type subFixture struct {
-	solutionID, basicPlan, proPlan, maxEmp, payroll, tenantID string
+	solutionID, basicPlan, proPlan, maxEmp, payroll, companyID string
 }
 
 func newSubFixture(t *testing.T) subFixture {
@@ -44,7 +44,7 @@ func newSubFixture(t *testing.T) subFixture {
 	f.proPlan = mustCreatePlan(t, f.solutionID, "pro", map[string]any{"price": "300000", "billing_cycle": "yearly"})
 	mustReplacePlanBenefits(t, f.basicPlan, map[string]any{f.maxEmp: 10})
 	mustReplacePlanBenefits(t, f.proPlan, map[string]any{f.maxEmp: 100, f.payroll: true})
-	f.tenantID = mustCreateTenant(t, adminHeader())
+	f.companyID = mustCreateCompany(t, adminHeader())
 	return f
 }
 
@@ -80,10 +80,10 @@ func snapshotValues(t *testing.T, subscriptionID string, addon bool) map[string]
 	return out
 }
 
-func eventTypesFor(t *testing.T, tenantID string) []string {
+func eventTypesFor(t *testing.T, companyID string) []string {
 	t.Helper()
 	rows, err := testSrv.DB.QueryContext(context.Background(),
-		`SELECT event_type FROM events WHERE tenant_id = $1 ORDER BY occurred_at, event_type`, tenantID)
+		`SELECT event_type FROM events WHERE company_id = $1 ORDER BY occurred_at, event_type`, companyID)
 	require.NoError(t, err)
 	defer rows.Close()
 	out := []string{}
@@ -102,13 +102,13 @@ func TestSubscription_Create_Unauthenticated(t *testing.T) {
 }
 
 func TestSubscription_Create_Forbidden_NonAdmin(t *testing.T) {
-	h, _, tenantID := mustTenantOwner(t)
-	assert.Equal(t, 403, testSrv.POST(subscriptionsPath(tenantID), map[string]any{"plan_id": uuid.NewString()}, h).Code)
+	h, _, companyID := mustCompanyOwner(t)
+	assert.Equal(t, 403, testSrv.POST(subscriptionsPath(companyID), map[string]any{"plan_id": uuid.NewString()}, h).Code)
 }
 
 func TestSubscription_Create_Forbidden_LicenseManaged(t *testing.T) {
 	f := newSubFixture(t)
-	w := testOnPremSrv.POST(subscriptionsPath(f.tenantID), map[string]any{"plan_id": f.basicPlan}, adminHeader())
+	w := testOnPremSrv.POST(subscriptionsPath(f.companyID), map[string]any{"plan_id": f.basicPlan}, adminHeader())
 	require.Equal(t, 403, w.Code, w.Body.String())
 	assert.Equal(t, "LICENSE_MANAGED", testhelper.DecodeError(t, w).ErrorCode)
 }
@@ -125,40 +125,40 @@ func TestSubscription_Create_InvalidPayload(t *testing.T) {
 	}
 	for name, body := range tests {
 		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, 422, testSrv.POST(subscriptionsPath(f.tenantID), body, adminHeader()).Code)
+			assert.Equal(t, 422, testSrv.POST(subscriptionsPath(f.companyID), body, adminHeader()).Code)
 		})
 	}
 }
 
-func TestSubscription_Create_TenantNotFound(t *testing.T) {
+func TestSubscription_Create_CompanyNotFound(t *testing.T) {
 	f := newSubFixture(t)
 	assert.Equal(t, 404, testSrv.POST(subscriptionsPath(uuid.NewString()), map[string]any{"plan_id": f.basicPlan}, adminHeader()).Code)
 }
 
-func TestSubscription_Create_TenantSuspended(t *testing.T) {
+func TestSubscription_Create_CompanySuspended(t *testing.T) {
 	f := newSubFixture(t)
-	_, err := testSrv.DB.ExecContext(context.Background(), `UPDATE tenants SET status = 'suspended' WHERE id = $1`, f.tenantID)
+	_, err := testSrv.DB.ExecContext(context.Background(), `UPDATE companies SET status = 'suspended' WHERE id = $1`, f.companyID)
 	require.NoError(t, err)
-	assert.Equal(t, 422, testSrv.POST(subscriptionsPath(f.tenantID), map[string]any{"plan_id": f.basicPlan}, adminHeader()).Code)
+	assert.Equal(t, 422, testSrv.POST(subscriptionsPath(f.companyID), map[string]any{"plan_id": f.basicPlan}, adminHeader()).Code)
 }
 
 func TestSubscription_Create_AlreadyLive(t *testing.T) {
 	f := newSubFixture(t)
-	mustSubscribe(t, f.tenantID, f.basicPlan)
-	w := testSrv.POST(subscriptionsPath(f.tenantID), map[string]any{"plan_id": f.proPlan}, adminHeader())
+	mustSubscribe(t, f.companyID, f.basicPlan)
+	w := testSrv.POST(subscriptionsPath(f.companyID), map[string]any{"plan_id": f.proPlan}, adminHeader())
 	assert.Equal(t, 409, w.Code, w.Body.String())
 }
 
 func TestSubscription_Create_Success_SnapshotAndEvents(t *testing.T) {
 	f := newSubFixture(t)
-	w := testSrv.POST(subscriptionsPath(f.tenantID), map[string]any{
+	w := testSrv.POST(subscriptionsPath(f.companyID), map[string]any{
 		"plan_id": f.proPlan, "status": "trialing", "current_period_start": "2026-01-31T00:00:00Z",
 	}, adminHeader())
 	require.Equal(t, 201, w.Code, w.Body.String())
 
 	var got subscriptionData
 	testhelper.DecodeBody(t, w, &got)
-	assert.Equal(t, f.tenantID, got.TenantID)
+	assert.Equal(t, f.companyID, got.CompanyID)
 	assert.Equal(t, f.solutionID, got.SolutionID)
 	assert.Equal(t, "pro", got.PlanCode)
 	assert.Equal(t, "trialing", got.Status)
@@ -167,12 +167,12 @@ func TestSubscription_Create_Success_SnapshotAndEvents(t *testing.T) {
 	assert.Contains(t, got.CurrentPeriodEnd, "2027-01-31")
 
 	assert.Equal(t, map[string]string{f.maxEmp: "100", f.payroll: "true"}, snapshotValues(t, got.ID, false))
-	assert.ElementsMatch(t, []string{"entitlement.changed", "subscription.created"}, eventTypesFor(t, f.tenantID))
+	assert.ElementsMatch(t, []string{"entitlement.changed", "subscription.created"}, eventTypesFor(t, f.companyID))
 }
 
 func TestSubscription_Snapshot_UnaffectedByPlanChanges(t *testing.T) {
 	f := newSubFixture(t)
-	subID := mustSubscribe(t, f.tenantID, f.basicPlan)
+	subID := mustSubscribe(t, f.companyID, f.basicPlan)
 
 	// Plan master diubah setelah subscribe → snapshot subscription tetap.
 	mustReplacePlanBenefits(t, f.basicPlan, map[string]any{f.maxEmp: 999, f.payroll: true})
@@ -185,15 +185,15 @@ func TestSubscription_List_Unauthenticated(t *testing.T) {
 	assert.Equal(t, 401, testSrv.GET(subscriptionsPath(uuid.NewString())).Code)
 }
 
-func TestSubscription_List_Forbidden_OtherTenant(t *testing.T) {
-	_, _, tenantID := mustTenantOwner(t)
-	strangerH, _, _ := mustTenantOwner(t)
-	assert.Equal(t, 403, testSrv.GET(subscriptionsPath(tenantID), strangerH).Code)
+func TestSubscription_List_Forbidden_OtherCompany(t *testing.T) {
+	_, _, companyID := mustCompanyOwner(t)
+	strangerH, _, _ := mustCompanyOwner(t)
+	assert.Equal(t, 403, testSrv.GET(subscriptionsPath(companyID), strangerH).Code)
 }
 
 func TestSubscription_List_Success_Member(t *testing.T) {
-	h, _, tenantID := mustTenantOwner(t)
-	w := testSrv.GET(subscriptionsPath(tenantID), h)
+	h, _, companyID := mustCompanyOwner(t)
+	w := testSrv.GET(subscriptionsPath(companyID), h)
 	require.Equal(t, 200, w.Code, w.Body.String())
 	var resp struct {
 		Data []subscriptionData `json:"data"`
@@ -209,13 +209,13 @@ func TestSubscription_List_Success_Member(t *testing.T) {
 
 func TestSubscription_List_ServiceToken_OnlyOwnSolution(t *testing.T) {
 	f := newSubFixture(t)
-	mustSubscribe(t, f.tenantID, f.basicPlan)
+	mustSubscribe(t, f.companyID, f.basicPlan)
 	other := newSubFixture(t)
-	// Tenant f juga subscribe solution lain.
-	mustSubscribe(t, f.tenantID, other.basicPlan)
+	// Company f juga subscribe solution lain.
+	mustSubscribe(t, f.companyID, other.basicPlan)
 
 	c := mustCreateClient(t, f.solutionID, "entitlements:read")
-	w := testSrv.GET(subscriptionsPath(f.tenantID), testhelper.BearerHeader(mustServiceToken(t, c, "")))
+	w := testSrv.GET(subscriptionsPath(f.companyID), testhelper.BearerHeader(mustServiceToken(t, c, "")))
 	require.Equal(t, 200, w.Code, w.Body.String())
 	var resp struct {
 		Data []subscriptionData `json:"data"`
@@ -225,19 +225,19 @@ func TestSubscription_List_ServiceToken_OnlyOwnSolution(t *testing.T) {
 	assert.Equal(t, f.solutionID, resp.Data[0].SolutionID)
 
 	// Admin melihat keduanya.
-	w = testSrv.GET(subscriptionsPath(f.tenantID), adminHeader())
+	w = testSrv.GET(subscriptionsPath(f.companyID), adminHeader())
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 	assert.Len(t, resp.Data, 2)
 }
 
 func TestSubscription_List_ServiceToken_Forbidden(t *testing.T) {
-	f := newSubFixture(t) // tenant belum subscribe
+	f := newSubFixture(t) // company belum subscribe
 	c := mustCreateClient(t, f.solutionID, "entitlements:read", "users:read")
-	assert.Equal(t, 403, testSrv.GET(subscriptionsPath(f.tenantID), testhelper.BearerHeader(mustServiceToken(t, c, ""))).Code,
-		"tenant tidak subscribe solution client")
+	assert.Equal(t, 403, testSrv.GET(subscriptionsPath(f.companyID), testhelper.BearerHeader(mustServiceToken(t, c, ""))).Code,
+		"company tidak subscribe solution client")
 
-	mustSubscribe(t, f.tenantID, f.basicPlan)
-	assert.Equal(t, 403, testSrv.GET(subscriptionsPath(f.tenantID), testhelper.BearerHeader(mustServiceToken(t, c, "users:read"))).Code,
+	mustSubscribe(t, f.companyID, f.basicPlan)
+	assert.Equal(t, 403, testSrv.GET(subscriptionsPath(f.companyID), testhelper.BearerHeader(mustServiceToken(t, c, "users:read"))).Code,
 		"scope entitlements:read tidak ada")
 }
 
@@ -248,7 +248,7 @@ func TestSubscription_ChangePlan_Unauthenticated(t *testing.T) {
 }
 
 func TestSubscription_ChangePlan_Forbidden_NonAdmin(t *testing.T) {
-	h, _, _ := mustTenantOwner(t)
+	h, _, _ := mustCompanyOwner(t)
 	assert.Equal(t, 403, testSrv.POST(subscriptionPath(uuid.NewString(), "change-plan"), map[string]any{"plan_id": uuid.NewString()}, h).Code)
 }
 
@@ -259,7 +259,7 @@ func TestSubscription_ChangePlan_NotFound(t *testing.T) {
 
 func TestSubscription_ChangePlan_Invalid(t *testing.T) {
 	f := newSubFixture(t)
-	subID := mustSubscribe(t, f.tenantID, f.basicPlan)
+	subID := mustSubscribe(t, f.companyID, f.basicPlan)
 	other := newSubFixture(t)
 
 	assert.Equal(t, 422, testSrv.POST(subscriptionPath(subID, "change-plan"), map[string]any{"plan_id": f.basicPlan}, adminHeader()).Code, "plan sama")
@@ -269,7 +269,7 @@ func TestSubscription_ChangePlan_Invalid(t *testing.T) {
 
 func TestSubscription_ChangePlan_Success_ReplacesPlanSnapshot(t *testing.T) {
 	f := newSubFixture(t)
-	subID := mustSubscribe(t, f.tenantID, f.basicPlan)
+	subID := mustSubscribe(t, f.companyID, f.basicPlan)
 
 	w := testSrv.POST(subscriptionPath(subID, "change-plan"), map[string]any{"plan_id": f.proPlan}, adminHeader())
 	require.Equal(t, 200, w.Code, w.Body.String())
@@ -280,7 +280,7 @@ func TestSubscription_ChangePlan_Success_ReplacesPlanSnapshot(t *testing.T) {
 	assert.Equal(t, "yearly", got.BillingCycle)
 
 	assert.Equal(t, map[string]string{f.maxEmp: "100", f.payroll: "true"}, snapshotValues(t, subID, false))
-	assert.Contains(t, eventTypesFor(t, f.tenantID), "subscription.plan_changed")
+	assert.Contains(t, eventTypesFor(t, f.companyID), "subscription.plan_changed")
 }
 
 // ── Cancel ───────────────────────────────────────────────────────────────────
@@ -295,14 +295,14 @@ func TestSubscription_Cancel_NotFound(t *testing.T) {
 
 func TestSubscription_Cancel_Success_AndConflicts(t *testing.T) {
 	f := newSubFixture(t)
-	subID := mustSubscribe(t, f.tenantID, f.basicPlan)
+	subID := mustSubscribe(t, f.companyID, f.basicPlan)
 
 	w := testSrv.POST(subscriptionPath(subID, "cancel"), nil, adminHeader())
 	require.Equal(t, 200, w.Code, w.Body.String())
 	var got subscriptionData
 	testhelper.DecodeBody(t, w, &got)
 	assert.Equal(t, "canceled", got.Status)
-	assert.Contains(t, eventTypesFor(t, f.tenantID), "subscription.status_changed")
+	assert.Contains(t, eventTypesFor(t, f.companyID), "subscription.status_changed")
 	assert.NotEmpty(t, snapshotValues(t, subID, false), "snapshot tetap disimpan sebagai histori")
 
 	assert.Equal(t, 409, testSrv.POST(subscriptionPath(subID, "cancel"), nil, adminHeader()).Code, "cancel dua kali")
@@ -310,7 +310,7 @@ func TestSubscription_Cancel_Success_AndConflicts(t *testing.T) {
 		"ganti plan subscription yang sudah dibatalkan")
 
 	// Subscription baru boleh dibuat setelah yang lama dibatalkan.
-	mustSubscribe(t, f.tenantID, f.proPlan)
+	mustSubscribe(t, f.companyID, f.proPlan)
 }
 
 // ── Add-ons ──────────────────────────────────────────────────────────────────
@@ -330,13 +330,13 @@ func TestSubscriptionAddon_Add_Unauthenticated(t *testing.T) {
 }
 
 func TestSubscriptionAddon_Add_Forbidden_NonAdmin(t *testing.T) {
-	h, _, _ := mustTenantOwner(t)
+	h, _, _ := mustCompanyOwner(t)
 	assert.Equal(t, 403, testSrv.POST(subscriptionPath(uuid.NewString(), "addons"), map[string]any{"addon_id": uuid.NewString()}, h).Code)
 }
 
 func TestSubscriptionAddon_Add_Forbidden_LicenseManaged(t *testing.T) {
 	f := newSubFixture(t)
-	subID := mustSubscribe(t, f.tenantID, f.basicPlan)
+	subID := mustSubscribe(t, f.companyID, f.basicPlan)
 	assert.Equal(t, 403, testOnPremSrv.POST(subscriptionPath(subID, "addons"), map[string]any{"addon_id": addonFixture(t, f)}, adminHeader()).Code)
 }
 
@@ -346,7 +346,7 @@ func TestSubscriptionAddon_Add_NotFound(t *testing.T) {
 
 func TestSubscriptionAddon_Add_Invalid(t *testing.T) {
 	f := newSubFixture(t)
-	subID := mustSubscribe(t, f.tenantID, f.basicPlan)
+	subID := mustSubscribe(t, f.companyID, f.basicPlan)
 	addonID := addonFixture(t, f)
 	otherAddon := mustCreateAddon(t, newSubFixture(t).solutionID, "x", nil)
 
@@ -357,7 +357,7 @@ func TestSubscriptionAddon_Add_Invalid(t *testing.T) {
 
 func TestSubscriptionAddon_Add_Success_DuplicateAndReactivate(t *testing.T) {
 	f := newSubFixture(t)
-	subID := mustSubscribe(t, f.tenantID, f.basicPlan)
+	subID := mustSubscribe(t, f.companyID, f.basicPlan)
 	addonID := addonFixture(t, f)
 
 	w := testSrv.POST(subscriptionPath(subID, "addons"), map[string]any{"addon_id": addonID, "quantity": 2}, adminHeader())
@@ -377,7 +377,7 @@ func TestSubscriptionAddon_Add_Success_DuplicateAndReactivate(t *testing.T) {
 
 	assert.Equal(t, map[string]string{f.maxEmp: "50"}, snapshotValues(t, subID, true))
 	assert.Equal(t, map[string]string{f.maxEmp: "10"}, snapshotValues(t, subID, false), "snapshot plan tidak tersentuh")
-	assert.Contains(t, eventTypesFor(t, f.tenantID), "subscription_addon.added")
+	assert.Contains(t, eventTypesFor(t, f.companyID), "subscription_addon.added")
 
 	assert.Equal(t, 409, testSrv.POST(subscriptionPath(subID, "addons"), map[string]any{"addon_id": addonID}, adminHeader()).Code, "sudah aktif")
 
@@ -397,19 +397,19 @@ func TestSubscriptionAddon_Add_Success_DuplicateAndReactivate(t *testing.T) {
 
 func TestSubscriptionAddon_Add_CanceledSubscription(t *testing.T) {
 	f := newSubFixture(t)
-	subID := mustSubscribe(t, f.tenantID, f.basicPlan)
+	subID := mustSubscribe(t, f.companyID, f.basicPlan)
 	require.Equal(t, 200, testSrv.POST(subscriptionPath(subID, "cancel"), nil, adminHeader()).Code)
 	assert.Equal(t, 409, testSrv.POST(subscriptionPath(subID, "addons"), map[string]any{"addon_id": addonFixture(t, f)}, adminHeader()).Code)
 }
 
 func TestSubscriptionAddon_List(t *testing.T) {
-	h, _, tenantID := mustTenantOwner(t)
+	h, _, companyID := mustCompanyOwner(t)
 	var subID string
-	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(), `SELECT id FROM subscriptions WHERE tenant_id = $1`, tenantID).Scan(&subID))
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(), `SELECT id FROM subscriptions WHERE company_id = $1`, companyID).Scan(&subID))
 
 	assert.Equal(t, 401, testSrv.GET(subscriptionPath(subID, "addons")).Code)
-	strangerH, _, _ := mustTenantOwner(t)
-	assert.Equal(t, 404, testSrv.GET(subscriptionPath(subID, "addons"), strangerH).Code, "subscription tenant lain disembunyikan")
+	strangerH, _, _ := mustCompanyOwner(t)
+	assert.Equal(t, 404, testSrv.GET(subscriptionPath(subID, "addons"), strangerH).Code, "subscription company lain disembunyikan")
 	assert.Equal(t, 404, testSrv.GET(subscriptionPath(uuid.NewString(), "addons"), adminHeader()).Code)
 
 	w := testSrv.GET(subscriptionPath(subID, "addons"), h)

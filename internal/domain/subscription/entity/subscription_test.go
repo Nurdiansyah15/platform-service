@@ -28,33 +28,33 @@ func terms(t *testing.T, planID, cycle, price string) entity.PlanTerms {
 var jan31 = time.Date(2026, 1, 31, 10, 0, 0, 0, time.UTC)
 
 func TestNewSubscription_Period(t *testing.T) {
-	s, err := entity.NewSubscription("t1", terms(t, "basic", "monthly", "100000"), "", jan31, jan31)
+	s, err := entity.NewSubscription("c1", terms(t, "basic", "monthly", "100000"), "", jan31, jan31)
 	require.NoError(t, err)
 	assert.Equal(t, valueobject.StatusActive, s.Status)
 	assert.Equal(t, "100000.00", s.PriceAtPurchase.String())
 	assert.Equal(t, time.Date(2026, 2, 28, 10, 0, 0, 0, time.UTC), *s.CurrentPeriodEnd, "31 Jan + 1 bulan dijepit ke 28 Feb")
 
-	y, err := entity.NewSubscription("t1", terms(t, "basic", "yearly", "1"), "trialing", jan31, jan31)
+	y, err := entity.NewSubscription("c1", terms(t, "basic", "yearly", "1"), "trialing", jan31, jan31)
 	require.NoError(t, err)
 	assert.Equal(t, valueobject.StatusTrialing, y.Status)
 	assert.Equal(t, time.Date(2027, 1, 31, 10, 0, 0, 0, time.UTC), *y.CurrentPeriodEnd)
 
 	leap := time.Date(2028, 2, 29, 0, 0, 0, 0, time.UTC)
-	ly, err := entity.NewSubscription("t1", terms(t, "basic", "yearly", "1"), "", leap, leap)
+	ly, err := entity.NewSubscription("c1", terms(t, "basic", "yearly", "1"), "", leap, leap)
 	require.NoError(t, err)
 	assert.Equal(t, time.Date(2029, 2, 28, 0, 0, 0, 0, time.UTC), *ly.CurrentPeriodEnd, "29 Feb + 1 tahun dijepit ke 28 Feb")
 
 	mid := time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC)
-	m, err := entity.NewSubscription("t1", terms(t, "basic", "monthly", "1"), "", mid, mid)
+	m, err := entity.NewSubscription("c1", terms(t, "basic", "monthly", "1"), "", mid, mid)
 	require.NoError(t, err)
 	assert.Equal(t, time.Date(2026, 4, 15, 0, 0, 0, 0, time.UTC), *m.CurrentPeriodEnd)
 
-	_, err = entity.NewSubscription("t1", terms(t, "basic", "monthly", "1"), "canceled", jan31, jan31)
+	_, err = entity.NewSubscription("c1", terms(t, "basic", "monthly", "1"), "canceled", jan31, jan31)
 	testhelper.AssertDomainError(t, err, constant.CodeSubscriptionStatusInvalid)
 }
 
 func TestSubscription_ChangePlanAndCancel(t *testing.T) {
-	s, err := entity.NewSubscription("t1", terms(t, "basic", "monthly", "100000"), "", jan31, jan31)
+	s, err := entity.NewSubscription("c1", terms(t, "basic", "monthly", "100000"), "", jan31, jan31)
 	require.NoError(t, err)
 
 	testhelper.AssertDomainError(t, s.ChangePlan(terms(t, "basic", "monthly", "1"), jan31), constant.CodeSubscriptionSamePlan)
@@ -72,7 +72,7 @@ func TestSubscription_ChangePlanAndCancel(t *testing.T) {
 }
 
 func TestSubscription_AttachAddon(t *testing.T) {
-	s, err := entity.NewSubscription("t1", terms(t, "basic", "monthly", "1"), "", jan31, jan31)
+	s, err := entity.NewSubscription("c1", terms(t, "basic", "monthly", "1"), "", jan31, jan31)
 	require.NoError(t, err)
 	price, _ := pricingvo.NewPrice("25000")
 	cur, _ := pricingvo.NewCurrency("")

@@ -27,7 +27,7 @@ type EventListReadQuery struct {
 	SolutionID string
 	Since      *time.Time
 	EventType  *string
-	TenantID   *string
+	CompanyID  *string
 	// After — cursor (occurred_at, id) dari halaman sebelumnya.
 	AfterOccurredAt *time.Time
 	AfterID         string
@@ -37,7 +37,7 @@ type EventListReadQuery struct {
 type EventReadItem struct {
 	ID         string
 	EventType  string
-	TenantID   *string
+	CompanyID  *string
 	SolutionID *string
 	Payload    []byte
 	OccurredAt time.Time

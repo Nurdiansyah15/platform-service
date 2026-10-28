@@ -29,7 +29,7 @@ const (
 	MsgServiceTokenRequired  = "AUTH_SERVICE_TOKEN_REQUIRED"
 	MsgInsufficientScope     = "AUTH_INSUFFICIENT_SCOPE"
 	MsgPlatformAdminRequired = "AUTH_PLATFORM_ADMIN_REQUIRED"
-	MsgTenantNotSelected     = "AUTH_TENANT_NOT_SELECTED"
+	MsgCompanyNotSelected    = "AUTH_COMPANY_NOT_SELECTED"
 )
 
 type AppError struct {

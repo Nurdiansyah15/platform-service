@@ -25,7 +25,7 @@ func NewPostgresSubscriptionQuery(db *sql.DB) *PostgresSubscriptionQuery {
 var subscriptionSortable = map[string]string{"created_at": "s.created_at", "status": "s.status", "current_period_end": "s.current_period_end"}
 
 const subscriptionSelect = `
-	SELECT s.id, s.tenant_id, s.solution_id, sol.code, s.plan_id, p.code, p.name, s.status, s.billing_cycle,
+	SELECT s.id, s.company_id, s.solution_id, sol.code, s.plan_id, p.code, p.name, s.status, s.billing_cycle,
 		s.current_period_start, s.current_period_end, s.price_at_purchase::text, s.currency, s.created_at, s.updated_at
 	FROM subscriptions s
 	JOIN solutions sol ON sol.id = s.solution_id
@@ -33,7 +33,7 @@ const subscriptionSelect = `
 
 func scanSubscriptionItem(row interface{ Scan(dest ...any) error }) (port.SubscriptionReadItem, error) {
 	var it port.SubscriptionReadItem
-	err := row.Scan(&it.ID, &it.TenantID, &it.SolutionID, &it.SolutionCode, &it.PlanID, &it.PlanCode, &it.PlanName,
+	err := row.Scan(&it.ID, &it.CompanyID, &it.SolutionID, &it.SolutionCode, &it.PlanID, &it.PlanCode, &it.PlanName,
 		&it.Status, &it.BillingCycle, &it.CurrentPeriodStart, &it.CurrentPeriodEnd, &it.PriceAtPurchase, &it.Currency,
 		&it.CreatedAt, &it.UpdatedAt)
 	return it, err
@@ -43,7 +43,7 @@ func (r *PostgresSubscriptionQuery) ListSubscriptions(ctx context.Context, q por
 	limit, offset, page, sortColumn, sortType := resolvePaginationParams(q.PaginationParams, 20, 100, subscriptionSortable, "s.created_at", "desc")
 
 	var w whereBuilder
-	w.add(`s.tenant_id = $%d`, q.TenantID)
+	w.add(`s.company_id = $%d`, q.CompanyID)
 	if q.SolutionID != nil {
 		w.add(`s.solution_id = $%d`, *q.SolutionID)
 	}
@@ -133,22 +133,22 @@ func (r *PostgresSubscriptionQuery) GetSubscriptionAddon(ctx context.Context, id
 	return &it, nil
 }
 
-func (r *PostgresSubscriptionQuery) ListSelectableTenants(ctx context.Context, userID, solutionID string) ([]port.SelectableTenantReadItem, error) {
+func (r *PostgresSubscriptionQuery) ListSelectableCompanies(ctx context.Context, userID, solutionID string) ([]port.SelectableCompanyReadItem, error) {
 	rows, err := execFromContext(ctx, r.db).QueryContext(ctx, `
 		SELECT t.id, t.name, t.slug, t.status
-		FROM tenants t
-		JOIN tenant_members m ON m.tenant_id = t.id AND m.user_id = $1 AND m.status = 'active'
+		FROM companies t
+		JOIN company_members m ON m.company_id = t.id AND m.user_id = $1 AND m.status = 'active'
 		WHERE t.status = 'active'
 		  AND EXISTS (SELECT 1 FROM subscriptions s
-		              WHERE s.tenant_id = t.id AND s.solution_id = $2 AND s.status = ANY($3::text[]))
+		              WHERE s.company_id = t.id AND s.solution_id = $2 AND s.status = ANY($3::text[]))
 		ORDER BY t.name, t.id`, userID, solutionID, valueobject.UsableStatuses)
 	if err != nil {
 		return nil, domainerr.Wrap(constant.CodeSubscriptionQueryFailed, err)
 	}
 	defer rows.Close()
-	items := []port.SelectableTenantReadItem{}
+	items := []port.SelectableCompanyReadItem{}
 	for rows.Next() {
-		var it port.SelectableTenantReadItem
+		var it port.SelectableCompanyReadItem
 		if err := rows.Scan(&it.ID, &it.Name, &it.Slug, &it.Status); err != nil {
 			return nil, domainerr.Wrap(constant.CodeSubscriptionQueryFailed, err)
 		}

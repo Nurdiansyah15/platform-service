@@ -23,10 +23,6 @@ func NewPostgresOrganizationQuery(db *sql.DB) *PostgresOrganizationQuery {
 
 var orgUnitSortable = map[string]string{"code": "code", "name": "name", "created_at": "created_at"}
 
-func (r *PostgresOrganizationQuery) ListCompanies(ctx context.Context, q port.OrgUnitListReadQuery) ([]port.OrgUnitReadItem, dto.Meta, error) {
-	return r.list(ctx, "companies", "tenant_id", q)
-}
-
 func (r *PostgresOrganizationQuery) ListBranches(ctx context.Context, q port.OrgUnitListReadQuery) ([]port.OrgUnitReadItem, dto.Meta, error) {
 	return r.list(ctx, "branches", "company_id", q)
 }

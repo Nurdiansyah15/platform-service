@@ -12,56 +12,40 @@ import (
 	orgrepo "platform-service/internal/domain/organization/repository"
 )
 
-// ScopeValidator memastikan scope milik tenant (spec §2.6):
-//   - tenant  → scope_id = tenant itu sendiri
-//   - company → company (belum dihapus) milik tenant
-//   - branch  → branch (belum dihapus) dari company milik tenant
+// ScopeValidator memastikan scope milik company (spec §2.6):
+//   - company → scope_id = company itu sendiri (boleh kosong, diisi companyID)
+//   - branch  → branch (belum dihapus) dari company tersebut
 type ScopeValidator struct {
-	companies orgrepo.CompanyRepository
-	branches  orgrepo.BranchRepository
+	branches orgrepo.BranchRepository
 }
 
-func NewScopeValidator(companies orgrepo.CompanyRepository, branches orgrepo.BranchRepository) *ScopeValidator {
-	return &ScopeValidator{companies: companies, branches: branches}
+func NewScopeValidator(branches orgrepo.BranchRepository) *ScopeValidator {
+	return &ScopeValidator{branches: branches}
 }
 
 // Resolve memvalidasi scope dan mengembalikan CheckScope (dengan company induk untuk branch).
-// scopeID kosong pada scope tenant diisi tenantID.
-func (v *ScopeValidator) Resolve(ctx context.Context, tenantID string, scopeType valueobject.ScopeType, scopeID string) (entity.CheckScope, error) {
+// scopeID kosong pada scope company diisi companyID.
+func (v *ScopeValidator) Resolve(ctx context.Context, companyID string, scopeType valueobject.ScopeType, scopeID string) (entity.CheckScope, error) {
 	invalid := domainerr.New(constant.CodeScopeInvalid)
-	if scopeType != valueobject.ScopeTenant && scopeID == "" {
-		return entity.CheckScope{}, invalid // company / branch wajib menyebut scope_id
-	}
 	switch scopeType {
-	case valueobject.ScopeTenant:
-		if scopeID != "" && scopeID != tenantID {
-			return entity.CheckScope{}, invalid
-		}
-		return entity.CheckScope{Scope: valueobject.Scope{Type: scopeType, ID: tenantID}}, nil
-
 	case valueobject.ScopeCompany:
-		c, err := v.companies.FindByID(ctx, scopeID)
-		if err != nil {
-			return entity.CheckScope{}, notFoundAsInvalid(err, orgconstant.CodeCompanyNotFound)
-		}
-		if c.TenantID != tenantID {
+		if scopeID != "" && scopeID != companyID {
 			return entity.CheckScope{}, invalid
 		}
-		return entity.CheckScope{Scope: valueobject.Scope{Type: scopeType, ID: c.ID}}, nil
+		return entity.CheckScope{Scope: valueobject.Scope{Type: scopeType, ID: companyID}}, nil
 
 	case valueobject.ScopeBranch:
+		if scopeID == "" {
+			return entity.CheckScope{}, invalid // branch wajib menyebut scope_id
+		}
 		b, err := v.branches.FindByID(ctx, scopeID)
 		if err != nil {
 			return entity.CheckScope{}, notFoundAsInvalid(err, orgconstant.CodeBranchNotFound)
 		}
-		c, err := v.companies.FindByID(ctx, b.CompanyID)
-		if err != nil {
-			return entity.CheckScope{}, notFoundAsInvalid(err, orgconstant.CodeCompanyNotFound)
-		}
-		if c.TenantID != tenantID {
+		if b.CompanyID != companyID {
 			return entity.CheckScope{}, invalid
 		}
-		return entity.CheckScope{Scope: valueobject.Scope{Type: scopeType, ID: b.ID}, BranchCompanyID: c.ID}, nil
+		return entity.CheckScope{Scope: valueobject.Scope{Type: scopeType, ID: b.ID}, BranchCompanyID: companyID}, nil
 	}
 	return entity.CheckScope{}, invalid
 }

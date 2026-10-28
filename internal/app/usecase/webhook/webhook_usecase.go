@@ -78,7 +78,7 @@ func (uc *WebhookUseCase) ListEvents(ctx context.Context, actor *principal.Princ
 		SolutionID: actor.SolutionID,
 		Since:      q.Since,
 		EventType:  q.EventType,
-		TenantID:   q.TenantID,
+		CompanyID:  q.CompanyID,
 		Limit:      limit + 1, // satu ekstra untuk mendeteksi halaman berikutnya
 	}
 	if q.Cursor != nil {
@@ -102,14 +102,14 @@ func (uc *WebhookUseCase) ListEvents(ctx context.Context, actor *principal.Princ
 	}
 	items := make([]dto.EventItem, 0, len(rows))
 	for _, r := range rows {
-		items = append(items, toEventItem(r.ID, r.EventType, r.TenantID, r.SolutionID, r.OccurredAt, r.Payload))
+		items = append(items, toEventItem(r.ID, r.EventType, r.CompanyID, r.SolutionID, r.OccurredAt, r.Payload))
 	}
 	return items, meta, nil
 }
 
-func toEventItem(id, eventType string, tenantID, solutionID *string, occurredAt time.Time, payload []byte) dto.EventItem {
+func toEventItem(id, eventType string, companyID, solutionID *string, occurredAt time.Time, payload []byte) dto.EventItem {
 	return dto.EventItem{
-		ID: id, Type: eventType, TenantID: tenantID, SolutionID: solutionID,
+		ID: id, Type: eventType, CompanyID: companyID, SolutionID: solutionID,
 		OccurredAt: occurredAt.UTC(), Data: payload,
 	}
 }

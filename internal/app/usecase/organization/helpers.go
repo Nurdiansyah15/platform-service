@@ -11,54 +11,38 @@ import (
 	"platform-service/internal/domain/organization/constant"
 	"platform-service/internal/domain/organization/entity"
 	orgrepo "platform-service/internal/domain/organization/repository"
-	tenantconstant "platform-service/internal/domain/tenant/constant"
-	tenantrepo "platform-service/internal/domain/tenant/repository"
-	"platform-service/internal/domain/tenant/service"
+	"platform-service/internal/domain/organization/service"
 )
 
-// ensureTenant memeriksa hak akses ke tenant lalu memastikan tenant ada.
-func ensureTenant(ctx context.Context, access *service.AccessPolicy, tenants tenantrepo.TenantRepository, actor *principal.Principal, tenantID string) error {
-	if err := access.EnsureCanAccess(ctx, accessorOf(actor), tenantID); err != nil {
-		return mapOrgDomainError(err)
-	}
-	if _, err := tenants.FindByID(ctx, tenantID); err != nil {
-		return mapOrgDomainError(err)
-	}
-	return nil
-}
-
-// accessibleCompany memuat company lalu memeriksa akses ke tenant pemiliknya.
-// Company milik tenant yang tidak boleh diakses dilaporkan 404 agar keberadaannya
-// tidak bocor lintas tenant.
+// accessibleCompany memeriksa akses ke company lalu memastikan company ada.
 func accessibleCompany(ctx context.Context, access *service.AccessPolicy, companies orgrepo.CompanyRepository, actor *principal.Principal, companyID string) (*entity.Company, error) {
+	if err := access.EnsureCanAccess(ctx, accessorOf(actor), companyID); err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
 	c, err := companies.FindByID(ctx, companyID)
 	if err != nil {
-		return nil, mapOrgDomainError(err)
-	}
-	if err := access.EnsureCanAccess(ctx, accessorOf(actor), c.TenantID); err != nil {
-		if isDomainCode(err, tenantconstant.CodeTenantAccessDenied) {
-			return nil, mapOrgDomainError(domainerr.New(constant.CodeCompanyNotFound))
-		}
-		return nil, mapOrgDomainError(err)
+		return nil, mapCompanyDomainError(err)
 	}
 	return c, nil
 }
 
-func mapOrgDomainError(err error) error {
+func mapCompanyDomainError(err error) error {
 	var de *domainerr.DomainError
 	if !errors.As(err, &de) {
 		return apperror.Internal(string(apperror.CodeInternal), err)
 	}
 	switch de.Code {
-	case constant.CodeCompanyNotFound, constant.CodeBranchNotFound, tenantconstant.CodeTenantNotFound:
+	case constant.CodeCompanyNotFound, constant.CodeBranchNotFound:
 		return apperror.NotFound(string(de.Code))
-	case tenantconstant.CodeTenantNotSelected:
-		return apperror.Forbidden(apperror.MsgTenantNotSelected)
-	case tenantconstant.CodeTenantAccessDenied:
+	case constant.CodeCompanyNotSelected:
+		return apperror.Forbidden(apperror.MsgCompanyNotSelected)
+	case constant.CodeCompanyAccessDenied:
 		return apperror.Forbidden(string(de.Code))
-	case constant.CodeCompanyCodeDuplicate, constant.CodeBranchCodeDuplicate:
+	case constant.CodeCompanySlugDuplicate, constant.CodeMemberAlreadyExists, constant.CodeBranchCodeDuplicate:
 		return apperror.Conflict(string(de.Code), err)
-	case constant.CodeOrgCodeInvalid, constant.CodeOrgNameInvalid, constant.CodeOrgStatusInvalid:
+	case constant.CodeCompanyNameInvalid, constant.CodeCompanySlugInvalid, constant.CodeCompanyStatusInvalid,
+		constant.CodeMemberStatusInvalid, constant.CodeMemberUserNotFound, constant.CodeMemberIdentityRequired,
+		constant.CodeOrgCodeInvalid, constant.CodeOrgNameInvalid, constant.CodeOrgStatusInvalid:
 		return apperror.Unprocessable(string(de.Code), nil, err)
 	default:
 		return apperror.Internal(string(de.Code), err)
@@ -71,7 +55,7 @@ func isDomainCode(err error, code domainerr.Code) bool {
 }
 
 func accessorOf(p *principal.Principal) service.Accessor {
-	a := service.Accessor{UserID: p.UserID, ActiveTenantID: p.TenantID, IsPlatformAdmin: p.IsUser() && p.IsPlatformAdmin}
+	a := service.Accessor{UserID: p.UserID, ActiveCompanyID: p.CompanyID, IsPlatformAdmin: p.IsUser() && p.IsPlatformAdmin}
 	if p.IsService() {
 		a.ServiceSolutionID = p.SolutionID
 	}
@@ -80,7 +64,7 @@ func accessorOf(p *principal.Principal) service.Accessor {
 
 func toCompanyResponse(c *entity.Company) dto.CompanyResponse {
 	return dto.CompanyResponse{
-		ID: c.ID, TenantID: c.TenantID, Name: c.Name, Code: c.Code.Value(), Status: c.Status.String(),
+		ID: c.ID, Name: c.Name, Slug: c.Slug.Value(), Status: c.Status.String(),
 		CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
 	}
 }

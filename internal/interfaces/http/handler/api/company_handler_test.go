@@ -12,30 +12,24 @@ import (
 	"platform-service/internal/testhelper"
 )
 
-func companiesPath(tenantID string) string {
-	return "/api/v1/tenants/" + tenantID + "/companies"
+type companyData struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Slug   string `json:"slug"`
+	Status string `json:"status"`
 }
 
-type orgUnitData struct {
-	ID        string `json:"id"`
-	TenantID  string `json:"tenant_id"`
-	CompanyID string `json:"company_id"`
-	Name      string `json:"name"`
-	Code      string `json:"code"`
-	Status    string `json:"status"`
-}
-
-type orgUnitListResp struct {
-	Data []orgUnitData `json:"data"`
+type companyListResp struct {
+	Data []companyData `json:"data"`
 	Meta struct {
 		Total int64 `json:"total"`
 	} `json:"meta"`
 }
 
-func orgCodes(items []orgUnitData) []string {
+func companyIDs(items []companyData) []string {
 	out := make([]string, 0, len(items))
 	for _, it := range items {
-		out = append(out, it.Code)
+		out = append(out, it.ID)
 	}
 	return out
 }
@@ -43,120 +37,156 @@ func orgCodes(items []orgUnitData) []string {
 // ── Create ───────────────────────────────────────────────────────────────────
 
 func TestCompany_Create_Unauthenticated(t *testing.T) {
-	assert.Equal(t, 401, testSrv.POST(companiesPath(uuid.NewString()), map[string]any{"name": "X", "code": "X"}).Code)
+	w := testSrv.POST("/api/v1/companies", map[string]any{"name": "Acme", "slug": testhelper.UniqueCode("acme")})
+	assert.Equal(t, 401, w.Code)
 }
 
 func TestCompany_Create_Forbidden_ServiceToken(t *testing.T) {
-	w := testSrv.POST(companiesPath(uuid.NewString()), map[string]any{"name": "X", "code": "X"},
-		testhelper.BearerHeader(testSrv.Auth.ServiceToken(uuid.NewString(), "org:write")))
-	assert.Equal(t, 403, w.Code, w.Body.String())
-}
-
-func TestCompany_Create_Forbidden_TenantNotSelected(t *testing.T) {
-	tok, _, _ := mustLoginNewUser(t)
-	h := testhelper.BearerHeader(tok.AccessToken)
-	tenantID := mustCreateTenant(t, h)
-
-	w := testSrv.POST(companiesPath(tenantID), map[string]any{"name": "HQ", "code": "HQ"}, h)
-	assert.Equal(t, 403, w.Code, w.Body.String())
-}
-
-func TestCompany_Create_Forbidden_NonMember(t *testing.T) {
-	_, _, tenantID := mustTenantOwner(t)
-	_, strangerID, _ := mustTenantOwner(t)
-	w := testSrv.POST(companiesPath(tenantID), map[string]any{"name": "HQ", "code": "HQ"}, tenantToken(strangerID, tenantID))
+	w := testSrv.POST("/api/v1/companies", map[string]any{"name": "Acme", "slug": testhelper.UniqueCode("acme")},
+		testhelper.BearerHeader(testSrv.Auth.ServiceToken(uuid.NewString(), "users:write")))
 	assert.Equal(t, 403, w.Code, w.Body.String())
 }
 
 func TestCompany_Create_InvalidPayload(t *testing.T) {
-	h, _, tenantID := mustTenantOwner(t)
-	tests := map[string]map[string]any{
-		"tanpa code":       {"name": "HQ"},
-		"code ber-spasi":   {"name": "HQ", "code": "kantor pusat"},
-		"status tak valid": {"name": "HQ", "code": "HQ", "status": "closed"},
-	}
-	for name, body := range tests {
-		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, 422, testSrv.POST(companiesPath(tenantID), body, h).Code)
-		})
-	}
+	tok, _, _ := mustLoginNewUser(t)
+	h := testhelper.BearerHeader(tok.AccessToken)
+
+	w := testSrv.POST("/api/v1/companies", map[string]any{"name": "Acme"}, h)
+	assert.Equal(t, 422, w.Code, "tanpa slug: %s", w.Body.String())
+
+	w = testSrv.POST("/api/v1/companies", map[string]any{"name": "Acme", "slug": "pt contoh!"}, h)
+	assert.Equal(t, 422, w.Code, "slug tidak valid: %s", w.Body.String())
 }
 
-func TestCompany_Create_TenantNotFound(t *testing.T) {
-	w := testSrv.POST(companiesPath(uuid.NewString()), map[string]any{"name": "HQ", "code": "HQ"}, adminHeader())
-	assert.Equal(t, 404, w.Code, w.Body.String())
-}
+func TestCompany_Create_DuplicateSlug(t *testing.T) {
+	tok, _, _ := mustLoginNewUser(t)
+	h := testhelper.BearerHeader(tok.AccessToken)
+	slug := testhelper.UniqueCode("dup")
+	require.Equal(t, 201, testSrv.POST("/api/v1/companies", map[string]any{"name": "A", "slug": slug}, h).Code)
 
-func TestCompany_Create_DuplicateCodeCaseInsensitive(t *testing.T) {
-	h, _, tenantID := mustTenantOwner(t)
-	mustCreateCompany(t, h, tenantID, "hq-01")
-
-	w := testSrv.POST(companiesPath(tenantID), map[string]any{"name": "Lagi", "code": "HQ-01"}, h)
+	w := testSrv.POST("/api/v1/companies", map[string]any{"name": "B", "slug": upper(slug)}, h)
 	assert.Equal(t, 409, w.Code, w.Body.String())
 }
 
-func TestCompany_Create_SameCodeInOtherTenantAllowed(t *testing.T) {
-	h1, _, t1 := mustTenantOwner(t)
-	h2, _, t2 := mustTenantOwner(t)
-	mustCreateCompany(t, h1, t1, "HQ")
-	mustCreateCompany(t, h2, t2, "HQ")
-}
+func TestCompany_Create_Success_CreatorBecomesMember(t *testing.T) {
+	tok, userID, _ := mustLoginNewUser(t)
+	slug := testhelper.UniqueCode("acme")
 
-func TestCompany_Create_CodeReusableAfterSoftDelete(t *testing.T) {
-	h, _, tenantID := mustTenantOwner(t)
-	id := mustCreateCompany(t, h, tenantID, "OLD")
-	_, err := testSrv.DB.ExecContext(context.Background(), `UPDATE companies SET deleted_at = NOW() WHERE id = $1`, id)
-	require.NoError(t, err)
-
-	mustCreateCompany(t, h, tenantID, "OLD")
-}
-
-func TestCompany_Create_Success(t *testing.T) {
-	h, _, tenantID := mustTenantOwner(t)
-
-	w := testSrv.POST(companiesPath(tenantID), map[string]any{"name": " Kantor Pusat ", "code": " hq-01 "}, h)
+	w := testSrv.POST("/api/v1/companies", map[string]any{"name": " Acme Corp ", "slug": slug}, testhelper.BearerHeader(tok.AccessToken))
 	require.Equal(t, 201, w.Code, w.Body.String())
-	var got orgUnitData
+
+	var got companyData
 	testhelper.DecodeBody(t, w, &got)
-	assert.Equal(t, tenantID, got.TenantID)
-	assert.Equal(t, "Kantor Pusat", got.Name)
-	assert.Equal(t, "HQ-01", got.Code)
+	assert.Equal(t, "Acme Corp", got.Name)
+	assert.Equal(t, slug, got.Slug)
 	assert.Equal(t, "active", got.Status)
 
-	var payloadCode string
+	var status string
 	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
-		`SELECT payload->>'code' FROM events WHERE event_type = 'company.created' AND payload->>'id' = $1`, got.ID).Scan(&payloadCode))
-	assert.Equal(t, "HQ-01", payloadCode)
+		`SELECT status FROM company_members WHERE company_id = $1 AND user_id = $2`, got.ID, userID).Scan(&status))
+	assert.Equal(t, "active", status)
+	assert.Equal(t, 1, countEvents(t, "company_member.added", got.ID))
+}
+
+func TestCompany_Create_ByPlatformAdmin_NoMembership(t *testing.T) {
+	companyID := mustCreateCompany(t, adminHeader())
+
+	var n int
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM company_members WHERE company_id = $1`, companyID).Scan(&n))
+	assert.Equal(t, 0, n)
+	assert.Equal(t, 0, countEvents(t, "company_member.added", companyID))
 }
 
 // ── List ─────────────────────────────────────────────────────────────────────
 
 func TestCompany_List_Unauthenticated(t *testing.T) {
-	assert.Equal(t, 401, testSrv.GET(companiesPath(uuid.NewString())).Code)
+	assert.Equal(t, 401, testSrv.GET("/api/v1/companies").Code)
 }
 
-func TestCompany_List_Forbidden_OtherTenant(t *testing.T) {
-	_, _, tenantID := mustTenantOwner(t)
-	_, strangerID, strangerTenant := mustTenantOwner(t)
-	assert.Equal(t, 403, testSrv.GET(companiesPath(tenantID), tenantToken(strangerID, strangerTenant)).Code)
+func TestCompany_List_InvalidStatus(t *testing.T) {
+	assert.Equal(t, 422, testSrv.GET("/api/v1/companies?status=deleted", adminHeader()).Code)
 }
 
-func TestCompany_List_NotFound(t *testing.T) {
-	assert.Equal(t, 404, testSrv.GET(companiesPath(uuid.NewString()), adminHeader()).Code)
+func TestCompany_List_UserSeesOnlyOwnCompanies_WithoutActiveCompany(t *testing.T) {
+	tok, _, _ := mustLoginNewUser(t)
+	h := testhelper.BearerHeader(tok.AccessToken) // cid kosong — List adalah endpoint pemilihan company
+	mine1 := mustCreateCompany(t, h)
+	mine2 := mustCreateCompany(t, h)
+	_, _, others := mustCompanyOwner(t)
+
+	w := testSrv.GET("/api/v1/companies?limit=100", h)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var resp companyListResp
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	assert.ElementsMatch(t, []string{mine1, mine2}, companyIDs(resp.Data))
+	assert.NotContains(t, companyIDs(resp.Data), others)
+	assert.Equal(t, int64(2), resp.Meta.Total)
 }
 
-func TestCompany_List_Success_ExcludesDeleted(t *testing.T) {
-	h, _, tenantID := mustTenantOwner(t)
-	mustCreateCompany(t, h, tenantID, "B")
-	mustCreateCompany(t, h, tenantID, "A")
-	deleted := mustCreateCompany(t, h, tenantID, "C")
-	_, err := testSrv.DB.ExecContext(context.Background(), `UPDATE companies SET deleted_at = NOW() WHERE id = $1`, deleted)
+func TestCompany_List_AdminSeesAll(t *testing.T) {
+	_, _, companyID := mustCompanyOwner(t)
+	var slug string
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(), `SELECT slug FROM companies WHERE id = $1`, companyID).Scan(&slug))
+
+	w := testSrv.GET("/api/v1/companies?search="+slug, adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var resp companyListResp
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	assert.Equal(t, []string{companyID}, companyIDs(resp.Data))
+}
+
+// ── Get ──────────────────────────────────────────────────────────────────────
+
+func TestCompany_Get_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.GET("/api/v1/companies/"+uuid.NewString()).Code)
+}
+
+func TestCompany_Get_InvalidID(t *testing.T) {
+	assert.Equal(t, 422, testSrv.GET("/api/v1/companies/bukan-uuid", adminHeader()).Code)
+}
+
+func TestCompany_Get_Forbidden_CompanyNotSelected(t *testing.T) {
+	tok, _, _ := mustLoginNewUser(t)
+	h := testhelper.BearerHeader(tok.AccessToken)
+	companyID := mustCreateCompany(t, h)
+
+	w := testSrv.GET("/api/v1/companies/"+companyID, h)
+	require.Equal(t, 403, w.Code, w.Body.String())
+	assert.Equal(t, "Select an active company first.", errorMessage(t, testhelper.DecodeError(t, w)))
+}
+
+func TestCompany_Get_Forbidden_OtherActiveCompany(t *testing.T) {
+	_, userID, _ := mustCompanyOwner(t)
+	_, _, otherCompany := mustCompanyOwner(t)
+
+	w := testSrv.GET("/api/v1/companies/"+otherCompany, companyToken(userID, otherCompany))
+	assert.Equal(t, 403, w.Code, "bukan member walau tid diisi: %s", w.Body.String())
+}
+
+func TestCompany_Get_NotFound(t *testing.T) {
+	assert.Equal(t, 404, testSrv.GET("/api/v1/companies/"+uuid.NewString(), adminHeader()).Code)
+}
+
+func TestCompany_Get_Success_Member(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	w := testSrv.GET("/api/v1/companies/"+companyID, h)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got companyData
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, companyID, got.ID)
+}
+
+func TestCompany_Get_Success_PlatformAdmin(t *testing.T) {
+	_, _, companyID := mustCompanyOwner(t)
+	assert.Equal(t, 200, testSrv.GET("/api/v1/companies/"+companyID, adminHeader()).Code)
+}
+
+func TestCompany_Get_Forbidden_InactiveMember(t *testing.T) {
+	h, userID, companyID := mustCompanyOwner(t)
+	_, err := testSrv.DB.ExecContext(context.Background(),
+		`UPDATE company_members SET status = 'inactive' WHERE company_id = $1 AND user_id = $2`, companyID, userID)
 	require.NoError(t, err)
 
-	w := testSrv.GET(companiesPath(tenantID), h)
-	require.Equal(t, 200, w.Code, w.Body.String())
-	var resp orgUnitListResp
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
-	assert.Equal(t, []string{"A", "B"}, orgCodes(resp.Data))
-	assert.Equal(t, int64(2), resp.Meta.Total)
+	assert.Equal(t, 403, testSrv.GET("/api/v1/companies/"+companyID, h).Code)
 }

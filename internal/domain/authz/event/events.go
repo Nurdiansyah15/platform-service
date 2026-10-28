@@ -7,7 +7,7 @@ const TypeRoleAssignmentCreated = "role_assignment.created"
 
 type RoleAssignmentPayload struct {
 	ID         string    `json:"id"`
-	TenantID   string    `json:"tenant_id"`
+	CompanyID  string    `json:"company_id"`
 	UserID     string    `json:"user_id"`
 	RoleID     string    `json:"role_id"`
 	RoleCode   string    `json:"role_code"`

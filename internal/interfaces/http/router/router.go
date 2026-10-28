@@ -20,7 +20,6 @@ type Handlers struct {
 	Auth     *api.AuthHandler
 	User     *api.UserHandler
 	Client   *api.SolutionClientHandler
-	Tenant   *api.TenantHandler
 	Org      *api.OrganizationHandler
 	Benefit  *api.BenefitHandler
 	Plan     *api.PlanHandler
@@ -84,7 +83,6 @@ func registerDomainRoutes(r Routes, h Handlers) {
 	RegisterAuthRoutes(r, h.Auth)
 	RegisterUserRoutes(r, h.User)
 	RegisterSolutionClientRoutes(r, h.Client)
-	RegisterTenantRoutes(r, h.Tenant)
 	RegisterOrganizationRoutes(r, h.Org)
 	RegisterBenefitRoutes(r, h.Benefit)
 	RegisterPlanRoutes(r, h.Plan)

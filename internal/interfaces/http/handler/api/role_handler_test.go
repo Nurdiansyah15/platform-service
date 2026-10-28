@@ -14,19 +14,19 @@ import (
 
 func solutionRolesPath(solutionID string) string { return "/api/v1/solutions/" + solutionID + "/roles" }
 func rolePermissionsPath(roleID string) string   { return "/api/v1/roles/" + roleID + "/permissions" }
-func tenantRolesPath(tenantID, solutionID string) string {
-	return "/api/v1/tenants/" + tenantID + "/solutions/" + solutionID + "/roles"
+func companyRolesPath(companyID, solutionID string) string {
+	return "/api/v1/companies/" + companyID + "/solutions/" + solutionID + "/roles"
 }
-func tenantRolePermissionsPath(tenantID, roleID string) string {
-	return "/api/v1/tenants/" + tenantID + "/roles/" + roleID + "/permissions"
+func companyRolePermissionsPath(companyID, roleID string) string {
+	return "/api/v1/companies/" + companyID + "/roles/" + roleID + "/permissions"
 }
 
 type roleData struct {
-	ID       string  `json:"id"`
-	TenantID *string `json:"tenant_id"`
-	Code     string  `json:"code"`
-	IsSystem bool    `json:"is_system"`
-	Scope    string  `json:"scope"`
+	ID        string  `json:"id"`
+	CompanyID *string `json:"company_id"`
+	Code      string  `json:"code"`
+	IsSystem  bool    `json:"is_system"`
+	Scope     string  `json:"scope"`
 }
 
 // mustCreateRole membuat role lewat path tertentu dan mengembalikan ID-nya.
@@ -106,12 +106,12 @@ func TestRole_CreateGlobal_Success_AndList(t *testing.T) {
 	require.Equal(t, 201, w.Code, w.Body.String())
 	var got roleData
 	testhelper.DecodeBody(t, w, &got)
-	assert.Nil(t, got.TenantID)
+	assert.Nil(t, got.CompanyID)
 	assert.Equal(t, "global", got.Scope)
 
 	var events int
 	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
-		`SELECT COUNT(*) FROM events WHERE event_type = 'role.created' AND solution_id = $1 AND tenant_id IS NULL`, solID).Scan(&events))
+		`SELECT COUNT(*) FROM events WHERE event_type = 'role.created' AND solution_id = $1 AND company_id IS NULL`, solID).Scan(&events))
 	assert.Equal(t, 1, events)
 
 	w = testSrv.GET(solutionRolesPath(solID), userHeader())
@@ -172,24 +172,24 @@ func TestRole_SystemRoleImmutable(t *testing.T) {
 	assert.Equal(t, 403, w.Code, w.Body.String())
 }
 
-// ── Role custom tenant ───────────────────────────────────────────────────────
+// ── Role custom company ───────────────────────────────────────────────────────
 
-// tenantRoleFixture: owner tenant (token asli ber-tid) yang subscribe solution berkatalog permission.
-func tenantRoleFixture(t *testing.T) (h map[string]string, tenantID, solutionID string) {
+// companyRoleFixture: owner company (token asli ber-tid) yang subscribe solution berkatalog permission.
+func companyRoleFixture(t *testing.T) (h map[string]string, companyID, solutionID string) {
 	t.Helper()
-	h, _, tenantID = mustTenantOwner(t)
+	h, _, companyID = mustCompanyOwner(t)
 	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
-		`SELECT solution_id FROM subscriptions WHERE tenant_id = $1`, tenantID).Scan(&solutionID))
+		`SELECT solution_id FROM subscriptions WHERE company_id = $1`, companyID).Scan(&solutionID))
 	mustSync(t, solutionID, adminHeader(), catalog("v1", [2]string{"employee.read", "R"}, [2]string{"employee.write", "W"}))
-	return h, tenantID, solutionID
+	return h, companyID, solutionID
 }
 
-func TestTenantRole_Create(t *testing.T) {
-	h, tenantID, solID := tenantRoleFixture(t)
-	path := tenantRolesPath(tenantID, solID)
+func TestCompanyRole_Create(t *testing.T) {
+	h, companyID, solID := companyRoleFixture(t)
+	path := companyRolesPath(companyID, solID)
 
 	assert.Equal(t, 401, testSrv.POST(path, map[string]any{"code": "x", "name": "X"}).Code)
-	strangerH, _, _ := mustTenantOwner(t)
+	strangerH, _, _ := mustCompanyOwner(t)
 	assert.Equal(t, 403, testSrv.POST(path, map[string]any{"code": "x", "name": "X"}, strangerH).Code, "bukan member")
 	assert.Equal(t, 422, testSrv.POST(path, map[string]any{"code": "x"}, h).Code)
 
@@ -197,69 +197,69 @@ func TestTenantRole_Create(t *testing.T) {
 	require.Equal(t, 201, w.Code, w.Body.String())
 	var got roleData
 	testhelper.DecodeBody(t, w, &got)
-	require.NotNil(t, got.TenantID)
-	assert.Equal(t, tenantID, *got.TenantID)
-	assert.Equal(t, "tenant", got.Scope)
-	assert.Equal(t, 1, countEvents(t, "role.created", tenantID))
+	require.NotNil(t, got.CompanyID)
+	assert.Equal(t, companyID, *got.CompanyID)
+	assert.Equal(t, "company", got.Scope)
+	assert.Equal(t, 1, countEvents(t, "role.created", companyID))
 
 	assert.Equal(t, 409, testSrv.POST(path, map[string]any{"code": "supervisor", "name": "Lagi"}, h).Code)
 
-	// Code yang sama boleh di tenant lain dan sebagai role global.
+	// Code yang sama boleh di company lain dan sebagai role global.
 	mustCreateRole(t, solutionRolesPath(solID), "supervisor", adminHeader())
 }
 
-func TestTenantRole_Create_TenantNotSubscribed(t *testing.T) {
+func TestCompanyRole_Create_CompanyNotSubscribed(t *testing.T) {
 	solID := roleSolution(t)
-	tenantID := mustCreateTenant(t, adminHeader())
-	w := testSrv.POST(tenantRolesPath(tenantID, solID), map[string]any{"code": "x", "name": "X"}, adminHeader())
+	companyID := mustCreateCompany(t, adminHeader())
+	w := testSrv.POST(companyRolesPath(companyID, solID), map[string]any{"code": "x", "name": "X"}, adminHeader())
 	assert.Equal(t, 403, w.Code, w.Body.String())
 }
 
-func TestTenantRole_Create_ServiceToken(t *testing.T) {
-	_, tenantID, solID := tenantRoleFixture(t)
+func TestCompanyRole_Create_ServiceToken(t *testing.T) {
+	_, companyID, solID := companyRoleFixture(t)
 	svc := testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, solID, "roles:write"), ""))
-	mustCreateRole(t, tenantRolesPath(tenantID, solID), "from_service", svc)
+	mustCreateRole(t, companyRolesPath(companyID, solID), "from_service", svc)
 
 	other := roleSolution(t)
 	foreign := testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, other, "roles:write"), ""))
-	assert.Equal(t, 403, testSrv.POST(tenantRolesPath(tenantID, solID), map[string]any{"code": "y", "name": "Y"}, foreign).Code)
+	assert.Equal(t, 403, testSrv.POST(companyRolesPath(companyID, solID), map[string]any{"code": "y", "name": "Y"}, foreign).Code)
 }
 
-func TestTenantRole_List_GlobalPlusOwnCustom(t *testing.T) {
-	h, tenantID, solID := tenantRoleFixture(t)
+func TestCompanyRole_List_GlobalPlusOwnCustom(t *testing.T) {
+	h, companyID, solID := companyRoleFixture(t)
 	mustCreateRole(t, solutionRolesPath(solID), "global_viewer", adminHeader())
-	mustCreateRole(t, tenantRolesPath(tenantID, solID), "my_custom", h)
+	mustCreateRole(t, companyRolesPath(companyID, solID), "my_custom", h)
 
-	// Custom role tenant lain di solution yang sama tidak boleh terlihat.
-	otherTenant := mustCreateTenant(t, adminHeader())
-	mustSubscribe(t, otherTenant, mustCreatePlan(t, solID, "other", nil))
-	mustCreateRole(t, tenantRolesPath(otherTenant, solID), "their_custom", adminHeader())
+	// Custom role company lain di solution yang sama tidak boleh terlihat.
+	otherCompany := mustCreateCompany(t, adminHeader())
+	mustSubscribe(t, otherCompany, mustCreatePlan(t, solID, "other", nil))
+	mustCreateRole(t, companyRolesPath(otherCompany, solID), "their_custom", adminHeader())
 
-	w := testSrv.GET(tenantRolesPath(tenantID, solID), h)
+	w := testSrv.GET(companyRolesPath(companyID, solID), h)
 	require.Equal(t, 200, w.Code, w.Body.String())
-	assert.Equal(t, []string{"global_viewer", "my_custom"}, roleCodes(t, w.Body.Bytes()), "global dulu, lalu custom milik tenant")
-	assert.Equal(t, 401, testSrv.GET(tenantRolesPath(tenantID, solID)).Code)
+	assert.Equal(t, []string{"global_viewer", "my_custom"}, roleCodes(t, w.Body.Bytes()), "global dulu, lalu custom milik company")
+	assert.Equal(t, 401, testSrv.GET(companyRolesPath(companyID, solID)).Code)
 }
 
-func TestTenantRole_ReplacePermissions(t *testing.T) {
-	h, tenantID, solID := tenantRoleFixture(t)
-	roleID := mustCreateRole(t, tenantRolesPath(tenantID, solID), "supervisor", h)
+func TestCompanyRole_ReplacePermissions(t *testing.T) {
+	h, companyID, solID := companyRoleFixture(t)
+	roleID := mustCreateRole(t, companyRolesPath(companyID, solID), "supervisor", h)
 	globalRole := mustCreateRole(t, solutionRolesPath(solID), "global_role", adminHeader())
 
 	body := map[string]any{"permission_codes": []string{"employee.read"}}
-	assert.Equal(t, 404, testSrv.PUT(tenantRolePermissionsPath(tenantID, globalRole), body, h).Code, "role global lewat path tenant")
+	assert.Equal(t, 404, testSrv.PUT(companyRolePermissionsPath(companyID, globalRole), body, h).Code, "role global lewat path company")
 	assert.Equal(t, 404, testSrv.PUT(rolePermissionsPath(roleID), body, adminHeader()).Code, "custom role lewat path global")
 
-	assert.Equal(t, 422, testSrv.PUT(tenantRolePermissionsPath(tenantID, roleID), map[string]any{"permission_codes": []string{"payroll.run"}}, h).Code)
+	assert.Equal(t, 422, testSrv.PUT(companyRolePermissionsPath(companyID, roleID), map[string]any{"permission_codes": []string{"payroll.run"}}, h).Code)
 
-	w := testSrv.PUT(tenantRolePermissionsPath(tenantID, roleID), body, h)
+	w := testSrv.PUT(companyRolePermissionsPath(companyID, roleID), body, h)
 	require.Equal(t, 200, w.Code, w.Body.String())
 	assert.Equal(t, []string{"employee.read"}, permissionCodesOf(t, w.Body.Bytes()))
-	assert.Equal(t, 1, countEvents(t, "role.permissions_changed", tenantID))
+	assert.Equal(t, 1, countEvents(t, "role.permissions_changed", companyID))
 
-	// Tenant lain tidak bisa melihat / mengubah custom role ini.
-	strangerH, _, strangerTenant := mustTenantOwner(t)
-	assert.Equal(t, 404, testSrv.PUT(tenantRolePermissionsPath(strangerTenant, roleID), body, strangerH).Code)
+	// Company lain tidak bisa melihat / mengubah custom role ini.
+	strangerH, _, strangerCompany := mustCompanyOwner(t)
+	assert.Equal(t, 404, testSrv.PUT(companyRolePermissionsPath(strangerCompany, roleID), body, strangerH).Code)
 	assert.Equal(t, 404, testSrv.GET(rolePermissionsPath(roleID), strangerH).Code)
 	assert.Equal(t, 200, testSrv.GET(rolePermissionsPath(roleID), h).Code)
 }

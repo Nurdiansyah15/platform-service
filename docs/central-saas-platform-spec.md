@@ -23,7 +23,7 @@
 
 | Domain | Entity |
 |---|---|
-| Identity & Organization | `users`, `tenants`, `tenant_members`, `companies`, `branches` |
+| Identity & Organization | `users`, `companies`, `company_members`, `branches` |
 | Solution Catalog | `solutions` |
 | Plans & Add-ons | `plans`, `addons` |
 | Benefits | `benefits`, `plan_benefits`, `addon_benefits` |
@@ -31,20 +31,20 @@
 | Authorization | `permissions`, `roles`, `role_permissions`, `user_role_assignments` |
 | Auth & Session | `auth_sessions`, `signing_keys` |
 | Solution Integration | `solution_clients`, `webhook_endpoints`, `events`, `webhook_deliveries` |
-| Usage & Metering | `usage_records`, `tenant_usage` |
+| Usage & Metering | `usage_records`, `company_usage` |
 | Licensing (khusus `on_prem`) | `installations`, `licenses`, `license_checkins` |
 
 ### Relasi Utama
 
 ```text
-tenants ──< tenant_members >── users
-tenants ──< companies ──< branches
+companies ──< company_members >── users
+companies ──< branches
 
 solutions ──< plans ──< plan_benefits >── benefits
 solutions ──< addons ──< addon_benefits >── benefits
 solutions ──< benefits
 
-tenants ──< subscriptions >── solutions
+companies ──< subscriptions >── solutions
 subscriptions >── plans
 subscriptions ──< subscription_addons >── addons
 subscriptions ──< subscription_benefit_snapshots >── benefits
@@ -52,18 +52,18 @@ subscription_addons ──< subscription_benefit_snapshots
 
 solutions ──< permissions
 solutions ──< roles ──< role_permissions >── permissions
-tenants ──< roles                         (custom role, tenant_id NOT NULL)
-tenant_members ──< user_role_assignments >── roles
-user_role_assignments ── scope (tenant | company | branch)
+companies ──< roles                         (custom role, company_id NOT NULL)
+company_members ──< user_role_assignments >── roles
+user_role_assignments ── scope (company | branch)
 
 users ──< auth_sessions >── solutions
-auth_sessions >── tenants                 (tenant aktif, boleh NULL sebelum pilih tenant)
+auth_sessions >── companies                 (company aktif, boleh NULL sebelum pilih company)
 
 solutions ──< solution_clients
 solutions ──< webhook_endpoints ──< webhook_deliveries >── events
 
-tenants ──< usage_records >── benefits
-tenants ──< tenant_usage >── benefits
+companies ──< usage_records >── benefits
+companies ──< company_usage >── benefits
 
 installations ──< licenses ──< license_checkins     (khusus on_prem)
 ```
@@ -90,16 +90,16 @@ Tabel yang menjadi target memiliki `UNIQUE (id, solution_id)`. Tabel relasi meny
 | Kolom | Nilai yang Diizinkan |
 |---|---|
 | `users.status` | `active`, `inactive`, `suspended` |
-| `tenants.status` | `active`, `suspended`, `closed` |
-| `tenant_members.status` | `invited`, `active`, `inactive` |
-| `companies.status`, `branches.status` | `active`, `inactive` |
+| `companies.status` | `active`, `suspended`, `closed` |
+| `company_members.status` | `invited`, `active`, `inactive` |
+| `branches.status` | `active`, `inactive` |
 | `solutions.status` | `active`, `inactive` |
 | `plans.billing_cycle`, `addons.billing_cycle`, `subscriptions.billing_cycle` | `monthly`, `yearly` |
 | `benefits.value_type` | `boolean`, `integer`, `decimal`, `string`, `json` |
 | `benefits.aggregation_strategy` | `sum`, `max`, `min`, `override`, `any_true` |
 | `subscriptions.status` | `trialing`, `active`, `past_due`, `canceled`, `expired` |
 | `subscription_addons.status` | `active`, `canceled` |
-| `user_role_assignments.scope_type` | `tenant`, `company`, `branch` |
+| `user_role_assignments.scope_type` | `company`, `branch` |
 | `permissions.status` | `active`, `deprecated` |
 | `benefits.metering` | `none`, `counter`, `gauge` |
 | `benefits.usage_reset` | `never`, `billing_period`, `monthly` |
@@ -131,7 +131,7 @@ Tabel yang menjadi target memiliki `UNIQUE (id, solution_id)`. Tabel relasi meny
 | `created_at` | TIMESTAMPTZ | NOT NULL, default `NOW()` |
 | `updated_at` | TIMESTAMPTZ | NOT NULL, default `NOW()` |
 
-#### `tenants`
+#### `companies`
 
 | Kolom | Tipe | Constraint |
 |---|---|---|
@@ -142,31 +142,16 @@ Tabel yang menjadi target memiliki `UNIQUE (id, solution_id)`. Tabel relasi meny
 | `created_at` | TIMESTAMPTZ | NOT NULL, default `NOW()` |
 | `updated_at` | TIMESTAMPTZ | NOT NULL, default `NOW()` |
 
-#### `tenant_members`
+#### `company_members`
 
 | Kolom | Tipe | Constraint |
 |---|---|---|
-| `tenant_id` | UUID | NOT NULL, FK → `tenants(id)` |
+| `company_id` | UUID | NOT NULL, FK → `companies(id)` |
 | `user_id` | UUID | NOT NULL, FK → `users(id)` |
 | `status` | VARCHAR(30) | NOT NULL, default `'active'`, CHECK enum |
 | `joined_at` | TIMESTAMPTZ | NOT NULL, default `NOW()` |
 
-- **PK:** `(tenant_id, user_id)`
-
-#### `companies`
-
-| Kolom | Tipe | Constraint |
-|---|---|---|
-| `id` | UUID | PK |
-| `tenant_id` | UUID | NOT NULL, FK → `tenants(id)` |
-| `name` | VARCHAR(255) | NOT NULL |
-| `code` | VARCHAR(100) | NOT NULL |
-| `status` | VARCHAR(30) | NOT NULL, default `'active'`, CHECK enum |
-| `created_at` | TIMESTAMPTZ | NOT NULL, default `NOW()` |
-| `updated_at` | TIMESTAMPTZ | NOT NULL, default `NOW()` |
-| `deleted_at` | TIMESTAMPTZ | NULL (soft delete) |
-
-- **UNIQUE (partial):** `(tenant_id, code) WHERE deleted_at IS NULL`
+- **PK:** `(company_id, user_id)`
 
 #### `branches`
 
@@ -313,7 +298,7 @@ Tabel yang menjadi target memiliki `UNIQUE (id, solution_id)`. Tabel relasi meny
 | Kolom | Tipe | Constraint |
 |---|---|---|
 | `id` | UUID | PK |
-| `tenant_id` | UUID | NOT NULL, FK → `tenants(id)` |
+| `company_id` | UUID | NOT NULL, FK → `companies(id)` |
 | `solution_id` | UUID | NOT NULL, FK → `solutions(id)` |
 | `plan_id` | UUID | NOT NULL |
 | `status` | VARCHAR(30) | NOT NULL, default `'active'`, CHECK enum |
@@ -394,13 +379,13 @@ Effective entitlement dihitung dari snapshot ini menggunakan `benefits.aggregati
 - Permission `deprecated` tetap tersimpan (tidak dihapus) agar role lama tidak rusak, tetapi tidak bisa ditambahkan ke role baru.
 - **UNIQUE:** `(id, solution_id)` — target composite FK
 
-#### `roles` (diperbarui — mendukung custom role per tenant)
+#### `roles` (diperbarui — mendukung custom role per company)
 
 | Kolom | Tipe | Constraint |
 |---|---|---|
 | `id` | UUID | PK |
 | `solution_id` | UUID | NOT NULL, FK → `solutions(id)` |
-| `tenant_id` | UUID | NULL, FK → `tenants(id)` |
+| `company_id` | UUID | NULL, FK → `companies(id)` |
 | `code` | VARCHAR(100) | NOT NULL |
 | `name` | VARCHAR(255) | NOT NULL |
 | `description` | TEXT | — |
@@ -409,23 +394,23 @@ Effective entitlement dihitung dari snapshot ini menggunakan `benefits.aggregati
 | `updated_at` | TIMESTAMPTZ | NOT NULL, default `NOW()` |
 | `deleted_at` | TIMESTAMPTZ | NULL (soft delete) |
 
-- **CHECK:** `NOT is_system OR tenant_id IS NULL` — role sistem tidak boleh milik tenant
-- **UNIQUE (partial):** `(solution_id, code) WHERE tenant_id IS NULL AND deleted_at IS NULL` — role global
-- **UNIQUE (partial):** `(solution_id, tenant_id, code) WHERE tenant_id IS NOT NULL AND deleted_at IS NULL` — custom role tenant
+- **CHECK:** `NOT is_system OR company_id IS NULL` — role sistem tidak boleh milik company
+- **UNIQUE (partial):** `(solution_id, code) WHERE company_id IS NULL AND deleted_at IS NULL` — role global
+- **UNIQUE (partial):** `(solution_id, company_id, code) WHERE company_id IS NOT NULL AND deleted_at IS NULL` — custom role company
 - **UNIQUE:** `(id, solution_id)` — target composite FK
 
 **Jenis role:**
 
-| Jenis | `tenant_id` | `is_system` | Dibuat oleh | Bisa diubah/dihapus tenant |
+| Jenis | `company_id` | `is_system` | Dibuat oleh | Bisa diubah/dihapus company |
 |---|---|---|---|---|
 | System role | NULL | TRUE | Platform | Tidak |
 | Global template role | NULL | FALSE | Platform | Tidak |
-| Custom tenant role | terisi | FALSE | Tenant | Ya (hanya tenant pemilik) |
+| Custom company role | terisi | FALSE | Company | Ya (hanya company pemilik) |
 
 **Aturan custom role:**
-- Tenant hanya boleh membuat role untuk solution yang sedang di-subscribe (status `trialing` / `active`).
+- Company hanya boleh membuat role untuk solution yang sedang di-subscribe (status `trialing` / `active`).
 - Permission yang dipasang harus milik solution yang sama (dijaga composite FK di `role_permissions`).
-- Custom role hanya terlihat dan bisa di-assign di dalam tenant pemiliknya.
+- Custom role hanya terlihat dan bisa di-assign di dalam company pemiliknya.
 
 #### `role_permissions`
 
@@ -444,20 +429,20 @@ Effective entitlement dihitung dari snapshot ini menggunakan `benefits.aggregati
 | Kolom | Tipe | Constraint |
 |---|---|---|
 | `id` | UUID | PK |
-| `tenant_id` | UUID | NOT NULL |
+| `company_id` | UUID | NOT NULL |
 | `user_id` | UUID | NOT NULL |
 | `role_id` | UUID | NOT NULL, FK → `roles(id)` |
 | `scope_type` | VARCHAR(30) | NOT NULL, CHECK enum |
 | `scope_id` | UUID | NOT NULL |
 | `created_at` | TIMESTAMPTZ | NOT NULL, default `NOW()` |
 
-- **FK:** `(tenant_id, user_id)` → `tenant_members(tenant_id, user_id)` — user wajib anggota tenant
+- **FK:** `(company_id, user_id)` → `company_members(company_id, user_id)` — user wajib anggota company
 - **UNIQUE:** `(user_id, role_id, scope_type, scope_id)`
 
 **Validasi di service layer:**
-- Role harus berasal dari solution yang sedang di-subscribe tenant.
-- Jika `roles.tenant_id` terisi, nilainya harus sama dengan `user_role_assignments.tenant_id`.
-- `scope_id` harus valid sesuai `scope_type` dan milik tenant tersebut (`tenant` = tenant itu sendiri, `company` = company milik tenant, `branch` = branch dari company milik tenant).
+- Role harus berasal dari solution yang sedang di-subscribe company.
+- Jika `roles.company_id` terisi, nilainya harus sama dengan `user_role_assignments.company_id`.
+- `scope_id` harus valid sesuai `scope_type` dan milik company tersebut (`company` = company itu sendiri, boleh kosong; `branch` = branch dari company tersebut).
 
 ---
 
@@ -465,14 +450,14 @@ Effective entitlement dihitung dari snapshot ini menggunakan `benefits.aggregati
 
 #### `auth_sessions`
 
-Satu baris per sesi login user pada satu solution. Menyimpan refresh token (hash) dan tenant aktif.
+Satu baris per sesi login user pada satu solution. Menyimpan refresh token (hash) dan company aktif.
 
 | Kolom | Tipe | Constraint |
 |---|---|---|
 | `id` | UUID | PK — dipakai sebagai claim `sid` |
 | `user_id` | UUID | NOT NULL, FK → `users(id)` |
 | `solution_id` | UUID | NOT NULL, FK → `solutions(id)` — audience sesi |
-| `tenant_id` | UUID | NULL, FK → `tenants(id)` — tenant aktif |
+| `company_id` | UUID | NULL, FK → `companies(id)` — company aktif |
 | `refresh_token_hash` | TEXT | NOT NULL, UNIQUE |
 | `user_agent` | TEXT | — |
 | `ip_address` | INET | — |
@@ -483,14 +468,14 @@ Satu baris per sesi login user pada satu solution. Menyimpan refresh token (hash
 
 **Aturan:**
 - Refresh token bersifat opaque, di-rotate setiap kali dipakai (hash lama diganti).
-- Refresh ditolak jika sesi revoked/expired, user tidak `active`, membership tenant aktif tidak `active`, atau tenant tidak `active`.
+- Refresh ditolak jika sesi revoked/expired, user tidak `active`, membership company aktif tidak `active`, atau company tidak `active`.
 - Logout = set `revoked_at`. Access token yang sudah terbit tetap valid sampai `exp`, karena itu umur access token dibuat pendek.
 
-**Alur pilih / switch tenant:**
+**Alur pilih / switch company:**
 
-1. Login → sesi dibuat. Jika user hanya punya 1 tenant yang subscribe solution tersebut, `tenant_id` langsung terisi. Jika lebih dari 1, `tenant_id = NULL`.
-2. Token dengan `tid` kosong hanya boleh memanggil endpoint identitas & pemilihan tenant.
-3. `POST /auth/switch-tenant` → validasi membership aktif + subscription aktif tenant untuk solution sesi → update `auth_sessions.tenant_id` → terbitkan access & refresh token baru.
+1. Login → sesi dibuat. Jika user hanya punya 1 company yang subscribe solution tersebut, `company_id` langsung terisi. Jika lebih dari 1, `company_id = NULL`.
+2. Token dengan `cid` kosong hanya boleh memanggil endpoint identitas & pemilihan company.
+3. `POST /auth/switch-company` → validasi membership aktif + subscription aktif company untuk solution sesi → update `auth_sessions.company_id` → terbitkan access & refresh token baru.
 
 #### `signing_keys`
 
@@ -534,13 +519,13 @@ Kredensial service-to-service untuk backend solution (OAuth2 client credentials)
 | `revoked_at` | TIMESTAMPTZ | NULL |
 
 - Secret hanya ditampilkan sekali saat create / rotate.
-- Client hanya boleh mengakses data milik `solution_id`-nya dan tenant yang subscribe solution tersebut.
+- Client hanya boleh mengakses data milik `solution_id`-nya dan company yang subscribe solution tersebut.
 
 **Daftar scope service:**
 
 | Scope | Akses |
 |---|---|
-| `users:read` | Baca user & membership tenant |
+| `users:read` | Baca user & membership company |
 | `users:write` | Create / invite / update / nonaktifkan user & membership |
 | `org:read` | Baca company & branch |
 | `org:write` | Kelola company & branch |
@@ -561,7 +546,7 @@ Kredensial service-to-service untuk backend solution (OAuth2 client credentials)
 | `iss` | URL platform |
 | `sub` | `users.id` |
 | `aud` | `solutions.code` |
-| `tid` | `tenants.id` aktif (boleh kosong sebelum pilih tenant) |
+| `cid` | `companies.id` aktif (boleh kosong sebelum pilih company) |
 | `sid` | `auth_sessions.id` |
 | `typ` | `user` |
 | `iat`, `exp`, `jti` | Standar JWT |
@@ -592,7 +577,7 @@ Ditulis dalam transaksi yang sama dengan perubahan data, lalu dikirim oleh worke
 |---|---|---|
 | `id` | UUID | PK — dipakai sebagai idempotency key penerima |
 | `event_type` | VARCHAR(100) | NOT NULL |
-| `tenant_id` | UUID | NULL — NULL untuk event level user/global |
+| `company_id` | UUID | NULL — NULL untuk event level user/global |
 | `solution_id` | UUID | NULL — NULL jika relevan untuk semua solution |
 | `payload` | JSONB | NOT NULL |
 | `occurred_at` | TIMESTAMPTZ | NOT NULL, default `NOW()` |
@@ -631,7 +616,7 @@ Ditulis dalam transaksi yang sama dengan perubahan data, lalu dikirim oleh worke
 - At-least-once; penerima wajib idempotent berdasarkan `event.id`.
 - Header: `X-Platform-Event-Id`, `X-Platform-Event-Type`, `X-Platform-Timestamp`, `X-Platform-Signature` (HMAC-SHA256 dari `timestamp.body`).
 - Retry dengan exponential backoff; setelah batas percobaan → `dead`, bisa di-retry manual.
-- Event tenant-scoped hanya dikirim ke solution yang di-subscribe tenant tersebut. Event user dikirim ke solution dari tenant mana pun tempat user menjadi anggota.
+- Event company-scoped hanya dikirim ke solution yang di-subscribe company tersebut. Event user dikirim ke solution dari company mana pun tempat user menjadi anggota.
 - Urutan tidak dijamin; payload memuat `updated_at` / versi agar penerima bisa mengabaikan event yang lebih lama.
 - Polling `GET /events` tersedia sebagai fallback & replay.
 
@@ -640,8 +625,8 @@ Ditulis dalam transaksi yang sama dengan perubahan data, lalu dikirim oleh worke
 | Grup | Event Type |
 |---|---|
 | User | `user.updated`, `user.status_changed` |
-| Tenant | `tenant.updated`, `tenant.status_changed` |
-| Membership | `tenant_member.added`, `tenant_member.updated`, `tenant_member.removed` |
+| Company | `company.updated`, `company.status_changed` |
+| Membership | `company_member.added`, `company_member.updated`, `company_member.removed` |
 | Organization | `company.created`, `company.updated`, `company.deleted`, `branch.created`, `branch.updated`, `branch.deleted` |
 | Subscription | `subscription.created`, `subscription.plan_changed`, `subscription.status_changed`, `subscription_addon.added`, `subscription_addon.updated`, `subscription_addon.removed` |
 | Entitlement | `entitlement.changed` (dipicu oleh perubahan snapshot) |
@@ -660,7 +645,7 @@ Catatan laporan usage dari solution (append-only, idempotent).
 | Kolom | Tipe | Constraint |
 |---|---|---|
 | `id` | UUID | PK |
-| `tenant_id` | UUID | NOT NULL, FK → `tenants(id)` |
+| `company_id` | UUID | NOT NULL, FK → `companies(id)` |
 | `solution_id` | UUID | NOT NULL |
 | `benefit_id` | UUID | NOT NULL |
 | `mode` | VARCHAR(30) | NOT NULL, CHECK IN (`'delta'`, `'absolute'`) |
@@ -673,13 +658,13 @@ Catatan laporan usage dari solution (append-only, idempotent).
 - **FK:** `(benefit_id, solution_id)` → `benefits(id, solution_id)`
 - **UNIQUE:** `(solution_id, idempotency_key)`
 
-#### `tenant_usage`
+#### `company_usage`
 
-Nilai pemakaian terkini per tenant per benefit per periode.
+Nilai pemakaian terkini per company per benefit per periode.
 
 | Kolom | Tipe | Constraint |
 |---|---|---|
-| `tenant_id` | UUID | NOT NULL, FK → `tenants(id)` |
+| `company_id` | UUID | NOT NULL, FK → `companies(id)` |
 | `solution_id` | UUID | NOT NULL |
 | `benefit_id` | UUID | NOT NULL |
 | `period_start` | TIMESTAMPTZ | NOT NULL — untuk `usage_reset = never` diisi tanggal awal tetap |
@@ -687,7 +672,7 @@ Nilai pemakaian terkini per tenant per benefit per periode.
 | `used` | NUMERIC(18,4) | NOT NULL, default `0` |
 | `updated_at` | TIMESTAMPTZ | NOT NULL, default `NOW()` |
 
-- **PK:** `(tenant_id, benefit_id, period_start)`
+- **PK:** `(company_id, benefit_id, period_start)`
 - **FK:** `(benefit_id, solution_id)` → `benefits(id, solution_id)`
 
 **Aturan:**
@@ -703,45 +688,44 @@ Nilai pemakaian terkini per tenant per benefit per periode.
 
 | Index | Tabel | Kolom | Keterangan |
 |---|---|---|---|
-| `idx_tenant_members_user_id` | `tenant_members` | `user_id` | baru |
-| `idx_companies_tenant_id` | `companies` | `tenant_id` | |
+| `idx_company_members_user_id` | `company_members` | `user_id` | baru |
 | `idx_branches_company_id` | `branches` | `company_id` | |
 | `idx_plans_solution_id` | `plans` | `solution_id` | |
 | `idx_addons_solution_id` | `addons` | `solution_id` | |
 | `idx_benefits_solution_id` | `benefits` | `solution_id` | |
 | `idx_plan_benefits_benefit_id` | `plan_benefits` | `benefit_id` | baru |
 | `idx_addon_benefits_benefit_id` | `addon_benefits` | `benefit_id` | baru |
-| `idx_subscriptions_tenant_id` | `subscriptions` | `tenant_id` | |
+| `idx_subscriptions_company_id` | `subscriptions` | `company_id` | |
 | `idx_subscriptions_solution_id` | `subscriptions` | `solution_id` | |
 | `idx_subscription_addons_subscription_id` | `subscription_addons` | `subscription_id` | |
 | `idx_sub_benefit_snapshots_subscription_id` | `subscription_benefit_snapshots` | `subscription_id` | baru |
 | `idx_roles_solution_id` | `roles` | `solution_id` | |
-| `idx_roles_tenant_solution` | `roles` | `tenant_id, solution_id` | baru |
+| `idx_roles_company_solution` | `roles` | `company_id, solution_id` | baru |
 | `idx_role_permissions_permission_id` | `role_permissions` | `permission_id` | baru |
-| `idx_user_role_assignments_user_tenant` | `user_role_assignments` | `user_id, tenant_id` | |
+| `idx_user_role_assignments_user_company` | `user_role_assignments` | `user_id, company_id` | |
 | `idx_user_role_assignments_scope` | `user_role_assignments` | `scope_type, scope_id` | |
 | `idx_auth_sessions_user_id` | `auth_sessions` | `user_id` | baru |
 | `idx_auth_sessions_active` | `auth_sessions` | `user_id, solution_id` WHERE `revoked_at IS NULL` | baru |
 | `idx_solution_clients_solution_id` | `solution_clients` | `solution_id` | baru |
 | `idx_webhook_endpoints_solution_id` | `webhook_endpoints` | `solution_id` | baru |
 | `idx_events_occurred_at` | `events` | `occurred_at` | baru |
-| `idx_events_tenant_id` | `events` | `tenant_id, occurred_at` | baru |
+| `idx_events_company_id` | `events` | `company_id, occurred_at` | baru |
 | `idx_webhook_deliveries_pending` | `webhook_deliveries` | `next_attempt_at` WHERE `status IN ('pending','failed')` | baru |
-| `idx_usage_records_tenant_benefit` | `usage_records` | `tenant_id, benefit_id, occurred_at` | baru |
+| `idx_usage_records_company_benefit` | `usage_records` | `company_id, benefit_id, occurred_at` | baru |
 
 ### 2.12 Soft Delete
 
 | Tabel | Mekanisme |
 |---|---|
-| `companies`, `branches`, `plans`, `addons`, `roles` | Set `deleted_at = NOW()`; query default memfilter `deleted_at IS NULL` |
-| `tenant_members` | Set `status = 'inactive'` dan hapus role assignment user di tenant tersebut |
+| `branches`, `plans`, `addons`, `roles` | Set `deleted_at = NOW()`; query default memfilter `deleted_at IS NULL` |
+| `company_members` | Set `status = 'inactive'` dan hapus role assignment user di company tersebut |
 | `subscription_addons` | Set `status = 'canceled'` dan hapus snapshot benefit add-on tersebut |
 
 Data yang di-soft delete tetap utuh untuk keperluan histori dan relasi FK.
 
 ### 2.13 Catatan Integritas
 
-Konsistensi solution antara plan, add-on, benefit, subscription, role, dan permission kini dijaga oleh composite FK di level DB. Validasi yang tetap di service layer: role sesuai subscription tenant, kepemilikan custom role, dan validitas `scope_id` terhadap tenant, company, dan branch.
+Konsistensi solution antara plan, add-on, benefit, subscription, role, dan permission kini dijaga oleh composite FK di level DB. Validasi yang tetap di service layer: role sesuai subscription company, kepemilikan custom role, dan validitas `scope_id` terhadap company dan branch.
 
 
 ### 2.14 Deployment Mode & Licensing (baru, khusus `on_prem`)
@@ -753,7 +737,7 @@ Konsistensi solution antara plan, add-on, benefit, subscription, role, dan permi
 | Sumber entitlement | `subscription_benefit_snapshots` | **License file bertanda tangan** (diverifikasi saat load & berkala) |
 | Kelola plan, add-on, benefit, subscription | Lewat API | **Dinonaktifkan** — hanya berubah lewat license baru |
 | Public key verifikasi license | — | **Ditanam di binary**, bukan di DB / config yang bisa diedit |
-| Limit usage | `tenant_usage` | Gauge dihitung dari data nyata (mis. `COUNT` user aktif); counter dari `usage_records` lokal |
+| Limit usage | `company_usage` | Gauge dihitung dari data nyata (mis. `COUNT` user aktif); counter dari `usage_records` lokal |
 | Laporan usage ke vendor | — | Lewat check-in online atau file offline |
 
 Tabel `plans`, `plan_benefits`, `subscriptions`, dan snapshot di mode `on_prem` hanya cerminan informasi. Mengubahnya langsung di DB **tidak** memengaruhi entitlement.
@@ -809,8 +793,8 @@ Satu baris per instalasi.
   "valid_from": "2026-10-01T00:00:00Z",
   "valid_until": "2026-10-31T23:59:59Z",
   "grace_days": 14,
-  "limits": { "max_tenants": 1 },
-  "tenants": [
+  "limits": { "max_companies": 1 },
+  "companies": [
     {
       "slug": "contoh",
       "solutions": [
@@ -856,7 +840,7 @@ Satu baris per instalasi.
 |---|---|---|
 | `valid` | Signature valid, fingerprint cocok, `now ≤ valid_until` | Normal |
 | `grace` | `valid_until < now ≤ grace_until` | Normal + peringatan di UI dan response |
-| `read_only` | `now > grace_until`, atau limit `max_tenants` terlampaui | Baca & ekspor boleh; semua operasi tulis ke data bisnis ditolak |
+| `read_only` | `now > grace_until`, atau limit `max_companies` terlampaui | Baca & ekspor boleh; semua operasi tulis ke data bisnis ditolak |
 | `invalid` | Signature tidak valid, fingerprint tidak cocok, license untuk instalasi lain, atau terdeteksi jam mundur | Sama dengan `read_only` + peringatan keras; login admin tetap bisa untuk upload license |
 
 **Pemeriksaan:**
@@ -874,9 +858,9 @@ Satu baris per instalasi.
 | Plans | `POST /solutions/{solutionId}/plans`, `PATCH`/`DELETE /plans/{planId}`, semua `PUT`/`DELETE /plans/{planId}/benefits...` |
 | Add-ons | `POST /solutions/{solutionId}/addons`, `PATCH`/`DELETE /addons/{addonId}`, semua `PUT`/`DELETE /addons/{addonId}/benefits...` |
 | Benefits | `POST /solutions/{solutionId}/benefits`, `PATCH /benefits/{benefitId}` |
-| Subscription | `POST /tenants/{tenantId}/subscriptions`, `PATCH /subscriptions/{subscriptionId}`, `change-plan`, `cancel`, `reactivate` |
+| Subscription | `POST /companies/{companyId}/subscriptions`, `PATCH /subscriptions/{subscriptionId}`, `change-plan`, `cancel`, `reactivate` |
 | Subscription Add-ons | `POST`, `PATCH`, `DELETE /subscriptions/{subscriptionId}/addons...` |
-| Tenant | `POST /tenants` — hanya diizinkan untuk tenant yang tercantum di license dan dalam batas `max_tenants` |
+| Company | `POST /companies` — hanya diizinkan untuk company yang tercantum di license dan dalam batas `max_companies` |
 
 **Catatan keamanan:** mode `on_prem` dikirim sebagai binary / container image (bukan source code); untuk bahasa interpreted gunakan obfuscation. Penegakan teknis dilengkapi kontrak lisensi (hak audit, kewajiban laporan usage, sanksi).
 
@@ -895,9 +879,9 @@ Base URL: `/api/v1`
 | POST | `/auth/login` | Wajib menyertakan solution (audience); membuat `auth_sessions` |
 | POST | `/auth/refresh` | Rotasi refresh token |
 | POST | `/auth/logout` | Revoke sesi saat ini |
-| GET | `/auth/me` | User + tenant aktif |
-| GET | `/auth/tenants` | Daftar tenant user yang subscribe solution sesi (baru) |
-| POST | `/auth/switch-tenant` | Ganti tenant aktif, terbitkan token baru (baru) |
+| GET | `/auth/me` | User + company aktif |
+| GET | `/auth/companies` | Daftar company user yang subscribe solution sesi (baru) |
+| POST | `/auth/switch-company` | Ganti company aktif, terbitkan token baru (baru) |
 | GET | `/auth/sessions` | Daftar sesi aktif user (baru) |
 | DELETE | `/auth/sessions/{sessionId}` | Revoke sesi tertentu (baru) |
 | POST | `/auth/logout-all` | Revoke semua sesi user (baru) |
@@ -912,28 +896,23 @@ Base URL: `/api/v1`
 | PATCH | `/users/{userId}` |
 | PATCH | `/users/{userId}/status` |
 
-### 3.2 Tenant & Membership
+### 3.2 Company & Membership
 
 | Method | Path | Catatan |
 |---|---|---|
-| GET | `/tenants` | |
-| POST | `/tenants` | |
-| GET | `/tenants/{tenantId}` | |
-| PATCH | `/tenants/{tenantId}` | |
-| GET | `/tenants/{tenantId}/members` | |
-| POST | `/tenants/{tenantId}/members` | |
-| PATCH | `/tenants/{tenantId}/members/{userId}` | |
-| DELETE | `/tenants/{tenantId}/members/{userId}` | Soft: status `inactive` + hapus role assignment |
-
-### 3.3 Company & Branch
-
-| Method | Path | Catatan |
-|---|---|---|
-| GET | `/tenants/{tenantId}/companies` | |
-| POST | `/tenants/{tenantId}/companies` | |
+| GET | `/companies` | |
+| POST | `/companies` | |
 | GET | `/companies/{companyId}` | |
 | PATCH | `/companies/{companyId}` | |
-| DELETE | `/companies/{companyId}` | Soft delete |
+| GET | `/companies/{companyId}/members` | |
+| POST | `/companies/{companyId}/members` | |
+| PATCH | `/companies/{companyId}/members/{userId}` | |
+| DELETE | `/companies/{companyId}/members/{userId}` | Soft: status `inactive` + hapus role assignment |
+
+### 3.3 Branch
+
+| Method | Path | Catatan |
+|---|---|---|
 | GET | `/companies/{companyId}/branches` | |
 | POST | `/companies/{companyId}/branches` | |
 | GET | `/branches/{branchId}` | |
@@ -994,8 +973,8 @@ Base URL: `/api/v1`
 
 | Method | Path | Catatan |
 |---|---|---|
-| GET | `/tenants/{tenantId}/subscriptions` | |
-| POST | `/tenants/{tenantId}/subscriptions` | Membuat snapshot benefit plan |
+| GET | `/companies/{companyId}/subscriptions` | |
+| POST | `/companies/{companyId}/subscriptions` | Membuat snapshot benefit plan |
 | GET | `/subscriptions/{subscriptionId}` | |
 | PATCH | `/subscriptions/{subscriptionId}` | |
 | POST | `/subscriptions/{subscriptionId}/change-plan` | Mengganti snapshot benefit plan |
@@ -1013,19 +992,19 @@ Base URL: `/api/v1`
 
 ### 3.10 Effective Benefits / Entitlements
 
-Dihitung dari `subscription_benefit_snapshots`. Untuk benefit yang di-meter, response memuat `limit`, `used`, dan `remaining` dari `tenant_usage`. Di mode `on_prem`, entitlement berasal dari license dan response juga memuat `license_state`.
+Dihitung dari `subscription_benefit_snapshots`. Untuk benefit yang di-meter, response memuat `limit`, `used`, dan `remaining` dari `company_usage`. Di mode `on_prem`, entitlement berasal dari license dan response juga memuat `license_state`.
 
 | Method | Path |
 |---|---|
-| GET | `/tenants/{tenantId}/solutions/{solutionId}/entitlements` |
-| GET | `/tenants/{tenantId}/solutions/{solutionId}/entitlements/{benefitCode}` |
-| POST | `/tenants/{tenantId}/solutions/{solutionId}/entitlements/check` |
+| GET | `/companies/{companyId}/solutions/{solutionId}/entitlements` |
+| GET | `/companies/{companyId}/solutions/{solutionId}/entitlements/{benefitCode}` |
+| POST | `/companies/{companyId}/solutions/{solutionId}/entitlements/check` |
 
 ### 3.11 Roles — Platform (Global)
 
 | Method | Path | Catatan |
 |---|---|---|
-| GET | `/solutions/{solutionId}/roles` | Hanya role global (`tenant_id IS NULL`) |
+| GET | `/solutions/{solutionId}/roles` | Hanya role global (`company_id IS NULL`) |
 | POST | `/solutions/{solutionId}/roles` | Membuat role global |
 | GET | `/roles/{roleId}` | |
 | PATCH | `/roles/{roleId}` | Role `is_system` tidak bisa diubah |
@@ -1033,17 +1012,17 @@ Dihitung dari `subscription_benefit_snapshots`. Untuk benefit yang di-meter, res
 | GET | `/roles/{roleId}/permissions` | |
 | PUT | `/roles/{roleId}/permissions` | Role `is_system` tidak bisa diubah |
 
-### 3.12 Roles — Tenant Custom (baru)
+### 3.12 Roles — Company Custom (baru)
 
 | Method | Path | Catatan |
 |---|---|---|
-| GET | `/tenants/{tenantId}/solutions/{solutionId}/roles` | Role global + custom role milik tenant |
-| POST | `/tenants/{tenantId}/solutions/{solutionId}/roles` | Membuat custom role; tenant wajib subscribe solution |
-| GET | `/tenants/{tenantId}/roles/{roleId}` | |
-| PATCH | `/tenants/{tenantId}/roles/{roleId}` | Hanya custom role milik tenant |
-| DELETE | `/tenants/{tenantId}/roles/{roleId}` | Soft delete; hanya custom role milik tenant |
-| GET | `/tenants/{tenantId}/roles/{roleId}/permissions` | |
-| PUT | `/tenants/{tenantId}/roles/{roleId}/permissions` | Permission harus milik solution yang sama |
+| GET | `/companies/{companyId}/solutions/{solutionId}/roles` | Role global + custom role milik company |
+| POST | `/companies/{companyId}/solutions/{solutionId}/roles` | Membuat custom role; company wajib subscribe solution |
+| GET | `/companies/{companyId}/roles/{roleId}` | |
+| PATCH | `/companies/{companyId}/roles/{roleId}` | Hanya custom role milik company |
+| DELETE | `/companies/{companyId}/roles/{roleId}` | Soft delete; hanya custom role milik company |
+| GET | `/companies/{companyId}/roles/{roleId}/permissions` | |
+| PUT | `/companies/{companyId}/roles/{roleId}/permissions` | Permission harus milik solution yang sama |
 
 ### 3.13 Permissions
 
@@ -1058,8 +1037,8 @@ Dihitung dari `subscription_benefit_snapshots`. Untuk benefit yang di-meter, res
 
 | Method | Path | Catatan |
 |---|---|---|
-| GET | `/tenants/{tenantId}/users/{userId}/role-assignments` | |
-| POST | `/tenants/{tenantId}/users/{userId}/role-assignments` | User wajib anggota tenant; bisa role global atau custom milik tenant |
+| GET | `/companies/{companyId}/users/{userId}/role-assignments` | |
+| POST | `/companies/{companyId}/users/{userId}/role-assignments` | User wajib anggota company; bisa role global atau custom milik company |
 | PATCH | `/role-assignments/{assignmentId}` | |
 | DELETE | `/role-assignments/{assignmentId}` | |
 
@@ -1069,7 +1048,7 @@ Dihitung dari `subscription_benefit_snapshots`. Untuk benefit yang di-meter, res
 |---|---|
 | POST | `/authz/check` |
 | POST | `/authz/check-batch` |
-| GET | `/tenants/{tenantId}/users/{userId}/effective-permissions` |
+| GET | `/companies/{companyId}/users/{userId}/effective-permissions` |
 
 ### 3.16 Service Auth & Keys (baru)
 
@@ -1105,17 +1084,17 @@ Dihitung dari `subscription_benefit_snapshots`. Untuk benefit yang di-meter, res
 | POST | `/webhooks/{webhookId}/test` | Kirim event uji |
 | GET | `/webhooks/{webhookId}/deliveries` | Riwayat pengiriman |
 | POST | `/webhook-deliveries/{deliveryId}/retry` | Retry manual |
-| GET | `/events` | Polling / replay; filter `since`, `event_type`, `tenant_id`; dibatasi ke solution pemanggil |
+| GET | `/events` | Polling / replay; filter `since`, `event_type`, `company_id`; dibatasi ke solution pemanggil |
 | GET | `/event-types` | Katalog event |
 
 ### 3.19 Usage Reporting (baru)
 
 | Method | Path | Catatan |
 |---|---|---|
-| POST | `/tenants/{tenantId}/solutions/{solutionId}/usage` | Laporan `delta` (counter); wajib `idempotency_key` |
-| PUT | `/tenants/{tenantId}/solutions/{solutionId}/usage/{benefitCode}` | Laporan `absolute` (gauge); wajib `idempotency_key` |
-| GET | `/tenants/{tenantId}/solutions/{solutionId}/usage` | Pemakaian periode berjalan |
-| GET | `/tenants/{tenantId}/solutions/{solutionId}/usage/{benefitCode}` | |
+| POST | `/companies/{companyId}/solutions/{solutionId}/usage` | Laporan `delta` (counter); wajib `idempotency_key` |
+| PUT | `/companies/{companyId}/solutions/{solutionId}/usage/{benefitCode}` | Laporan `absolute` (gauge); wajib `idempotency_key` |
+| GET | `/companies/{companyId}/solutions/{solutionId}/usage` | Pemakaian periode berjalan |
+| GET | `/companies/{companyId}/solutions/{solutionId}/usage/{benefitCode}` | |
 
 ### 3.20 Catalog Sync (baru)
 
@@ -1153,13 +1132,11 @@ Di mode `cloud`, seluruh endpoint di atas mengembalikan `404`.
 | Authentication | POST | `/api/v1/auth/refresh` |
 | Authentication | POST | `/api/v1/auth/logout` |
 | Authentication | GET | `/api/v1/auth/me` |
-| Tenant | POST | `/api/v1/tenants` |
-| Tenant | GET | `/api/v1/tenants` |
-| Tenant | GET | `/api/v1/tenants/{tenantId}` |
-| Tenant | GET | `/api/v1/tenants/{tenantId}/members` |
-| Tenant | POST | `/api/v1/tenants/{tenantId}/members` |
-| Organization | GET | `/api/v1/tenants/{tenantId}/companies` |
-| Organization | POST | `/api/v1/tenants/{tenantId}/companies` |
+| Company | POST | `/api/v1/companies` |
+| Company | GET | `/api/v1/companies` |
+| Company | GET | `/api/v1/companies/{companyId}` |
+| Company | GET | `/api/v1/companies/{companyId}/members` |
+| Company | POST | `/api/v1/companies/{companyId}/members` |
 | Organization | GET | `/api/v1/companies/{companyId}/branches` |
 | Organization | POST | `/api/v1/companies/{companyId}/branches` |
 | Solution Catalog | GET | `/api/v1/solutions` |
@@ -1171,34 +1148,34 @@ Di mode `cloud`, seluruh endpoint di atas mengembalikan `404`.
 | Add-ons | POST | `/api/v1/solutions/{solutionId}/addons` |
 | Add-ons | GET | `/api/v1/addons/{addonId}/benefits` |
 | Add-ons | PUT | `/api/v1/addons/{addonId}/benefits` |
-| Subscription | POST | `/api/v1/tenants/{tenantId}/subscriptions` |
-| Subscription | GET | `/api/v1/tenants/{tenantId}/subscriptions` |
+| Subscription | POST | `/api/v1/companies/{companyId}/subscriptions` |
+| Subscription | GET | `/api/v1/companies/{companyId}/subscriptions` |
 | Subscription | POST | `/api/v1/subscriptions/{subscriptionId}/change-plan` |
 | Subscription | POST | `/api/v1/subscriptions/{subscriptionId}/cancel` |
 | Subscription | GET | `/api/v1/subscriptions/{subscriptionId}/addons` |
 | Subscription | POST | `/api/v1/subscriptions/{subscriptionId}/addons` |
-| Effective Entitlements | GET | `/api/v1/tenants/{tenantId}/solutions/{solutionId}/entitlements` |
-| Effective Entitlements | GET | `/api/v1/tenants/{tenantId}/solutions/{solutionId}/entitlements/{benefitCode}` |
+| Effective Entitlements | GET | `/api/v1/companies/{companyId}/solutions/{solutionId}/entitlements` |
+| Effective Entitlements | GET | `/api/v1/companies/{companyId}/solutions/{solutionId}/entitlements/{benefitCode}` |
 | Authorization | GET | `/api/v1/solutions/{solutionId}/roles` |
 | Authorization | POST | `/api/v1/solutions/{solutionId}/roles` |
 | Authorization | GET | `/api/v1/roles/{roleId}/permissions` |
 | Authorization | PUT | `/api/v1/roles/{roleId}/permissions` |
-| Tenant Custom Role | GET | `/api/v1/tenants/{tenantId}/solutions/{solutionId}/roles` |
-| Tenant Custom Role | POST | `/api/v1/tenants/{tenantId}/solutions/{solutionId}/roles` |
-| Tenant Custom Role | PUT | `/api/v1/tenants/{tenantId}/roles/{roleId}/permissions` |
-| Authorization | POST | `/api/v1/tenants/{tenantId}/users/{userId}/role-assignments` |
+| Company Custom Role | GET | `/api/v1/companies/{companyId}/solutions/{solutionId}/roles` |
+| Company Custom Role | POST | `/api/v1/companies/{companyId}/solutions/{solutionId}/roles` |
+| Company Custom Role | PUT | `/api/v1/companies/{companyId}/roles/{roleId}/permissions` |
+| Authorization | POST | `/api/v1/companies/{companyId}/users/{userId}/role-assignments` |
 | Authorization | POST | `/api/v1/authz/check` |
 | Authorization | POST | `/api/v1/authz/check-batch` |
-| Auth & Session | GET | `/api/v1/auth/tenants` |
-| Auth & Session | POST | `/api/v1/auth/switch-tenant` |
+| Auth & Session | GET | `/api/v1/auth/companies` |
+| Auth & Session | POST | `/api/v1/auth/switch-company` |
 | Service Auth | POST | `/api/v1/oauth/token` |
 | Service Auth | GET | `/api/v1/.well-known/jwks.json` |
 | Solution Clients | POST | `/api/v1/solutions/{solutionId}/clients` |
 | Solution Clients | POST | `/api/v1/solution-clients/{clientId}/rotate-secret` |
 | Webhooks | POST | `/api/v1/solutions/{solutionId}/webhooks` |
 | Webhooks | GET | `/api/v1/events` |
-| Usage | POST | `/api/v1/tenants/{tenantId}/solutions/{solutionId}/usage` |
-| Usage | PUT | `/api/v1/tenants/{tenantId}/solutions/{solutionId}/usage/{benefitCode}` |
+| Usage | POST | `/api/v1/companies/{companyId}/solutions/{solutionId}/usage` |
+| Usage | PUT | `/api/v1/companies/{companyId}/solutions/{solutionId}/usage/{benefitCode}` |
 | Catalog Sync | PUT | `/api/v1/solutions/{solutionId}/permissions/sync` |
 | License (`on_prem`) | GET | `/api/v1/installation` |
 | License (`on_prem`) | GET | `/api/v1/license` |
@@ -1210,7 +1187,7 @@ Di mode `cloud`, seluruh endpoint di atas mengembalikan `404`.
 
 ## 5. Prinsip Utama
 
-Aplikasi produk mengambil **effective benefits** dari snapshot subscription tenant dan memeriksa **permission user** secara terpisah. Keduanya harus divalidasi di sisi server.
+Aplikasi produk mengambil **effective benefits** dari snapshot subscription company dan memeriksa **permission user** secara terpisah. Keduanya harus divalidasi di sisi server.
 
 ---
 
@@ -1220,15 +1197,16 @@ Aplikasi produk mengambil **effective benefits** dari snapshot subscription tena
 |---|---|
 | 1 | Composite FK `(id, solution_id)` untuk menjaga konsistensi solution di `plan_benefits`, `addon_benefits`, `subscriptions`, `subscription_addons`, `role_permissions` |
 | 2 | Tabel baru `subscription_benefit_snapshots`; entitlement dihitung dari snapshot |
-| 3 | `user_role_assignments`: FK ke `tenant_members`, unique `(user_id, role_id, scope_type, scope_id)`, aturan validasi role & scope |
+| 3 | `user_role_assignments`: FK ke `company_members`, unique `(user_id, role_id, scope_type, scope_id)`, aturan validasi role & scope |
 | 4 | CHECK constraint untuk seluruh kolom status/enum |
 | 5 | Index baru untuk FK yang belum ter-index |
-| 6 | Soft delete (`deleted_at`) untuk `companies`, `branches`, `plans`, `addons`, `roles`; `updated_at` di `companies` & `branches` |
-| 7 | Custom role per tenant per solution: `roles.tenant_id`, partial unique, endpoint `/tenants/{tenantId}/...roles` |
+| 6 | Soft delete (`deleted_at`) untuk `branches`, `plans`, `addons`, `roles`; `updated_at` di `companies` & `branches` |
+| 7 | Custom role per company per solution: `roles.company_id`, partial unique, endpoint `/companies/{companyId}/...roles` |
 | 8 | `solution_clients` + scope service + `POST /oauth/token` (client credentials) |
 | 9 | `signing_keys`, endpoint JWKS & openid-configuration, definisi claim user & service token |
 | 10 | Events (outbox), `webhook_endpoints`, `webhook_deliveries`, katalog event, endpoint polling `/events` |
-| 11 | `auth_sessions` (refresh token, tenant aktif), endpoint `/auth/tenants`, `/auth/switch-tenant`, manajemen sesi |
-| 12 | Usage reporting: `benefits.metering` & `usage_reset`, `usage_records`, `tenant_usage`, entitlement memuat `used`/`remaining` |
+| 11 | `auth_sessions` (refresh token, company aktif), endpoint `/auth/companies`, `/auth/switch-company`, manajemen sesi |
+| 12 | Usage reporting: `benefits.metering` & `usage_reset`, `usage_records`, `company_usage`, entitlement memuat `used`/`remaining` |
 | 13 | Catalog sync: `permissions.status`, `solutions.permission_catalog_version`, endpoint sync permission & system role |
 | 14 | Deployment mode `cloud`/`on_prem`; licensing: `installations`, `licenses`, `license_checkins`, state `valid`/`grace`/`read_only`/`invalid`, endpoint license, daftar endpoint yang dinonaktifkan di `on_prem` |
+| 15 | **Hirarki baru:** `companies` menjadi entitas tertinggi (menggantikan `tenants`); `tenant_members` → `company_members`; `tenant_usage` → `company_usage`; seluruh `tenant_id` → `company_id`, claim `tid` → `cid`, event `tenant.*`/`tenant_member.*` → `company.*`/`company_member.*`, scope authz `company` \| `branch` |

@@ -31,7 +31,7 @@ type AddSubscriptionAddonRequest struct {
 
 type SubscriptionResponse struct {
 	ID                 string     `json:"id"`
-	TenantID           string     `json:"tenant_id"`
+	CompanyID          string     `json:"company_id"`
 	SolutionID         string     `json:"solution_id"`
 	SolutionCode       string     `json:"solution_code"`
 	PlanID             string     `json:"plan_id"`

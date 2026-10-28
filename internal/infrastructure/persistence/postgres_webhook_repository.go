@@ -45,22 +45,22 @@ func NewPostgresWebhookDeliveryRepository(db *sql.DB) *PostgresWebhookDeliveryRe
 
 // eventRoutedToSolution — aturan routing spec §2.9 (e = events; %[1]s = solution id, %[2]s = status live):
 //   - event milik solution tersebut;
-//   - event tenant (solution_id NULL) dari tenant yang berlangganan (live) solution tersebut;
-//   - event user (tenant & solution NULL, payload.user_id) bila user anggota aktif tenant
+//   - event company (solution_id NULL) dari company yang berlangganan (live) solution tersebut;
+//   - event user (company & solution NULL, payload.user_id) bila user anggota aktif company
 //     yang berlangganan solution tersebut.
 const eventRoutedToSolution = `(
 	e.solution_id = %[1]s
-	OR (e.solution_id IS NULL AND e.tenant_id IS NOT NULL AND EXISTS (
+	OR (e.solution_id IS NULL AND e.company_id IS NOT NULL AND EXISTS (
 		SELECT 1 FROM subscriptions s
-		WHERE s.tenant_id = e.tenant_id AND s.solution_id = %[1]s AND s.status = ANY(%[2]s::text[])))
-	OR (e.solution_id IS NULL AND e.tenant_id IS NULL AND EXISTS (
-		SELECT 1 FROM tenant_members tm
-		JOIN subscriptions s ON s.tenant_id = tm.tenant_id
+		WHERE s.company_id = e.company_id AND s.solution_id = %[1]s AND s.status = ANY(%[2]s::text[])))
+	OR (e.solution_id IS NULL AND e.company_id IS NULL AND EXISTS (
+		SELECT 1 FROM company_members tm
+		JOIN subscriptions s ON s.company_id = tm.company_id
 		WHERE tm.user_id::text = e.payload->>'user_id' AND tm.status = 'active'
 		  AND s.solution_id = %[1]s AND s.status = ANY(%[2]s::text[])))
 )`
 
-// liveStatuses — subscription yang masih berjalan menerima event tenant.
+// liveStatuses — subscription yang masih berjalan menerima event company.
 var liveStatuses = []string{string(subvo.StatusTrialing), string(subvo.StatusActive), string(subvo.StatusPastDue)}
 
 func (r *PostgresWebhookDeliveryRepository) FanOut(ctx context.Context, now time.Time, limit int) (int, error) {
@@ -100,7 +100,7 @@ func (r *PostgresWebhookDeliveryRepository) ClaimDue(ctx context.Context, now ti
 		UPDATE webhook_deliveries d SET next_attempt_at = $2
 		FROM due, events e, webhook_endpoints w
 		WHERE d.id = due.id AND e.id = d.event_id AND w.id = d.webhook_endpoint_id
-		RETURNING d.id, d.event_id, d.webhook_endpoint_id, d.attempt_count, e.event_type, e.tenant_id,
+		RETURNING d.id, d.event_id, d.webhook_endpoint_id, d.attempt_count, e.event_type, e.company_id,
 			e.solution_id, e.payload, e.occurred_at, w.url, w.secret_encrypted`,
 		now.UTC(), now.UTC().Add(lease), limit)
 	if err != nil {
@@ -111,7 +111,7 @@ func (r *PostgresWebhookDeliveryRepository) ClaimDue(ctx context.Context, now ti
 	var out []*entity.Delivery
 	for rows.Next() {
 		var d entity.Delivery
-		if err := rows.Scan(&d.ID, &d.EventID, &d.EndpointID, &d.AttemptCount, &d.EventType, &d.TenantID,
+		if err := rows.Scan(&d.ID, &d.EventID, &d.EndpointID, &d.AttemptCount, &d.EventType, &d.CompanyID,
 			&d.SolutionID, &d.Payload, &d.OccurredAt, &d.URL, &d.SecretEncrypted); err != nil {
 			return nil, domainerr.Wrap(constant.CodeWebhookQueryFailed, err)
 		}

@@ -23,15 +23,15 @@ func (r *PostgresEventQuery) List(ctx context.Context, q port.EventListReadQuery
 	if q.EventType != nil {
 		w.add(`e.event_type = $%d`, *q.EventType)
 	}
-	if q.TenantID != nil {
-		w.add(`e.tenant_id = $%d`, *q.TenantID)
+	if q.CompanyID != nil {
+		w.add(`e.company_id = $%d`, *q.CompanyID)
 	}
 	if q.AfterOccurredAt != nil {
 		w.add(`(e.occurred_at, e.id) > ($%d, $%d)`, *q.AfterOccurredAt, q.AfterID)
 	}
 	w.args = append(w.args, q.Limit)
 	rows, err := execFromContext(ctx, r.db).QueryContext(ctx, sprintf(`
-		SELECT e.id, e.event_type, e.tenant_id, e.solution_id, e.payload, e.occurred_at
+		SELECT e.id, e.event_type, e.company_id, e.solution_id, e.payload, e.occurred_at
 		FROM events e %s ORDER BY e.occurred_at, e.id LIMIT $%d`, w.sql(), len(w.args)), w.args...)
 	if err != nil {
 		return nil, domainerr.Wrap(constant.CodeWebhookQueryFailed, err)
@@ -41,7 +41,7 @@ func (r *PostgresEventQuery) List(ctx context.Context, q port.EventListReadQuery
 	items := []port.EventReadItem{}
 	for rows.Next() {
 		var it port.EventReadItem
-		if err := rows.Scan(&it.ID, &it.EventType, &it.TenantID, &it.SolutionID, &it.Payload, &it.OccurredAt); err != nil {
+		if err := rows.Scan(&it.ID, &it.EventType, &it.CompanyID, &it.SolutionID, &it.Payload, &it.OccurredAt); err != nil {
 			return nil, domainerr.Wrap(constant.CodeWebhookQueryFailed, err)
 		}
 		items = append(items, it)

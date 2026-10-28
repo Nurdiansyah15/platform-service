@@ -1,18 +1,6 @@
 basePath: /
 definitions:
-  dto.AddSubscriptionAddonRequest:
-    properties:
-      addon_id:
-        type: string
-      quantity:
-        description: Quantity — default 1.
-        maximum: 1000000
-        minimum: 1
-        type: integer
-    required:
-    - addon_id
-    type: object
-  dto.AddTenantMemberRequest:
+  dto.AddCompanyMemberRequest:
     properties:
       email:
         maxLength: 255
@@ -24,6 +12,18 @@ definitions:
         type: string
       user_id:
         type: string
+    type: object
+  dto.AddSubscriptionAddonRequest:
+    properties:
+      addon_id:
+        type: string
+      quantity:
+        description: Quantity — default 1.
+        maximum: 1000000
+        minimum: 1
+        type: integer
+    required:
+    - addon_id
     type: object
   dto.AddonResponse:
     properties:
@@ -76,6 +76,10 @@ definitions:
         type: string
       access_token_expires_at:
         type: string
+      company_id:
+        description: CompanyID company aktif; null bila user belum memilih company
+          (diisi mulai Fase 10).
+        type: string
       expires_in:
         type: integer
       refresh_token:
@@ -83,10 +87,6 @@ definitions:
       refresh_token_expires_at:
         type: string
       session_id:
-        type: string
-      tenant_id:
-        description: TenantID tenant aktif; null bila user belum memilih tenant (diisi
-          mulai Fase 10).
         type: string
       token_type:
         type: string
@@ -99,7 +99,7 @@ definitions:
         maxItems: 100
         minItems: 1
         type: array
-      tenant_id:
+      company_id:
         type: string
       user_id:
         type: string
@@ -108,12 +108,12 @@ definitions:
     type: object
   dto.AuthzCheckBatchResponse:
     properties:
+      company_id:
+        type: string
       results:
         items:
           $ref: '#/definitions/dto.AuthzCheckResult'
         type: array
-      tenant_id:
-        type: string
       user_id:
         type: string
     type: object
@@ -126,7 +126,6 @@ definitions:
         type: string
       scope_type:
         enum:
-        - tenant
         - company
         - branch
         type: string
@@ -135,6 +134,8 @@ definitions:
     type: object
   dto.AuthzCheckRequest:
     properties:
+      company_id:
+        type: string
       permission:
         maxLength: 150
         type: string
@@ -142,11 +143,8 @@ definitions:
         type: string
       scope_type:
         enum:
-        - tenant
         - company
         - branch
-        type: string
-      tenant_id:
         type: string
       user_id:
         type: string
@@ -230,19 +228,32 @@ definitions:
     required:
     - plan_id
     type: object
+  dto.CompanyMemberResponse:
+    properties:
+      company_id:
+        type: string
+      email:
+        type: string
+      joined_at:
+        type: string
+      name:
+        type: string
+      status:
+        type: string
+      user_id:
+        type: string
+    type: object
   dto.CompanyResponse:
     properties:
-      code:
-        type: string
       created_at:
         type: string
       id:
         type: string
       name:
         type: string
-      status:
+      slug:
         type: string
-      tenant_id:
+      status:
         type: string
       updated_at:
         type: string
@@ -322,6 +333,18 @@ definitions:
     - name
     - value_type
     type: object
+  dto.CreateCompanyRequest:
+    properties:
+      name:
+        maxLength: 255
+        type: string
+      slug:
+        maxLength: 100
+        type: string
+    required:
+    - name
+    - slug
+    type: object
   dto.CreateOrgUnitRequest:
     properties:
       code:
@@ -372,13 +395,12 @@ definitions:
       role_id:
         type: string
       scope_id:
-        description: ScopeID — wajib untuk company / branch; untuk tenant boleh kosong
-          (= tenant itu sendiri).
+        description: ScopeID — wajib untuk company / branch; untuk company boleh kosong
+          (= company itu sendiri).
         type: string
       scope_type:
-        description: ScopeType — tenant (default) | company | branch.
+        description: ScopeType — company (default) | branch.
         enum:
-        - tenant
         - company
         - branch
         type: string
@@ -446,18 +468,6 @@ definitions:
         type: string
     required:
     - plan_id
-    type: object
-  dto.CreateTenantRequest:
-    properties:
-      name:
-        maxLength: 255
-        type: string
-      slug:
-        maxLength: 100
-        type: string
-    required:
-    - name
-    - slug
     type: object
   dto.CreateUserRequest:
     properties:
@@ -559,6 +569,8 @@ definitions:
     type: object
   dto.EntitlementsResponse:
     properties:
+      company_id:
+        type: string
       entitlements:
         items:
           $ref: '#/definitions/dto.EntitlementResponse'
@@ -568,13 +580,13 @@ definitions:
       subscription:
         allOf:
         - $ref: '#/definitions/dto.EntitlementSubscription'
-        description: Subscription — null bila tenant tidak berlangganan (semua benefit
+        description: Subscription — null bila company tidak berlangganan (semua benefit
           granted=false).
-      tenant_id:
-        type: string
     type: object
   dto.EventItem:
     properties:
+      company_id:
+        type: string
       data:
         type: object
       id:
@@ -582,8 +594,6 @@ definitions:
       occurred_at:
         type: string
       solution_id:
-        type: string
-      tenant_id:
         type: string
       type:
         type: string
@@ -795,6 +805,8 @@ definitions:
     type: object
   dto.RoleAssignmentResponse:
     properties:
+      company_id:
+        type: string
       created_at:
         type: string
       id:
@@ -808,8 +820,6 @@ definitions:
       scope_type:
         type: string
       solution_id:
-        type: string
-      tenant_id:
         type: string
       user_id:
         type: string
@@ -829,6 +839,8 @@ definitions:
     properties:
       code:
         type: string
+      company_id:
+        type: string
       created_at:
         type: string
       description:
@@ -840,21 +852,19 @@ definitions:
       name:
         type: string
       scope:
-        description: Scope — "system" | "global" | "tenant".
+        description: Scope — "system" | "global" | "company".
         type: string
       solution_id:
-        type: string
-      tenant_id:
         type: string
       updated_at:
         type: string
     type: object
-  dto.SelectableTenantResponse:
+  dto.SelectableCompanyResponse:
     properties:
       id:
         type: string
       is_active:
-        description: IsActive — tenant ini adalah tenant aktif token saat ini.
+        description: IsActive — company ini adalah company aktif token saat ini.
         type: boolean
       name:
         type: string
@@ -865,6 +875,8 @@ definitions:
     type: object
   dto.SessionResponse:
     properties:
+      company_id:
+        type: string
       created_at:
         type: string
       expires_at:
@@ -873,8 +885,6 @@ definitions:
         type: string
       solution:
         $ref: '#/definitions/dto.SolutionSummary'
-      tenant_id:
-        type: string
     type: object
   dto.SolutionClientWithSecretResponse:
     properties:
@@ -961,6 +971,8 @@ definitions:
     properties:
       billing_cycle:
         type: string
+      company_id:
+        type: string
       created_at:
         type: string
       currency:
@@ -986,17 +998,15 @@ definitions:
         type: string
       status:
         type: string
-      tenant_id:
-        type: string
       updated_at:
         type: string
     type: object
-  dto.SwitchTenantRequest:
+  dto.SwitchCompanyRequest:
     properties:
-      tenant_id:
+      company_id:
         type: string
     required:
-    - tenant_id
+    - company_id
     type: object
   dto.SyncPermissionsRequest:
     properties:
@@ -1030,36 +1040,6 @@ definitions:
       updated:
         type: integer
       version:
-        type: string
-    type: object
-  dto.TenantMemberResponse:
-    properties:
-      email:
-        type: string
-      joined_at:
-        type: string
-      name:
-        type: string
-      status:
-        type: string
-      tenant_id:
-        type: string
-      user_id:
-        type: string
-    type: object
-  dto.TenantResponse:
-    properties:
-      created_at:
-        type: string
-      id:
-        type: string
-      name:
-        type: string
-      slug:
-        type: string
-      status:
-        type: string
-      updated_at:
         type: string
     type: object
   dto.UsageReportResponse:
@@ -1156,7 +1136,7 @@ definitions:
     type: object
 info:
   contact: {}
-  description: Identity, tenant, catalog, subscription, entitlement, authorization,
+  description: Identity, company, catalog, subscription, entitlement, authorization,
     dan licensing untuk solution.
   title: Central SaaS Platform API
   version: "1.0"
@@ -1266,6 +1246,37 @@ paths:
       summary: Replace add-on benefits
       tags:
       - Add-ons
+  /api/v1/auth/companies:
+    get:
+      description: Company tempat user member active, company active, dan subscribe
+        solution sesi (trialing / active).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.SelectableCompanyResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Companies selectable for the session's solution
+      tags:
+      - Auth
   /api/v1/auth/login:
     post:
       consumes:
@@ -1387,19 +1398,19 @@ paths:
       summary: Refresh token
       tags:
       - Auth
-  /api/v1/auth/switch-tenant:
+  /api/v1/auth/switch-company:
     post:
       consumes:
       - application/json
-      description: Mengganti tenant aktif sesi dan menerbitkan access & refresh token
+      description: Mengganti company aktif sesi dan menerbitkan access & refresh token
         baru; refresh token lama tidak berlaku.
       parameters:
-      - description: Tenant tujuan
+      - description: Company tujuan
         in: body
         name: body
         required: true
         schema:
-          $ref: '#/definitions/dto.SwitchTenantRequest'
+          $ref: '#/definitions/dto.SwitchCompanyRequest'
       produces:
       - application/json
       responses:
@@ -1426,47 +1437,16 @@ paths:
             $ref: '#/definitions/respond.ErrorBody'
       security:
       - BearerAuth: []
-      summary: Switch active tenant
-      tags:
-      - Auth
-  /api/v1/auth/tenants:
-    get:
-      description: Tenant tempat user member active, tenant active, dan subscribe
-        solution sesi (trialing / active).
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  items:
-                    $ref: '#/definitions/dto.SelectableTenantResponse'
-                  type: array
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: Tenants selectable for the session's solution
+      summary: Switch active company
       tags:
       - Auth
   /api/v1/authz/check:
     post:
       consumes:
       - application/json
-      description: 'Token service: wajib tenant_id & user_id (solution = milik client).
-        Token user: mengecek diri sendiri pada tenant aktif (tid). Scope default tenant;
-        assignment company berlaku untuk branch di bawahnya.'
+      description: 'Token service: wajib company_id & user_id (solution = milik client).
+        Token user: mengecek diri sendiri pada company aktif (cid). Scope default
+        company; assignment company berlaku untuk branch di bawahnya.'
       parameters:
       - description: Permission check
         in: body
@@ -1580,6 +1560,155 @@ paths:
       summary: Get benefit
       tags:
       - Benefits
+  /api/v1/companies:
+    get:
+      description: Platform admin melihat semua company; user lain hanya company tempat
+        ia member active.
+      parameters:
+      - description: active | suspended | closed
+        in: query
+        name: status
+        type: string
+      - description: Cari di name / slug
+        in: query
+        name: search
+        type: string
+      - description: Halaman
+        in: query
+        name: page
+        type: integer
+      - description: Jumlah per halaman (maks 100)
+        in: query
+        name: limit
+        type: integer
+      - description: name | slug | created_at
+        in: query
+        name: sort_by
+        type: string
+      - description: asc | desc
+        in: query
+        name: sort_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.CompanyResponse'
+                  type: array
+                meta:
+                  $ref: '#/definitions/dto.Meta'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List companies
+      tags:
+      - Companies
+    post:
+      consumes:
+      - application/json
+      description: Pembuat (non platform admin) otomatis menjadi member active.
+      parameters:
+      - description: Company
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateCompanyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.CompanyResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Create company
+      tags:
+      - Companies
+  /api/v1/companies/{companyId}:
+    get:
+      description: Platform admin, atau member active yang token-nya ber-cid company
+        ini.
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.CompanyResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Get company
+      tags:
+      - Companies
   /api/v1/companies/{companyId}/branches:
     get:
       parameters:
@@ -1652,8 +1781,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: code dinormalisasi UPPERCASE, unik per company. Company tenant
-        lain → 404.
+      description: code dinormalisasi UPPERCASE, unik per company.
       parameters:
       - description: Company ID
         in: path
@@ -1703,6 +1831,723 @@ paths:
       summary: Create branch
       tags:
       - Organization
+  /api/v1/companies/{companyId}/members:
+    get:
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: invited | active | inactive
+        in: query
+        name: status
+        type: string
+      - description: Cari di email / nama user
+        in: query
+        name: search
+        type: string
+      - description: Halaman
+        in: query
+        name: page
+        type: integer
+      - description: Jumlah per halaman (maks 100)
+        in: query
+        name: limit
+        type: integer
+      - description: email | name | joined_at
+        in: query
+        name: sort_by
+        type: string
+      - description: asc | desc
+        in: query
+        name: sort_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.CompanyMemberResponse'
+                  type: array
+                meta:
+                  $ref: '#/definitions/dto.Meta'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List company members
+      tags:
+      - Companies
+    post:
+      consumes:
+      - application/json
+      description: Isi salah satu user_id atau email (user harus sudah terdaftar).
+        Member inactive diaktifkan kembali.
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: Member
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.AddCompanyMemberRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.CompanyMemberResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Add company member
+      tags:
+      - Companies
+  /api/v1/companies/{companyId}/roles/{roleId}/permissions:
+    put:
+      consumes:
+      - application/json
+      description: Hanya custom role milik company (role global / company lain → 404).
+        Permission harus milik solution yang sama.
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: Role ID
+        in: path
+        name: roleId
+        required: true
+        type: string
+      - description: Permission codes
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ReplaceRolePermissionsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.RolePermissionResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Replace company custom role permissions
+      tags:
+      - Roles
+  /api/v1/companies/{companyId}/solutions/{solutionId}/entitlements:
+    get:
+      description: 'Dihitung dari snapshot subscription (sum: plan + add-on × quantity;
+        max/min; any_true; override: add-on terbaru). -1 = unlimited. Benefit di-meter
+        memuat limit, used, remaining.'
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.EntitlementsResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Effective entitlements
+      tags:
+      - Entitlements
+  /api/v1/companies/{companyId}/solutions/{solutionId}/entitlements/{benefitCode}:
+    get:
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Benefit code
+        in: path
+        name: benefitCode
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.EntitlementResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Effective entitlement of one benefit
+      tags:
+      - Entitlements
+  /api/v1/companies/{companyId}/solutions/{solutionId}/roles:
+    get:
+      description: Role global + custom role milik company untuk solution.
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Cari di code / name
+        in: query
+        name: search
+        type: string
+      - description: Halaman
+        in: query
+        name: page
+        type: integer
+      - description: Jumlah per halaman (default 50, maks 200)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.RoleResponse'
+                  type: array
+                meta:
+                  $ref: '#/definitions/dto.Meta'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List roles available to a company
+      tags:
+      - Roles
+    post:
+      consumes:
+      - application/json
+      description: Company wajib subscribe solution (trialing / active).
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Role
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.RoleResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Create company custom role
+      tags:
+      - Roles
+  /api/v1/companies/{companyId}/solutions/{solutionId}/usage:
+    post:
+      consumes:
+      - application/json
+      description: 'used = used + quantity untuk benefit metering counter. Idempotent
+        per idempotency_key: 201 = diterapkan, 200 = replay (tidak diterapkan ulang).'
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: Solution ID (harus solution client)
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Laporan
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ReportUsageDeltaRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.UsageReportResponse'
+              type: object
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.UsageReportResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Report counter usage (delta)
+      tags:
+      - Usage
+  /api/v1/companies/{companyId}/solutions/{solutionId}/usage/{benefitCode}:
+    put:
+      consumes:
+      - application/json
+      description: used = quantity untuk benefit metering gauge. Laporan dengan occurred_at
+        lebih lama dari yang sudah diterapkan diabaikan. Idempotent per idempotency_key.
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: Solution ID (harus solution client)
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Benefit code
+        in: path
+        name: benefitCode
+        required: true
+        type: string
+      - description: Laporan
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ReportUsageAbsoluteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.UsageReportResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Report gauge usage (absolute)
+      tags:
+      - Usage
+  /api/v1/companies/{companyId}/subscriptions:
+    get:
+      description: Token service hanya melihat subscription solution miliknya.
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: trialing | active | past_due | canceled | expired
+        in: query
+        name: status
+        type: string
+      - description: Halaman
+        in: query
+        name: page
+        type: integer
+      - description: Jumlah per halaman (maks 100)
+        in: query
+        name: limit
+        type: integer
+      - description: created_at | status | current_period_end
+        in: query
+        name: sort_by
+        type: string
+      - description: asc | desc
+        in: query
+        name: sort_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.SubscriptionResponse'
+                  type: array
+                meta:
+                  $ref: '#/definitions/dto.Meta'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List company subscriptions
+      tags:
+      - Subscriptions
+    post:
+      consumes:
+      - application/json
+      description: Membekukan benefit plan ke snapshot. Maksimal satu subscription
+        hidup (trialing/active/past_due) per company per solution.
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: Subscription
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateSubscriptionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.SubscriptionResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Create subscription
+      tags:
+      - Subscriptions
+  /api/v1/companies/{companyId}/users/{userId}/role-assignments:
+    post:
+      consumes:
+      - application/json
+      description: User wajib member active; company wajib subscribe solution role;
+        custom role harus milik company; scope_id harus milik company (company / company
+        / branch).
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: string
+      - description: Assignment
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateRoleAssignmentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.RoleAssignmentResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Assign role to company member
+      tags:
+      - Authorization
   /api/v1/events:
     get:
       description: Event yang relevan untuk solution pemanggil, urut occurred_at naik.
@@ -1716,9 +2561,9 @@ paths:
         in: query
         name: event_type
         type: string
-      - description: Filter tenant
+      - description: Filter company
         in: query
-        name: tenant_id
+        name: company_id
         type: string
       - description: meta.next_cursor dari halaman sebelumnya
         in: query
@@ -1896,7 +2741,8 @@ paths:
       - Plans
   /api/v1/roles/{roleId}/permissions:
     get:
-      description: Custom role hanya terlihat oleh tenant pemiliknya (selain itu 404).
+      description: Custom role hanya terlihat oleh company pemiliknya (selain itu
+        404).
       parameters:
       - description: Role ID
         in: path
@@ -3065,994 +3911,6 @@ paths:
       summary: Change subscription plan
       tags:
       - Subscriptions
-  /api/v1/tenants:
-    get:
-      description: Platform admin melihat semua tenant; user lain hanya tenant tempat
-        ia member active.
-      parameters:
-      - description: active | suspended | closed
-        in: query
-        name: status
-        type: string
-      - description: Cari di name / slug
-        in: query
-        name: search
-        type: string
-      - description: Halaman
-        in: query
-        name: page
-        type: integer
-      - description: Jumlah per halaman (maks 100)
-        in: query
-        name: limit
-        type: integer
-      - description: name | slug | created_at
-        in: query
-        name: sort_by
-        type: string
-      - description: asc | desc
-        in: query
-        name: sort_type
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  items:
-                    $ref: '#/definitions/dto.TenantResponse'
-                  type: array
-                meta:
-                  $ref: '#/definitions/dto.Meta'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: List tenants
-      tags:
-      - Tenants
-    post:
-      consumes:
-      - application/json
-      description: Pembuat (non platform admin) otomatis menjadi member active.
-      parameters:
-      - description: Tenant
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/dto.CreateTenantRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.TenantResponse'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: Create tenant
-      tags:
-      - Tenants
-  /api/v1/tenants/{tenantId}:
-    get:
-      description: Platform admin, atau member active yang token-nya ber-tid tenant
-        ini.
-      parameters:
-      - description: Tenant ID
-        in: path
-        name: tenantId
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.TenantResponse'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: Get tenant
-      tags:
-      - Tenants
-  /api/v1/tenants/{tenantId}/companies:
-    get:
-      parameters:
-      - description: Tenant ID
-        in: path
-        name: tenantId
-        required: true
-        type: string
-      - description: active | inactive
-        in: query
-        name: status
-        type: string
-      - description: Cari di code / name
-        in: query
-        name: search
-        type: string
-      - description: Halaman
-        in: query
-        name: page
-        type: integer
-      - description: Jumlah per halaman (maks 100)
-        in: query
-        name: limit
-        type: integer
-      - description: code | name | created_at
-        in: query
-        name: sort_by
-        type: string
-      - description: asc | desc
-        in: query
-        name: sort_type
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  items:
-                    $ref: '#/definitions/dto.CompanyResponse'
-                  type: array
-                meta:
-                  $ref: '#/definitions/dto.Meta'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: List companies
-      tags:
-      - Organization
-    post:
-      consumes:
-      - application/json
-      description: code dinormalisasi UPPERCASE, unik per tenant.
-      parameters:
-      - description: Tenant ID
-        in: path
-        name: tenantId
-        required: true
-        type: string
-      - description: Company
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/dto.CreateOrgUnitRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.CompanyResponse'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: Create company
-      tags:
-      - Organization
-  /api/v1/tenants/{tenantId}/members:
-    get:
-      parameters:
-      - description: Tenant ID
-        in: path
-        name: tenantId
-        required: true
-        type: string
-      - description: invited | active | inactive
-        in: query
-        name: status
-        type: string
-      - description: Cari di email / nama user
-        in: query
-        name: search
-        type: string
-      - description: Halaman
-        in: query
-        name: page
-        type: integer
-      - description: Jumlah per halaman (maks 100)
-        in: query
-        name: limit
-        type: integer
-      - description: email | name | joined_at
-        in: query
-        name: sort_by
-        type: string
-      - description: asc | desc
-        in: query
-        name: sort_type
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  items:
-                    $ref: '#/definitions/dto.TenantMemberResponse'
-                  type: array
-                meta:
-                  $ref: '#/definitions/dto.Meta'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: List tenant members
-      tags:
-      - Tenants
-    post:
-      consumes:
-      - application/json
-      description: Isi salah satu user_id atau email (user harus sudah terdaftar).
-        Member inactive diaktifkan kembali.
-      parameters:
-      - description: Tenant ID
-        in: path
-        name: tenantId
-        required: true
-        type: string
-      - description: Member
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/dto.AddTenantMemberRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.TenantMemberResponse'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: Add tenant member
-      tags:
-      - Tenants
-  /api/v1/tenants/{tenantId}/roles/{roleId}/permissions:
-    put:
-      consumes:
-      - application/json
-      description: Hanya custom role milik tenant (role global / tenant lain → 404).
-        Permission harus milik solution yang sama.
-      parameters:
-      - description: Tenant ID
-        in: path
-        name: tenantId
-        required: true
-        type: string
-      - description: Role ID
-        in: path
-        name: roleId
-        required: true
-        type: string
-      - description: Permission codes
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/dto.ReplaceRolePermissionsRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  items:
-                    $ref: '#/definitions/dto.RolePermissionResponse'
-                  type: array
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: Replace tenant custom role permissions
-      tags:
-      - Roles
-  /api/v1/tenants/{tenantId}/solutions/{solutionId}/entitlements:
-    get:
-      description: 'Dihitung dari snapshot subscription (sum: plan + add-on × quantity;
-        max/min; any_true; override: add-on terbaru). -1 = unlimited. Benefit di-meter
-        memuat limit, used, remaining.'
-      parameters:
-      - description: Tenant ID
-        in: path
-        name: tenantId
-        required: true
-        type: string
-      - description: Solution ID
-        in: path
-        name: solutionId
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.EntitlementsResponse'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: Effective entitlements
-      tags:
-      - Entitlements
-  /api/v1/tenants/{tenantId}/solutions/{solutionId}/entitlements/{benefitCode}:
-    get:
-      parameters:
-      - description: Tenant ID
-        in: path
-        name: tenantId
-        required: true
-        type: string
-      - description: Solution ID
-        in: path
-        name: solutionId
-        required: true
-        type: string
-      - description: Benefit code
-        in: path
-        name: benefitCode
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.EntitlementResponse'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: Effective entitlement of one benefit
-      tags:
-      - Entitlements
-  /api/v1/tenants/{tenantId}/solutions/{solutionId}/roles:
-    get:
-      description: Role global + custom role milik tenant untuk solution.
-      parameters:
-      - description: Tenant ID
-        in: path
-        name: tenantId
-        required: true
-        type: string
-      - description: Solution ID
-        in: path
-        name: solutionId
-        required: true
-        type: string
-      - description: Cari di code / name
-        in: query
-        name: search
-        type: string
-      - description: Halaman
-        in: query
-        name: page
-        type: integer
-      - description: Jumlah per halaman (default 50, maks 200)
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  items:
-                    $ref: '#/definitions/dto.RoleResponse'
-                  type: array
-                meta:
-                  $ref: '#/definitions/dto.Meta'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: List roles available to a tenant
-      tags:
-      - Roles
-    post:
-      consumes:
-      - application/json
-      description: Tenant wajib subscribe solution (trialing / active).
-      parameters:
-      - description: Tenant ID
-        in: path
-        name: tenantId
-        required: true
-        type: string
-      - description: Solution ID
-        in: path
-        name: solutionId
-        required: true
-        type: string
-      - description: Role
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/dto.CreateRoleRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.RoleResponse'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: Create tenant custom role
-      tags:
-      - Roles
-  /api/v1/tenants/{tenantId}/solutions/{solutionId}/usage:
-    post:
-      consumes:
-      - application/json
-      description: 'used = used + quantity untuk benefit metering counter. Idempotent
-        per idempotency_key: 201 = diterapkan, 200 = replay (tidak diterapkan ulang).'
-      parameters:
-      - description: Tenant ID
-        in: path
-        name: tenantId
-        required: true
-        type: string
-      - description: Solution ID (harus solution client)
-        in: path
-        name: solutionId
-        required: true
-        type: string
-      - description: Laporan
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/dto.ReportUsageDeltaRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.UsageReportResponse'
-              type: object
-        "201":
-          description: Created
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.UsageReportResponse'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: Report counter usage (delta)
-      tags:
-      - Usage
-  /api/v1/tenants/{tenantId}/solutions/{solutionId}/usage/{benefitCode}:
-    put:
-      consumes:
-      - application/json
-      description: used = quantity untuk benefit metering gauge. Laporan dengan occurred_at
-        lebih lama dari yang sudah diterapkan diabaikan. Idempotent per idempotency_key.
-      parameters:
-      - description: Tenant ID
-        in: path
-        name: tenantId
-        required: true
-        type: string
-      - description: Solution ID (harus solution client)
-        in: path
-        name: solutionId
-        required: true
-        type: string
-      - description: Benefit code
-        in: path
-        name: benefitCode
-        required: true
-        type: string
-      - description: Laporan
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/dto.ReportUsageAbsoluteRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.UsageReportResponse'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: Report gauge usage (absolute)
-      tags:
-      - Usage
-  /api/v1/tenants/{tenantId}/subscriptions:
-    get:
-      description: Token service hanya melihat subscription solution miliknya.
-      parameters:
-      - description: Tenant ID
-        in: path
-        name: tenantId
-        required: true
-        type: string
-      - description: trialing | active | past_due | canceled | expired
-        in: query
-        name: status
-        type: string
-      - description: Halaman
-        in: query
-        name: page
-        type: integer
-      - description: Jumlah per halaman (maks 100)
-        in: query
-        name: limit
-        type: integer
-      - description: created_at | status | current_period_end
-        in: query
-        name: sort_by
-        type: string
-      - description: asc | desc
-        in: query
-        name: sort_type
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  items:
-                    $ref: '#/definitions/dto.SubscriptionResponse'
-                  type: array
-                meta:
-                  $ref: '#/definitions/dto.Meta'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: List tenant subscriptions
-      tags:
-      - Subscriptions
-    post:
-      consumes:
-      - application/json
-      description: Membekukan benefit plan ke snapshot. Maksimal satu subscription
-        hidup (trialing/active/past_due) per tenant per solution.
-      parameters:
-      - description: Tenant ID
-        in: path
-        name: tenantId
-        required: true
-        type: string
-      - description: Subscription
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/dto.CreateSubscriptionRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.SubscriptionResponse'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: Create subscription
-      tags:
-      - Subscriptions
-  /api/v1/tenants/{tenantId}/users/{userId}/role-assignments:
-    post:
-      consumes:
-      - application/json
-      description: User wajib member active; tenant wajib subscribe solution role;
-        custom role harus milik tenant; scope_id harus milik tenant (tenant / company
-        / branch).
-      parameters:
-      - description: Tenant ID
-        in: path
-        name: tenantId
-        required: true
-        type: string
-      - description: User ID
-        in: path
-        name: userId
-        required: true
-        type: string
-      - description: Assignment
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/dto.CreateRoleAssignmentRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            allOf:
-            - $ref: '#/definitions/respond.SuccessBody'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.RoleAssignmentResponse'
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/respond.ErrorBody'
-      security:
-      - BearerAuth: []
-      summary: Assign role to tenant member
-      tags:
-      - Authorization
   /api/v1/users:
     post:
       consumes:

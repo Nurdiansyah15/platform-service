@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS tenant_usage;
+DROP TABLE IF EXISTS company_usage;

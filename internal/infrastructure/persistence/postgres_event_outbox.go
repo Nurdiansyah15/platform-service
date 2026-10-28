@@ -30,7 +30,7 @@ func (o *PostgresEventOutbox) Append(ctx context.Context, events ...port.OutboxE
 	}
 
 	const q = `
-		INSERT INTO events (id, event_type, tenant_id, solution_id, payload, occurred_at)
+		INSERT INTO events (id, event_type, company_id, solution_id, payload, occurred_at)
 		VALUES ($1, $2, $3, $4, $5, $6)`
 
 	for _, ev := range events {
@@ -49,7 +49,7 @@ func (o *PostgresEventOutbox) Append(ctx context.Context, events ...port.OutboxE
 		if occurredAt.IsZero() {
 			occurredAt = time.Now().UTC()
 		}
-		if _, err := tx.ExecContext(ctx, q, id, ev.EventType, nullString(ev.TenantID), nullString(ev.SolutionID), payload, occurredAt); err != nil {
+		if _, err := tx.ExecContext(ctx, q, id, ev.EventType, nullString(ev.CompanyID), nullString(ev.SolutionID), payload, occurredAt); err != nil {
 			return fmt.Errorf("outbox: insert %s: %w", ev.EventType, err)
 		}
 	}

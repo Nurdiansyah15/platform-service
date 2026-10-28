@@ -110,7 +110,7 @@ func TestAuth_Login_Success(t *testing.T) {
 	assert.Equal(t, "Bearer", tok.TokenType)
 	assert.InDelta(t, 900, tok.ExpiresIn, 2)
 	assert.NotEmpty(t, tok.RefreshToken)
-	assert.Nil(t, tok.TenantID)
+	assert.Nil(t, tok.CompanyID)
 
 	var (
 		dbUserID, dbHash string
@@ -157,7 +157,7 @@ func TestAuth_Me_Success(t *testing.T) {
 			Solution struct {
 				Code string `json:"code"`
 			} `json:"solution"`
-			TenantID *string `json:"tenant_id"`
+			CompanyID *string `json:"company_id"`
 		} `json:"session"`
 	}
 	testhelper.DecodeBody(t, w, &got)
@@ -167,7 +167,7 @@ func TestAuth_Me_Success(t *testing.T) {
 	assert.True(t, got.User.HasPassword)
 	assert.Equal(t, tok.SessionID, got.Session.ID)
 	assert.Equal(t, code, got.Session.Solution.Code)
-	assert.Nil(t, got.Session.TenantID)
+	assert.Nil(t, got.Session.CompanyID)
 	assert.NotContains(t, w.Body.String(), "password_hash")
 }
 

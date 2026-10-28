@@ -13,7 +13,7 @@ import (
 	"platform-service/internal/domain/subscription/valueobject"
 )
 
-const subscriptionLiveIndex = "uq_subscriptions_live_tenant_solution"
+const subscriptionLiveIndex = "uq_subscriptions_live_company_solution"
 
 // PostgresSubscriptionRepository implements repository.SubscriptionRepository.
 type PostgresSubscriptionRepository struct {
@@ -26,7 +26,7 @@ func NewPostgresSubscriptionRepository(db *sql.DB) *PostgresSubscriptionReposito
 
 func (r *PostgresSubscriptionRepository) Save(ctx context.Context, s *entity.Subscription) error {
 	const q = `
-		INSERT INTO subscriptions (id, tenant_id, solution_id, plan_id, status, billing_cycle,
+		INSERT INTO subscriptions (id, company_id, solution_id, plan_id, status, billing_cycle,
 			current_period_start, current_period_end, price_at_purchase, currency, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10, $11, $12)
 		ON CONFLICT (id) DO UPDATE SET
@@ -40,7 +40,7 @@ func (r *PostgresSubscriptionRepository) Save(ctx context.Context, s *entity.Sub
 		RETURNING created_at, updated_at`
 
 	err := execFromContext(ctx, r.db).QueryRowContext(ctx, q,
-		s.ID, s.TenantID, s.SolutionID, s.PlanID, s.Status.String(), s.BillingCycle.String(),
+		s.ID, s.CompanyID, s.SolutionID, s.PlanID, s.Status.String(), s.BillingCycle.String(),
 		s.CurrentPeriodStart, s.CurrentPeriodEnd, s.PriceAtPurchase.String(), s.Currency.String(), s.CreatedAt, s.UpdatedAt,
 	).Scan(&s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
@@ -59,9 +59,9 @@ func (r *PostgresSubscriptionRepository) FindByID(ctx context.Context, id string
 	return r.findOne(ctx, `WHERE id = $1`, id)
 }
 
-func (r *PostgresSubscriptionRepository) FindUsable(ctx context.Context, tenantID, solutionID string) (*entity.Subscription, error) {
-	return r.findOne(ctx, `WHERE tenant_id = $1 AND solution_id = $2 AND status = ANY($3::text[])`,
-		tenantID, solutionID, valueobject.UsableStatuses)
+func (r *PostgresSubscriptionRepository) FindUsable(ctx context.Context, companyID, solutionID string) (*entity.Subscription, error) {
+	return r.findOne(ctx, `WHERE company_id = $1 AND solution_id = $2 AND status = ANY($3::text[])`,
+		companyID, solutionID, valueobject.UsableStatuses)
 }
 
 func (r *PostgresSubscriptionRepository) findOne(ctx context.Context, where string, args ...any) (*entity.Subscription, error) {
@@ -70,10 +70,10 @@ func (r *PostgresSubscriptionRepository) findOne(ctx context.Context, where stri
 		status, cycle, price, currency string
 	)
 	err := execFromContext(ctx, r.db).QueryRowContext(ctx, `
-		SELECT id, tenant_id, solution_id, plan_id, status, billing_cycle, current_period_start, current_period_end,
+		SELECT id, company_id, solution_id, plan_id, status, billing_cycle, current_period_start, current_period_end,
 			price_at_purchase::text, currency, created_at, updated_at
 		FROM subscriptions `+where, args...,
-	).Scan(&s.ID, &s.TenantID, &s.SolutionID, &s.PlanID, &status, &cycle, &s.CurrentPeriodStart, &s.CurrentPeriodEnd,
+	).Scan(&s.ID, &s.CompanyID, &s.SolutionID, &s.PlanID, &status, &cycle, &s.CurrentPeriodStart, &s.CurrentPeriodEnd,
 		&price, &currency, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -96,12 +96,12 @@ func (r *PostgresSubscriptionRepository) findOne(ctx context.Context, where stri
 	return &s, nil
 }
 
-func (r *PostgresSubscriptionRepository) HasUsable(ctx context.Context, tenantID, solutionID string) (bool, error) {
+func (r *PostgresSubscriptionRepository) HasUsable(ctx context.Context, companyID, solutionID string) (bool, error) {
 	var ok bool
 	err := execFromContext(ctx, r.db).QueryRowContext(ctx, `
 		SELECT EXISTS (SELECT 1 FROM subscriptions
-			WHERE tenant_id = $1 AND solution_id = $2 AND status = ANY($3::text[]))`,
-		tenantID, solutionID, valueobject.UsableStatuses,
+			WHERE company_id = $1 AND solution_id = $2 AND status = ANY($3::text[]))`,
+		companyID, solutionID, valueobject.UsableStatuses,
 	).Scan(&ok)
 	if err != nil {
 		return false, domainerr.Wrap(constant.CodeSubscriptionQueryFailed, err)

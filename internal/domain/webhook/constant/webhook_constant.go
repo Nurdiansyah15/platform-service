@@ -14,9 +14,9 @@ const (
 // EventTypes adalah katalog event (spec §2.9). Endpoint hanya boleh berlangganan event ini.
 var EventTypes = []string{
 	"user.updated", "user.status_changed",
-	"tenant.updated", "tenant.status_changed",
-	"tenant_member.added", "tenant_member.updated", "tenant_member.removed",
-	"company.created", "company.updated", "company.deleted", "branch.created", "branch.updated", "branch.deleted",
+	"company.created", "company.updated", "company.deleted",
+	"company_member.added", "company_member.updated", "company_member.removed",
+	"branch.created", "branch.updated", "branch.deleted",
 	"subscription.created", "subscription.plan_changed", "subscription.status_changed",
 	"subscription_addon.added", "subscription_addon.updated", "subscription_addon.removed",
 	"entitlement.changed",

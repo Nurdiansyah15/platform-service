@@ -2,7 +2,7 @@
 //
 //	@title			Central SaaS Platform API
 //	@version		1.0
-//	@description	Identity, tenant, catalog, subscription, entitlement, authorization, dan licensing untuk solution.
+//	@description	Identity, company, catalog, subscription, entitlement, authorization, dan licensing untuk solution.
 //	@BasePath		/
 //	@securityDefinitions.apikey	BearerAuth
 //	@in							header

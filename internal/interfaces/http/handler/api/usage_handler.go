@@ -28,15 +28,15 @@ func NewUsageHandler(useCase *usage.UsageUseCase) *UsageHandler {
 //	@Security		BearerAuth
 //	@Accept			json
 //	@Produce		json
-//	@Param			tenantId			path		string							true	"Tenant ID"
+//	@Param			companyId			path		string							true	"Company ID"
 //	@Param			solutionId			path		string							true	"Solution ID (harus solution client)"
 //	@Param			body				body		dto.ReportUsageDeltaRequest		true	"Laporan"
 //	@Success		201					{object}	respond.SuccessBody{data=dto.UsageReportResponse}
 //	@Success		200					{object}	respond.SuccessBody{data=dto.UsageReportResponse}
 //	@Failure		401,403,404,409,422	{object}	respond.ErrorBody
-//	@Router			/api/v1/tenants/{tenantId}/solutions/{solutionId}/usage [post]
+//	@Router			/api/v1/companies/{companyId}/solutions/{solutionId}/usage [post]
 func (h *UsageHandler) ReportDelta(c *gin.Context) {
-	var param dto.TenantSolutionParam
+	var param dto.CompanySolutionParam
 	if err := c.ShouldBindUri(&param); err != nil {
 		httperror.Handle(c, err)
 		return
@@ -47,7 +47,7 @@ func (h *UsageHandler) ReportDelta(c *gin.Context) {
 		return
 	}
 	actor, _ := middleware.PrincipalFrom(c)
-	resp, err := h.useCase.ReportDelta(c.Request.Context(), actor, param.TenantID, param.SolutionID, req)
+	resp, err := h.useCase.ReportDelta(c.Request.Context(), actor, param.CompanyID, param.SolutionID, req)
 	if err != nil {
 		httperror.Handle(c, err)
 		return
@@ -67,15 +67,15 @@ func (h *UsageHandler) ReportDelta(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Accept			json
 //	@Produce		json
-//	@Param			tenantId			path		string							true	"Tenant ID"
+//	@Param			companyId			path		string							true	"Company ID"
 //	@Param			solutionId			path		string							true	"Solution ID (harus solution client)"
 //	@Param			benefitCode			path		string							true	"Benefit code"
 //	@Param			body				body		dto.ReportUsageAbsoluteRequest	true	"Laporan"
 //	@Success		200					{object}	respond.SuccessBody{data=dto.UsageReportResponse}
 //	@Failure		401,403,404,409,422	{object}	respond.ErrorBody
-//	@Router			/api/v1/tenants/{tenantId}/solutions/{solutionId}/usage/{benefitCode} [put]
+//	@Router			/api/v1/companies/{companyId}/solutions/{solutionId}/usage/{benefitCode} [put]
 func (h *UsageHandler) ReportAbsolute(c *gin.Context) {
-	var param dto.TenantSolutionBenefitParam
+	var param dto.CompanySolutionBenefitParam
 	if err := c.ShouldBindUri(&param); err != nil {
 		httperror.Handle(c, err)
 		return
@@ -86,7 +86,7 @@ func (h *UsageHandler) ReportAbsolute(c *gin.Context) {
 		return
 	}
 	actor, _ := middleware.PrincipalFrom(c)
-	resp, err := h.useCase.ReportAbsolute(c.Request.Context(), actor, param.TenantID, param.SolutionID, param.BenefitCode, req)
+	resp, err := h.useCase.ReportAbsolute(c.Request.Context(), actor, param.CompanyID, param.SolutionID, param.BenefitCode, req)
 	if err != nil {
 		httperror.Handle(c, err)
 		return

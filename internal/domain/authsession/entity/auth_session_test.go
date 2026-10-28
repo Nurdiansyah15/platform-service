@@ -66,16 +66,16 @@ func TestAuthSession_RevokeBlocksRotate(t *testing.T) {
 	assert.Equal(t, "h1", s.RefreshTokenHash)
 }
 
-func TestAuthSession_SwitchTenant(t *testing.T) {
+func TestAuthSession_SwitchCompany(t *testing.T) {
 	s := newSession(t)
-	prev, err := s.SwitchTenant("tenant-1", "h2", time.Hour, t0)
+	prev, err := s.SwitchCompany("company-1", "h2", time.Hour, t0)
 	require.NoError(t, err)
 	assert.Equal(t, "h1", prev)
-	require.NotNil(t, s.TenantID)
-	assert.Equal(t, "tenant-1", *s.TenantID)
+	require.NotNil(t, s.CompanyID)
+	assert.Equal(t, "company-1", *s.CompanyID)
 	assert.Equal(t, "h2", s.RefreshTokenHash)
 
 	s.Revoke(t0)
-	_, err = s.SwitchTenant("tenant-2", "h3", time.Hour, t0)
+	_, err = s.SwitchCompany("company-2", "h3", time.Hour, t0)
 	testhelper.AssertDomainError(t, err, constant.CodeSessionRevoked)
 }

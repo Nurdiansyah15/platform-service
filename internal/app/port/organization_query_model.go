@@ -8,7 +8,7 @@ import (
 )
 
 type OrgUnitListReadQuery struct {
-	// ParentID = tenant_id (company) atau company_id (branch).
+	// ParentID = company_id pemilik branch.
 	ParentID string
 	Status   *string
 	Search   *string // code / name
@@ -26,6 +26,5 @@ type OrgUnitReadItem struct {
 }
 
 type OrganizationQueryReadModel interface {
-	ListCompanies(ctx context.Context, q OrgUnitListReadQuery) ([]OrgUnitReadItem, dto.Meta, error)
 	ListBranches(ctx context.Context, q OrgUnitListReadQuery) ([]OrgUnitReadItem, dto.Meta, error)
 }

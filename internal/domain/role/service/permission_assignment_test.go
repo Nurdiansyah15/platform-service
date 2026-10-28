@@ -47,12 +47,12 @@ func TestResolvePermissions(t *testing.T) {
 }
 
 func TestRole(t *testing.T) {
-	tenant := "t1"
-	r, err := entity.NewRole(entity.NewRoleParams{SolutionID: "s", TenantID: &tenant, Code: " HR_Admin ", Name: "HR Admin"}, time.Now())
+	companyID := "c1"
+	r, err := entity.NewRole(entity.NewRoleParams{SolutionID: "s", CompanyID: &companyID, Code: " HR_Admin ", Name: "HR Admin"}, time.Now())
 	require.NoError(t, err)
 	assert.Equal(t, "hr_admin", r.Code.Value())
 	assert.False(t, r.IsGlobal())
-	assert.True(t, r.IsOwnedBy("t1"))
+	assert.True(t, r.IsOwnedBy("c1"))
 	assert.False(t, r.IsOwnedBy("t2"))
 	assert.NoError(t, r.EnsureEditable())
 

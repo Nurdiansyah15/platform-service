@@ -7,7 +7,7 @@ import (
 )
 
 type RoleRepository interface {
-	// Save insert/update. Code bentrok (global per solution / custom per tenant+solution) → CodeRoleCodeDuplicate.
+	// Save insert/update. Code bentrok (global per solution / custom per company+solution) → CodeRoleCodeDuplicate.
 	Save(ctx context.Context, r *entity.Role) error
 	// FindByID mengabaikan role yang sudah di-soft delete.
 	FindByID(ctx context.Context, id string) (*entity.Role, error)

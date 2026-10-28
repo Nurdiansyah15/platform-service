@@ -27,12 +27,12 @@ func NewSubscriptionStatus(raw string) (SubscriptionStatus, error) {
 func (s SubscriptionStatus) String() string { return string(s) }
 
 // IsLive — subscription masih berjalan (belum dibatalkan / kedaluwarsa). Maksimal
-// satu subscription live per tenant per solution.
+// satu subscription live per company per solution.
 func (s SubscriptionStatus) IsLive() bool {
 	return s == StatusTrialing || s == StatusActive || s == StatusPastDue
 }
 
-// IsUsable — subscription memberi akses (pilih tenant, entitlement, akses service).
+// IsUsable — subscription memberi akses (pilih company, entitlement, akses service).
 func (s SubscriptionStatus) IsUsable() bool {
 	return s == StatusTrialing || s == StatusActive
 }
