@@ -92,6 +92,26 @@ func (uc *CompanyMemberUseCase) Add(ctx context.Context, actor *principal.Princi
 	}, nil
 }
 
+// Get mengambil satu member company beserta data user.
+//
+// Required — auth: user (platform admin, atau member active dengan cid = companyId) atau service | scope: users:read
+func (uc *CompanyMemberUseCase) Get(ctx context.Context, actor *principal.Principal, companyID, userID string) (*dto.CompanyMemberResponse, error) {
+	if err := uc.ensureCompany(ctx, actor, companyID); err != nil {
+		return nil, err
+	}
+	m, err := uc.deps.Members.Find(ctx, companyID, userID)
+	if err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+	u, err := uc.deps.Users.FindByID(ctx, userID)
+	if err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+	return &dto.CompanyMemberResponse{
+		CompanyID: companyID, UserID: u.ID, Email: u.Email.Value(), Name: u.Name, Status: m.Status.String(), JoinedAt: m.JoinedAt,
+	}, nil
+}
+
 // Update mengubah status member. Status inactive = member dikeluarkan: role assignment
 // user di company ini ikut dihapus (spec §8.2).
 //

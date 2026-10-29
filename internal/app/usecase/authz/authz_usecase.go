@@ -2,6 +2,7 @@ package authz
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"platform-service/internal/app/apperror"
@@ -34,6 +35,7 @@ type AuthzDeps struct {
 	Members       orgrepo.CompanyMemberRepository
 	Subscriptions subrepo.SubscriptionRepository
 	Solutions     solutionrepo.SolutionRepository
+	Query         port.RoleAssignmentQueryReadModel
 }
 
 type AuthzUseCase struct {
@@ -112,6 +114,108 @@ func (uc *AuthzUseCase) AssignRole(ctx context.Context, actor *principal.Princip
 		ID: a.ID, CompanyID: companyID, UserID: userID, RoleID: r.ID, RoleCode: r.Code.Value(), SolutionID: r.SolutionID,
 		ScopeType: a.Scope.Type.String(), ScopeID: a.Scope.ID, CreatedAt: a.CreatedAt,
 	}, nil
+}
+
+// ListAssignments menampilkan role assignment user di company. Token service hanya melihat
+// role milik solution-nya; token user boleh memfilter dengan solution_id.
+//
+// Required — auth: user (platform admin / member dengan cid) atau service | scope: roles:write
+func (uc *AuthzUseCase) ListAssignments(ctx context.Context, actor *principal.Principal, companyID, userID string, req dto.SolutionFilterQuery) ([]dto.RoleAssignmentDetailResponse, error) {
+	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), companyID); err != nil {
+		return nil, mapAuthzDomainError(err)
+	}
+	solutionID := req.SolutionID
+	if actor.IsService() {
+		solutionID = &actor.SolutionID
+	}
+	items, err := uc.deps.Query.ListForMember(ctx, port.RoleAssignmentListReadQuery{CompanyID: companyID, UserID: userID, SolutionID: solutionID})
+	if err != nil {
+		return nil, mapAuthzDomainError(err)
+	}
+	return items, nil
+}
+
+// RevokeAssignment mencabut role assignment. Assignment milik company yang tidak bisa diakses
+// (atau role solution lain untuk token service) dilaporkan 404.
+//
+// Required — auth: user (platform admin / member dengan cid) atau service | scope: roles:write
+func (uc *AuthzUseCase) RevokeAssignment(ctx context.Context, actor *principal.Principal, assignmentID string) error {
+	notFound := mapAuthzDomainError(domainerr.New(constant.CodeAssignmentNotFound))
+	a, err := uc.deps.Assignments.FindByID(ctx, assignmentID)
+	if err != nil {
+		return mapAuthzDomainError(err)
+	}
+	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), a.CompanyID); err != nil {
+		if isDomainCode(err, orgconstant.CodeCompanyAccessDenied) {
+			return notFound
+		}
+		return mapAuthzDomainError(err)
+	}
+	if actor.IsService() && actor.SolutionID != a.Role.SolutionID {
+		return notFound
+	}
+
+	now := uc.now()
+	err = uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
+		if err := uc.deps.Assignments.Delete(ctx, a.ID); err != nil {
+			return err
+		}
+		return uc.deps.Outbox.Append(ctx, port.OutboxEvent{
+			EventType:  event.TypeRoleAssignmentDeleted,
+			CompanyID:  &a.CompanyID,
+			SolutionID: &a.Role.SolutionID,
+			Payload: event.RoleAssignmentPayload{
+				ID: a.ID, CompanyID: a.CompanyID, UserID: a.UserID, RoleID: a.RoleID, RoleCode: a.Role.Code,
+				SolutionID: a.Role.SolutionID, ScopeType: a.Scope.Type.String(), ScopeID: a.Scope.ID, CreatedAt: a.CreatedAt,
+			},
+			OccurredAt: now,
+		})
+	})
+	if err != nil {
+		return mapAuthzDomainError(err)
+	}
+	return nil
+}
+
+// EffectivePermissions menampilkan seluruh permission user di company untuk satu solution,
+// beserta role & scope asalnya. Token user wajib mengisi solution_id; token service memakai
+// solution client. User bukan member active → daftar kosong.
+//
+// Required — auth: user (platform admin / member dengan cid) atau service | scope: authz:check
+func (uc *AuthzUseCase) EffectivePermissions(ctx context.Context, actor *principal.Principal, companyID, userID string, req dto.SolutionFilterQuery) ([]dto.EffectivePermissionResponse, error) {
+	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), companyID); err != nil {
+		return nil, mapAuthzDomainError(err)
+	}
+	solutionID := actor.SolutionID
+	if !actor.IsService() {
+		if req.SolutionID == nil {
+			return nil, mapAuthzDomainError(domainerr.New(constant.CodeSolutionRequired))
+		}
+		solutionID = *req.SolutionID
+	}
+	if _, err := uc.deps.Solutions.FindByID(ctx, solutionID); err != nil {
+		return nil, mapAuthzDomainError(err)
+	}
+
+	grants, err := uc.effectiveGrants(ctx, companyID, userID, solutionID)
+	if err != nil {
+		return nil, mapAuthzDomainError(err)
+	}
+	byPermission := map[string]*dto.EffectivePermissionResponse{}
+	for _, g := range grants {
+		p, ok := byPermission[g.PermissionCode]
+		if !ok {
+			p = &dto.EffectivePermissionResponse{Permission: g.PermissionCode}
+			byPermission[g.PermissionCode] = p
+		}
+		p.Grants = append(p.Grants, dto.EffectiveGrantResponse{RoleCode: g.RoleCode, ScopeType: g.Scope.Type.String(), ScopeID: g.Scope.ID})
+	}
+	out := make([]dto.EffectivePermissionResponse, 0, len(byPermission))
+	for _, p := range byPermission {
+		out = append(out, *p)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Permission < out[j].Permission })
+	return out, nil
 }
 
 // Check memeriksa satu permission.

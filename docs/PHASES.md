@@ -382,8 +382,8 @@ Pola sama: usecase + handler + handler test wajib.
 
 ### L1 — Identity & Session
 - [ ] `GET /auth/sessions`, `DELETE /auth/sessions/{sessionId}`, `POST /auth/logout-all`
-- [ ] `GET /users/me`, `PATCH /users/me`
-- [ ] `GET /users`, `GET /users/{userId}`, `PATCH /users/{userId}`, `PATCH /users/{userId}/status`
+- [x] `GET /users/me`, `PATCH /users/me` (ganti password wajib `current_password`)
+- [x] `GET /users`, `GET /users/{userId}` (+ keanggotaan company), `PATCH /users/{userId}`, `PATCH /users/{userId}/status`
 
 ### L2 — Company & Organization
 - [x] `PATCH /companies/{companyId}` (status khusus platform admin)
@@ -409,8 +409,9 @@ Pola sama: usecase + handler + handler test wajib.
 - [ ] `GET/PATCH/DELETE /companies/{companyId}/roles/{roleId}`, `GET /companies/{companyId}/roles/{roleId}/permissions`
 - [ ] `POST /solutions/{solutionId}/permissions`, `GET/PATCH /permissions/{permissionId}`
 - [ ] `PUT /solutions/{solutionId}/roles/sync`, `GET /solutions/{solutionId}/catalog-version`
-- [ ] `GET /companies/{companyId}/users/{userId}/role-assignments`, `PATCH/DELETE /role-assignments/{assignmentId}`
-- [ ] `GET /companies/{companyId}/users/{userId}/effective-permissions`
+- [x] `GET /companies/{companyId}/users/{userId}/role-assignments`, `DELETE /role-assignments/{assignmentId}`
+- [ ] `PATCH /role-assignments/{assignmentId}` (sementara: cabut lalu assign ulang)
+- [x] `GET /companies/{companyId}/users/{userId}/effective-permissions` (`solution_id` wajib untuk token user)
 
 ### L7 — Service Auth & Keys
 - [ ] `GET /.well-known/openid-configuration`

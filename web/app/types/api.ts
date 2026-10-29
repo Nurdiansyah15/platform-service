@@ -225,13 +225,49 @@ export interface CreateOrgUnitRequest {
   status?: 'active' | 'inactive'
 }
 
-// ── Users (platform admin) ──────────────────────────────────────────────────
+// ── Users ───────────────────────────────────────────────────────────────────
+export type UserStatus = 'active' | 'inactive' | 'suspended'
+
 export interface CreateUserRequest {
   email: string
   name: string
   password?: string
-  status?: 'active' | 'inactive' | 'suspended'
+  status?: UserStatus
   is_platform_admin?: boolean
+}
+
+export interface ListUserQuery extends PaginationParams {
+  status?: UserStatus
+  is_platform_admin?: boolean
+  search?: string
+}
+
+/** Field yang tidak dikirim tidak diubah. `password` = reset password oleh admin. */
+export interface UpdateUserRequest {
+  email?: string
+  name?: string
+  password?: string
+  is_platform_admin?: boolean
+}
+
+export interface UserMembership {
+  company_id: string
+  company_name: string
+  company_slug: string
+  company_status: string
+  member_status: MemberStatus
+  joined_at: string
+}
+
+export interface UserDetailResponse extends UserResponse {
+  memberships: UserMembership[]
+}
+
+/** Ganti password wajib menyertakan `current_password`. */
+export interface UpdateMeRequest {
+  name?: string
+  password?: string
+  current_password?: string
 }
 
 // ── Roles & Permissions ─────────────────────────────────────────────────────
@@ -315,24 +351,28 @@ export interface RoleAssignmentResponse {
   created_at: string
 }
 
-export interface AuthzCheckRequest {
-  company_id?: string
-  user_id?: string
-  permission: string
-  scope_type?: 'company' | 'branch'
-  scope_id?: string
+/** Assignment beserta info role & scope (GET .../role-assignments). */
+export interface RoleAssignmentDetail {
+  id: string
+  company_id: string
+  user_id: string
+  role_id: string
+  role_code: string
+  role_name: string
+  role_is_global: boolean
+  solution_id: string
+  solution_code: string
+  scope_type: 'company' | 'branch'
+  scope_id: string
+  scope_name: string
+  created_at: string
 }
 
+/** `POST /authz/check-batch` — tetap dipakai composable usePermission. */
 export interface AuthzCheckItem {
   permission: string
   scope_type?: 'company' | 'branch'
   scope_id?: string
-}
-
-export interface AuthzCheckBatchRequest {
-  company_id?: string
-  user_id?: string
-  checks: AuthzCheckItem[]
 }
 
 export interface AuthzCheckResult {
@@ -347,6 +387,11 @@ export interface AuthzCheckBatchResponse {
   company_id: string
   user_id: string
   results: AuthzCheckResult[]
+}
+
+export interface EffectivePermission {
+  permission: string
+  grants: { role_code: string; scope_type: 'company' | 'branch'; scope_id: string }[]
 }
 
 // ── Error klien ─────────────────────────────────────────────────────────────

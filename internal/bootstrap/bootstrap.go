@@ -160,7 +160,9 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		KeyStore: keyStore,
 		Logger:   opts.Logger,
 	})
-	userUC := user.NewUserUseCase(user.UserDeps{Repo: userRepo, Hasher: hasher})
+	userUC := user.NewUserUseCase(user.UserDeps{
+		Repo: userRepo, Hasher: hasher, Tx: transactor, Outbox: outbox, Query: persistence.NewPostgresUserQuery(opts.DB),
+	})
 	authUC, err := auth.NewAuthUseCase(auth.AuthDeps{
 		Users:           userRepo,
 		Solutions:       solutionRepo,
@@ -259,6 +261,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Members:       memberRepo,
 		Subscriptions: subscriptionRepo,
 		Solutions:     solutionRepo,
+		Query:         persistence.NewPostgresRoleAssignmentQuery(opts.DB),
 	})
 	entitlementResolver := entservice.NewResolver(subscriptionRepo, snapshotReader)
 	entitlementUC := entitlement.NewEntitlementUseCase(entitlement.EntitlementDeps{

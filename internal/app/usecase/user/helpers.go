@@ -18,10 +18,12 @@ func mapUserDomainError(err error) error {
 	switch de.Code {
 	case constant.CodeUserNotFound:
 		return apperror.NotFound(string(de.Code))
+	case constant.CodeUserSelfChangeForbidden:
+		return apperror.Forbidden(string(de.Code))
 	case constant.CodeUserEmailDuplicate:
 		return apperror.Conflict(string(de.Code), err)
 	case constant.CodeUserEmailInvalid, constant.CodeUserNameInvalid,
-		constant.CodeUserPasswordInvalid, constant.CodeUserStatusInvalid:
+		constant.CodeUserPasswordInvalid, constant.CodeUserStatusInvalid, constant.CodeUserCurrentPasswordInvalid:
 		return apperror.Unprocessable(string(de.Code), nil, err)
 	default:
 		return apperror.Internal(string(de.Code), err)

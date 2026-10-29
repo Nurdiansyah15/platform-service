@@ -9,6 +9,7 @@ import (
 	domainerr "platform-service/internal/domain/errors"
 	orgconstant "platform-service/internal/domain/organization/constant"
 	orgservice "platform-service/internal/domain/organization/service"
+	solutionconstant "platform-service/internal/domain/solution/constant"
 )
 
 func mapAuthzDomainError(err error) error {
@@ -17,7 +18,7 @@ func mapAuthzDomainError(err error) error {
 		return apperror.Internal(string(apperror.CodeInternal), err)
 	}
 	switch de.Code {
-	case orgconstant.CodeCompanyNotFound:
+	case orgconstant.CodeCompanyNotFound, constant.CodeAssignmentNotFound, solutionconstant.CodeSolutionNotFound:
 		return apperror.NotFound(string(de.Code))
 	case orgconstant.CodeCompanyNotSelected:
 		return apperror.Forbidden(apperror.MsgCompanyNotSelected)
@@ -26,7 +27,8 @@ func mapAuthzDomainError(err error) error {
 	case constant.CodeAssignmentDuplicate:
 		return apperror.Conflict(string(de.Code), err)
 	case constant.CodeAssignmentNotMember, constant.CodeAssignmentRoleUnavailable, constant.CodeScopeTypeInvalid,
-		constant.CodeScopeInvalid, constant.CodeCheckTargetRequired, constant.CodeCheckSolutionUnavailable:
+		constant.CodeScopeInvalid, constant.CodeCheckTargetRequired, constant.CodeCheckSolutionUnavailable,
+		constant.CodeSolutionRequired:
 		return apperror.Unprocessable(string(de.Code), nil, err)
 	default:
 		return apperror.Internal(string(de.Code), err)

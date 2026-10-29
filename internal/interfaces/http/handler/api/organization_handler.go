@@ -206,6 +206,32 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 	respond.Created(c, "company member added", resp)
 }
 
+// GetMember godoc
+//
+//	@Summary	Get company member
+//	@Tags		Companies
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Param		companyId		path		string	true	"Company ID"
+//	@Param		userId			path		string	true	"User ID"
+//	@Success	200				{object}	respond.SuccessBody{data=dto.CompanyMemberResponse}
+//	@Failure	401,403,404,422	{object}	respond.ErrorBody
+//	@Router		/api/v1/companies/{companyId}/members/{userId} [get]
+func (h *OrganizationHandler) GetMember(c *gin.Context) {
+	var param dto.CompanyMemberParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	resp, err := h.members.Get(c.Request.Context(), actor, param.CompanyID, param.UserID)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "company member", resp)
+}
+
 // UpdateMember godoc
 //
 //	@Summary		Update company member

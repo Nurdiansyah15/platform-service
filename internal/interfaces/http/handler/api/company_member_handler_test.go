@@ -241,3 +241,33 @@ func TestCompanyMember_Remove_Success(t *testing.T) {
 	assert.Equal(t, 200, testSrv.DELETE(memberPath(f.companyID, f.staffID), f.ownerH).Code)
 	assert.Equal(t, 1, countEvents(t, "company_member.removed", f.companyID))
 }
+
+// ── Get ──────────────────────────────────────────────────────────────────────
+
+func TestCompanyMember_Get_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.GET(memberPath(uuid.NewString(), uuid.NewString())).Code)
+}
+
+func TestCompanyMember_Get_Forbidden_NonMember(t *testing.T) {
+	_, ownerID, companyID := mustCompanyOwner(t)
+	_, strangerID, _ := mustCompanyOwner(t)
+	assert.Equal(t, 403, testSrv.GET(memberPath(companyID, ownerID), companyToken(strangerID, companyID)).Code)
+}
+
+func TestCompanyMember_Get_NotFound(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	assert.Equal(t, 404, testSrv.GET(memberPath(companyID, uuid.NewString()), h).Code)
+	assert.Equal(t, 422, testSrv.GET(memberPath(companyID, "bukan-uuid"), h).Code)
+}
+
+func TestCompanyMember_Get_Success(t *testing.T) {
+	h, ownerID, companyID := mustCompanyOwner(t)
+	w := testSrv.GET(memberPath(companyID, ownerID), h)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got memberData
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, ownerID, got.UserID)
+	assert.Equal(t, companyID, got.CompanyID)
+	assert.Equal(t, "active", got.Status)
+	assert.NotEmpty(t, got.Email)
+}

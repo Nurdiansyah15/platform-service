@@ -115,7 +115,7 @@ onMounted(load)
 
 <template>
   <div>
-    <PageHeader title="Members" subtitle="Anggota company dan status keanggotaan.">
+    <PageHeader title="Members" subtitle="Anggota company. Klik nama untuk mengatur role per solution.">
       <template #actions>
         <UButton
           icon="i-lucide-user-plus"
@@ -188,7 +188,16 @@ onMounted(load)
             </tr>
             <template v-else>
               <tr v-for="m in items" :key="m.user_id" class="border-b border-default/60">
-                <td class="px-3 py-2 font-medium text-highlighted">{{ m.name }}</td>
+                <td class="px-3 py-2">
+                  <NuxtLink
+                    v-if="!isForeignCompany"
+                    :to="`/companies/${companyId}/members/${m.user_id}`"
+                    class="font-medium text-highlighted hover:text-primary"
+                  >
+                    {{ m.name }}
+                  </NuxtLink>
+                  <span v-else class="font-medium text-highlighted">{{ m.name }}</span>
+                </td>
                 <td class="px-3 py-2 text-muted">{{ m.email }}</td>
                 <td class="px-3 py-2">
                   <UBadge

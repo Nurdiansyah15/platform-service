@@ -75,6 +75,52 @@ func (u *User) HasPassword() bool {
 	return u.PasswordHash != nil && *u.PasswordHash != ""
 }
 
+// Update mengganti nama dan/atau email; nil = tidak diubah.
+func (u *User) Update(name, email *string, now time.Time) error {
+	if name != nil {
+		n := strings.TrimSpace(*name)
+		if n == "" || utf8.RuneCountInString(n) > constant.NameMaxLength {
+			return domainerr.New(constant.CodeUserNameInvalid)
+		}
+		u.Name = n
+	}
+	if email != nil {
+		e, err := valueobject.NewEmail(*email)
+		if err != nil {
+			return err
+		}
+		u.Email = e
+	}
+	u.UpdatedAt = now.UTC()
+	return nil
+}
+
+// SetPassword mengganti hash password (sudah divalidasi & di-hash oleh usecase).
+func (u *User) SetPassword(hash string, now time.Time) {
+	u.PasswordHash = &hash
+	u.UpdatedAt = now.UTC()
+}
+
+// ChangeStatus mengganti status user. Mengembalikan true bila status benar-benar berubah.
+func (u *User) ChangeStatus(raw string, now time.Time) (bool, error) {
+	st, err := valueobject.NewUserStatus(raw)
+	if err != nil {
+		return false, err
+	}
+	if st == u.Status {
+		return false, nil
+	}
+	u.Status = st
+	u.UpdatedAt = now.UTC()
+	return true, nil
+}
+
+// SetPlatformAdmin memberi / mencabut flag administrator platform.
+func (u *User) SetPlatformAdmin(admin bool, now time.Time) {
+	u.IsPlatformAdmin = admin
+	u.UpdatedAt = now.UTC()
+}
+
 // GrantPlatformAdmin menjadikan user administrator platform.
 func (u *User) GrantPlatformAdmin(now time.Time) {
 	u.IsPlatformAdmin = true

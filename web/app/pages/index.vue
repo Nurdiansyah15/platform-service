@@ -81,12 +81,12 @@ const auth = useAuthStore()
         </div>
         <p class="mt-2 text-sm text-muted">Katalog solution dan role global.</p>
       </NuxtLink>
-      <NuxtLink to="/authorization/check" class="rounded-lg border border-default bg-default p-4 transition hover:border-primary/40">
+      <NuxtLink to="/profile" class="rounded-lg border border-default bg-default p-4 transition hover:border-primary/40">
         <div class="flex items-center gap-3">
-          <UIcon name="i-lucide-shield-check" class="size-5 text-primary" />
-          <span class="font-medium text-highlighted">Authorization</span>
+          <UIcon name="i-lucide-user-round" class="size-5 text-primary" />
+          <span class="font-medium text-highlighted">Profil</span>
         </div>
-        <p class="mt-2 text-sm text-muted">Uji permission dan assignment role.</p>
+        <p class="mt-2 text-sm text-muted">Ubah nama dan ganti password.</p>
       </NuxtLink>
     </div>
   </div>

@@ -16,6 +16,15 @@ type RoleAssignment struct {
 	RoleID    string
 	Scope     valueobject.Scope
 	CreatedAt time.Time
+
+	// Role diisi saat assignment dimuat dari storage (FindByID); kosong untuk assignment baru.
+	Role AssignedRole
+}
+
+// AssignedRole — ringkasan role dari assignment yang dimuat (role boleh sudah soft delete).
+type AssignedRole struct {
+	SolutionID string
+	Code       string
 }
 
 func NewRoleAssignment(companyID, userID, roleID string, scope valueobject.Scope, now time.Time) *RoleAssignment {

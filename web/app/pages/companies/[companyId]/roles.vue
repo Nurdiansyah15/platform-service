@@ -1,13 +1,20 @@
 <script setup lang="ts">
-import type { RoleResponse } from '~/types/api'
+import type { RoleResponse, SolutionResponse } from '~/types/api'
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const api = useApi()
 const toast = useToast()
 
 const companyId = computed(() => String(route.params.companyId))
-const solutionId = computed(() => auth.solution?.id ?? '')
+
+// Custom role selalu milik satu solution; pilihan disimpan di query (?solutionId=) agar
+// tetap terpilih saat kembali dari halaman permission role.
+const solutions = ref<SolutionResponse[]>([])
+const solutionItems = computed(() => solutions.value.map(s => ({ label: `${s.name} (${s.code})`, value: s.id })))
+const solutionId = ref(typeof route.query.solutionId === 'string' ? route.query.solutionId : '')
+
 const isForeignCompany = computed(
   () => !auth.isPlatformAdmin && auth.activeCompanyId !== companyId.value,
 )
@@ -57,7 +64,32 @@ async function createRole() {
   }
 }
 
-onMounted(load)
+async function loadSolutions() {
+  try {
+    const res = await api.get<SolutionResponse[]>('/api/v1/solutions', { query: { limit: 100 } })
+    solutions.value = res.data
+    if (!solutions.value.some(s => s.id === solutionId.value)) {
+      // Default: solution pertama selain console (role produk biasanya yang dicari).
+      solutionId.value = (res.data.find(s => s.id !== auth.solution?.id) ?? res.data[0])?.id ?? ''
+    }
+  } catch (err) {
+    error.value = (err as { message?: string }).message || 'Gagal memuat solution'
+  }
+}
+
+watch(solutionId, (id) => {
+  showCreate.value = false
+  router.replace({ query: { ...route.query, solutionId: id || undefined } })
+  load()
+})
+
+onMounted(async () => {
+  if (isForeignCompany.value) return
+  const before = solutionId.value
+  await loadSolutions()
+  // watch tidak terpicu bila solution dari query sudah valid → muat manual.
+  if (solutionId.value === before) await load()
+})
 </script>
 
 <template>
@@ -83,13 +115,11 @@ onMounted(load)
       title="Company ini bukan company aktif"
       description="Aktifkan company ini dulu untuk mengelola role."
     />
-    <UAlert
-      v-else-if="!solutionId"
-      class="mb-4"
-      color="warning"
-      variant="subtle"
-      title="Solution sesi tidak diketahui"
-    />
+    <UCard v-else class="mb-4">
+      <UFormField label="Solution" hint="custom role berlaku untuk solution ini" class="max-w-md">
+        <USelect v-model="solutionId" :items="solutionItems" placeholder="Pilih solution" class="w-full" />
+      </UFormField>
+    </UCard>
 
     <UCard v-if="showCreate && !isForeignCompany && solutionId" class="mb-4">
       <form class="grid gap-4 sm:grid-cols-3" @submit.prevent="createRole">

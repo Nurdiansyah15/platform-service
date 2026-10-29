@@ -21,5 +21,13 @@ func RegisterAuthRoutes(r Routes, h *api.AuthHandler) {
 // RegisterUserRoutes — manajemen user (spec §3.1).
 func RegisterUserRoutes(r Routes, h *api.UserHandler) {
 	g := r.Authenticated.Group("/users")
-	g.POST("", middleware.RequirePlatformAdmin(), h.Create)
+	g.GET("/me", middleware.RequireUser(), h.Me)
+	g.PATCH("/me", middleware.RequireUser(), h.UpdateMe)
+
+	admin := g.Group("", middleware.RequirePlatformAdmin())
+	admin.GET("", h.List)
+	admin.POST("", h.Create)
+	admin.GET("/:userId", h.Get)
+	admin.PATCH("/:userId", h.Update)
+	admin.PATCH("/:userId/status", h.ChangeStatus)
 }

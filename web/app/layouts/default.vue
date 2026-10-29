@@ -13,8 +13,8 @@ const nav: NavItem[] = [
   { label: 'Dashboard', to: '/', icon: 'i-lucide-layout-dashboard' },
   { label: 'Companies', to: '/companies', icon: 'i-lucide-building-2' },
   { label: 'Solutions', to: '/solutions', icon: 'i-lucide-boxes' },
-  { label: 'Authorization', to: '/authorization/check', icon: 'i-lucide-shield-check' },
   { label: 'Users', to: '/admin/users', icon: 'i-lucide-users', adminOnly: true },
+  { label: 'Profil', to: '/profile', icon: 'i-lucide-user-round' },
 ]
 
 const visibleNav = computed(() => nav.filter(i => !i.adminOnly || auth.isPlatformAdmin))

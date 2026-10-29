@@ -9,6 +9,9 @@ import (
 type RoleAssignmentRepository interface {
 	// Create menyimpan assignment. Kombinasi user+role+scope sudah ada → CodeAssignmentDuplicate.
 	Create(ctx context.Context, a *entity.RoleAssignment) error
+	// FindByID memuat assignment beserta ringkasan role-nya. Tidak ada → CodeAssignmentNotFound.
+	FindByID(ctx context.Context, id string) (*entity.RoleAssignment, error)
+	Delete(ctx context.Context, id string) error
 	// DeleteByMember menghapus semua assignment user di company (member dikeluarkan).
 	DeleteByMember(ctx context.Context, companyID, userID string) error
 }

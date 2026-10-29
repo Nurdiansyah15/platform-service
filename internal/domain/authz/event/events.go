@@ -3,7 +3,10 @@ package event
 
 import "time"
 
-const TypeRoleAssignmentCreated = "role_assignment.created"
+const (
+	TypeRoleAssignmentCreated = "role_assignment.created"
+	TypeRoleAssignmentDeleted = "role_assignment.deleted"
+)
 
 type RoleAssignmentPayload struct {
 	ID         string    `json:"id"`

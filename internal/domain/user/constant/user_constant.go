@@ -3,14 +3,18 @@ package constant
 import domainerr "platform-service/internal/domain/errors"
 
 const (
-	CodeUserNotFound          domainerr.Code = "DOMAIN_USER_NOT_FOUND"
-	CodeUserEmailDuplicate    domainerr.Code = "DOMAIN_USER_EMAIL_DUPLICATE"
-	CodeUserEmailInvalid      domainerr.Code = "DOMAIN_USER_EMAIL_INVALID"
-	CodeUserNameInvalid       domainerr.Code = "DOMAIN_USER_NAME_INVALID"
-	CodeUserPasswordInvalid   domainerr.Code = "DOMAIN_USER_PASSWORD_INVALID"
-	CodeUserStatusInvalid     domainerr.Code = "DOMAIN_USER_STATUS_INVALID"
-	CodeUserPersistenceFailed domainerr.Code = "DOMAIN_USER_PERSISTENCE_FAILED"
-	CodeUserQueryFailed       domainerr.Code = "DOMAIN_USER_QUERY_FAILED"
+	CodeUserNotFound        domainerr.Code = "DOMAIN_USER_NOT_FOUND"
+	CodeUserEmailDuplicate  domainerr.Code = "DOMAIN_USER_EMAIL_DUPLICATE"
+	CodeUserEmailInvalid    domainerr.Code = "DOMAIN_USER_EMAIL_INVALID"
+	CodeUserNameInvalid     domainerr.Code = "DOMAIN_USER_NAME_INVALID"
+	CodeUserPasswordInvalid domainerr.Code = "DOMAIN_USER_PASSWORD_INVALID"
+	CodeUserStatusInvalid   domainerr.Code = "DOMAIN_USER_STATUS_INVALID"
+	// CodeUserSelfChangeForbidden — admin tidak boleh menonaktifkan / mencabut flag admin dirinya sendiri.
+	CodeUserSelfChangeForbidden domainerr.Code = "DOMAIN_USER_SELF_CHANGE_FORBIDDEN"
+	// CodeUserCurrentPasswordInvalid — password lama salah saat user mengganti password-nya sendiri.
+	CodeUserCurrentPasswordInvalid domainerr.Code = "DOMAIN_USER_CURRENT_PASSWORD_INVALID"
+	CodeUserPersistenceFailed      domainerr.Code = "DOMAIN_USER_PERSISTENCE_FAILED"
+	CodeUserQueryFailed            domainerr.Code = "DOMAIN_USER_QUERY_FAILED"
 )
 
 const (

@@ -290,3 +290,166 @@ func TestAuthzCheck_DeletedRoleNoLongerGrants(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, f.serviceCheck(t, "employee.read", "", "").Allowed)
 }
+
+// ── List / Revoke assignment ─────────────────────────────────────────────────
+
+type assignmentData struct {
+	ID           string `json:"id"`
+	RoleCode     string `json:"role_code"`
+	RoleIsGlobal bool   `json:"role_is_global"`
+	SolutionID   string `json:"solution_id"`
+	ScopeType    string `json:"scope_type"`
+	ScopeID      string `json:"scope_id"`
+	ScopeName    string `json:"scope_name"`
+}
+
+func listAssignments(t *testing.T, path string, h map[string]string) []assignmentData {
+	t.Helper()
+	w := testSrv.GET(path, h)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got []assignmentData
+	testhelper.DecodeBody(t, w, &got)
+	return got
+}
+
+func TestRoleAssignment_List_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.GET(assignPath(uuid.NewString(), uuid.NewString())).Code)
+}
+
+func TestRoleAssignment_List_Forbidden(t *testing.T) {
+	f := newAuthzFixture(t)
+	strangerH, _, _ := mustCompanyOwner(t)
+	assert.Equal(t, 403, testSrv.GET(assignPath(f.companyID, f.staffID), strangerH).Code)
+}
+
+func TestRoleAssignment_List_InvalidQuery(t *testing.T) {
+	f := newAuthzFixture(t)
+	assert.Equal(t, 422, testSrv.GET(assignPath(f.companyID, f.staffID)+"?solution_id=x", f.ownerH).Code)
+}
+
+func TestRoleAssignment_List_Success(t *testing.T) {
+	f := newAuthzFixture(t)
+	f.assign(t, f.hrAdmin, "", "")
+	f.assign(t, f.supervisor, "branch", f.b1)
+
+	got := listAssignments(t, assignPath(f.companyID, f.staffID)+"?solution_id="+f.solutionID, f.ownerH)
+	require.Len(t, got, 2)
+	byRole := map[string]assignmentData{}
+	for _, a := range got {
+		byRole[a.RoleCode] = a
+	}
+	assert.True(t, byRole["hr_admin"].RoleIsGlobal)
+	assert.Equal(t, "company", byRole["hr_admin"].ScopeType)
+	assert.False(t, byRole["supervisor"].RoleIsGlobal)
+	assert.Equal(t, f.b1, byRole["supervisor"].ScopeID)
+	assert.Equal(t, "Branch B1", byRole["supervisor"].ScopeName)
+
+	// Filter solution lain → kosong; token service solution lain hanya melihat solution-nya.
+	other := mustCreateSolution(t, testhelper.UniqueCode("oth"))
+	assert.Empty(t, listAssignments(t, assignPath(f.companyID, f.staffID)+"?solution_id="+other, f.ownerH))
+	foreign := testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, other, "roles:write"), ""))
+	assert.Empty(t, listAssignments(t, assignPath(f.companyID, f.staffID), foreign))
+	assert.Len(t, listAssignments(t, assignPath(f.companyID, f.staffID), f.svc), 2)
+}
+
+func revokePath(id string) string {
+	return "/api/v1/role-assignments/" + id
+}
+
+func TestRoleAssignment_Revoke_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.DELETE(revokePath(uuid.NewString())).Code)
+}
+
+func TestRoleAssignment_Revoke_NotFound(t *testing.T) {
+	f := newAuthzFixture(t)
+	assert.Equal(t, 404, testSrv.DELETE(revokePath(uuid.NewString()), f.ownerH).Code)
+	assert.Equal(t, 422, testSrv.DELETE(revokePath("bukan-uuid"), f.ownerH).Code)
+
+	// Assignment milik company lain / solution lain → 404 (keberadaannya tidak dibocorkan).
+	f.assign(t, f.hrAdmin, "", "")
+	id := listAssignments(t, assignPath(f.companyID, f.staffID), f.ownerH)[0].ID
+	strangerH, _, _ := mustCompanyOwner(t)
+	assert.Equal(t, 404, testSrv.DELETE(revokePath(id), strangerH).Code)
+	other := mustCreateSolution(t, testhelper.UniqueCode("oth"))
+	foreign := testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, other, "roles:write"), ""))
+	assert.Equal(t, 404, testSrv.DELETE(revokePath(id), foreign).Code)
+}
+
+func TestRoleAssignment_Revoke_Success(t *testing.T) {
+	f := newAuthzFixture(t)
+	f.assign(t, f.hrAdmin, "", "")
+	require.True(t, f.serviceCheck(t, "employee.read", "", "").Allowed)
+	id := listAssignments(t, assignPath(f.companyID, f.staffID), f.ownerH)[0].ID
+
+	w := testSrv.DELETE(revokePath(id), f.ownerH)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	assert.Empty(t, listAssignments(t, assignPath(f.companyID, f.staffID), f.ownerH))
+	assert.False(t, f.serviceCheck(t, "employee.read", "", "").Allowed)
+	assert.Equal(t, 1, countEvents(t, "role_assignment.deleted", f.companyID))
+
+	assert.Equal(t, 404, testSrv.DELETE(revokePath(id), f.ownerH).Code, "sudah dihapus")
+}
+
+// ── Effective permissions ────────────────────────────────────────────────────
+
+func effectivePath(companyID, userID string) string {
+	return "/api/v1/companies/" + companyID + "/users/" + userID + "/effective-permissions"
+}
+
+type effectivePermission struct {
+	Permission string `json:"permission"`
+	Grants     []struct {
+		RoleCode  string `json:"role_code"`
+		ScopeType string `json:"scope_type"`
+		ScopeID   string `json:"scope_id"`
+	} `json:"grants"`
+}
+
+func TestEffectivePermissions_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.GET(effectivePath(uuid.NewString(), uuid.NewString())).Code)
+}
+
+func TestEffectivePermissions_Forbidden(t *testing.T) {
+	f := newAuthzFixture(t)
+	strangerH, _, _ := mustCompanyOwner(t)
+	assert.Equal(t, 403, testSrv.GET(effectivePath(f.companyID, f.staffID)+"?solution_id="+f.solutionID, strangerH).Code)
+	noScope := testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, f.solutionID, "roles:write"), ""))
+	assert.Equal(t, 403, testSrv.GET(effectivePath(f.companyID, f.staffID), noScope).Code, "tanpa authz:check")
+}
+
+func TestEffectivePermissions_InvalidQuery(t *testing.T) {
+	f := newAuthzFixture(t)
+	assert.Equal(t, 422, testSrv.GET(effectivePath(f.companyID, f.staffID), f.ownerH).Code, "token user tanpa solution_id")
+	assert.Equal(t, 422, testSrv.GET(effectivePath(f.companyID, f.staffID)+"?solution_id=x", f.ownerH).Code)
+}
+
+func TestEffectivePermissions_NotFound(t *testing.T) {
+	f := newAuthzFixture(t)
+	assert.Equal(t, 404, testSrv.GET(effectivePath(f.companyID, f.staffID)+"?solution_id="+uuid.NewString(), f.ownerH).Code)
+}
+
+func TestEffectivePermissions_Success(t *testing.T) {
+	f := newAuthzFixture(t)
+	f.assign(t, f.hrAdmin, "", "")
+	f.assign(t, f.supervisor, "branch", f.b1)
+
+	w := testSrv.GET(effectivePath(f.companyID, f.staffID)+"?solution_id="+f.solutionID, f.ownerH)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got []effectivePermission
+	testhelper.DecodeBody(t, w, &got)
+	codes := make([]string, 0, len(got))
+	for _, p := range got {
+		codes = append(codes, p.Permission)
+	}
+	assert.Equal(t, []string{"attendance.edit", "employee.read", "employee.write"}, codes)
+	require.Len(t, got[0].Grants, 1)
+	assert.Equal(t, "supervisor", got[0].Grants[0].RoleCode)
+	assert.Equal(t, "branch", got[0].Grants[0].ScopeType)
+	assert.Equal(t, f.b1, got[0].Grants[0].ScopeID)
+
+	// Token service memakai solution client tanpa solution_id.
+	w = testSrv.GET(effectivePath(f.companyID, f.staffID), f.svc)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	testhelper.DecodeBody(t, w, &got)
+	assert.Len(t, got, 3)
+}

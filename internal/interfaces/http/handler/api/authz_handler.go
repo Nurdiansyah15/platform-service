@@ -104,3 +104,94 @@ func (h *AuthzHandler) CheckBatch(c *gin.Context) {
 	}
 	respond.OK(c, "authz check batch", resp)
 }
+
+// ListAssignments godoc
+//
+//	@Summary		List role assignments of a company member
+//	@Description	Token service hanya melihat role milik solution-nya; token user boleh memfilter solution_id.
+//	@Tags			Authorization
+//	@Security		BearerAuth
+//	@Produce		json
+//	@Param			companyId		path		string	true	"Company ID"
+//	@Param			userId			path		string	true	"User ID"
+//	@Param			solution_id		query		string	false	"Filter solution"
+//	@Success		200				{object}	respond.SuccessBody{data=[]dto.RoleAssignmentDetailResponse}
+//	@Failure		401,403,404,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/companies/{companyId}/users/{userId}/role-assignments [get]
+func (h *AuthzHandler) ListAssignments(c *gin.Context) {
+	var param dto.CompanyUserParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.SolutionFilterQuery
+	if err := c.ShouldBindQuery(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	items, err := h.useCase.ListAssignments(c.Request.Context(), actor, param.CompanyID, param.UserID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "role assignments", items)
+}
+
+// RevokeAssignment godoc
+//
+//	@Summary		Revoke role assignment
+//	@Description	Assignment milik company yang tidak bisa diakses (atau role solution lain untuk token service) dilaporkan 404.
+//	@Tags			Authorization
+//	@Security		BearerAuth
+//	@Produce		json
+//	@Param			assignmentId	path		string	true	"Role assignment ID"
+//	@Success		200				{object}	respond.SuccessBody
+//	@Failure		401,403,404,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/role-assignments/{assignmentId} [delete]
+func (h *AuthzHandler) RevokeAssignment(c *gin.Context) {
+	var param dto.RoleAssignmentIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	if err := h.useCase.RevokeAssignment(c.Request.Context(), actor, param.AssignmentID); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "role assignment revoked", nil)
+}
+
+// EffectivePermissions godoc
+//
+//	@Summary		Effective permissions of a company member
+//	@Description	Seluruh permission user di company untuk satu solution beserta role & scope asalnya. Token user wajib solution_id; token service memakai solution client.
+//	@Tags			Authorization
+//	@Security		BearerAuth
+//	@Produce		json
+//	@Param			companyId		path		string	true	"Company ID"
+//	@Param			userId			path		string	true	"User ID"
+//	@Param			solution_id		query		string	false	"Solution (wajib untuk token user)"
+//	@Success		200				{object}	respond.SuccessBody{data=[]dto.EffectivePermissionResponse}
+//	@Failure		401,403,404,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/companies/{companyId}/users/{userId}/effective-permissions [get]
+func (h *AuthzHandler) EffectivePermissions(c *gin.Context) {
+	var param dto.CompanyUserParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.SolutionFilterQuery
+	if err := c.ShouldBindQuery(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	items, err := h.useCase.EffectivePermissions(c.Request.Context(), actor, param.CompanyID, param.UserID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "effective permissions", items)
+}
