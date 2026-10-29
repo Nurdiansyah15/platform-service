@@ -20,14 +20,14 @@ help:
 	@echo "    make dev-restart               Restart app + worker (muat ulang kode)"
 	@echo "    make dev-build                 Build ulang image dev"
 	@echo "    make dev-web                   Jalankan hanya UI Nuxt (web/)"
-	@echo "    make dev-migrate CMD=up        Jalankan migrasi di container (default: up)"
+	@echo "    make dev-migrate CMD=up        Jalankan migrasi di container (default: up; CMD=fresh ikut restart app + worker)"
 	@echo "    make dev-seed ONLY=\"a b\"       Jalankan seeder di container"
 	@echo "    make dev-shell                 Shell masuk container app"
 	@echo ""
-	@echo "  UI / Nuxt (web/, pnpm di container node:22):"
-	@echo "    make web-install               pnpm install"
-	@echo "    make web-dev                   pnpm dev"
-	@echo "    make web-build                 pnpm build"
+	@echo "  UI / Nuxt (web/, bun di container oven/bun):"
+	@echo "    make web-install               bun install"
+	@echo "    make web-dev                   bun dev"
+	@echo "    make web-build                 bun build"
 	@echo "    make web-typecheck             Vue typecheck"
 	@echo ""
 	@echo "  Development (host, tanpa Docker):"
@@ -80,8 +80,11 @@ dev-build:
 dev-web: web-install
 	$(COMPOSE_DEV) up -d web
 
+# `fresh` mengosongkan semua tabel termasuk signing_keys, padahal app hanya membuat
+# signing key saat startup → restart app + worker agar key active dibuat ulang.
 dev-migrate:
 	$(COMPOSE_DEV) run --rm migrate $(or $(CMD),up)
+	$(if $(filter fresh,$(CMD)),$(COMPOSE_DEV) restart app worker,)
 
 dev-seed:
 	$(COMPOSE_DEV) --profile tools run --rm seeder $(ONLY)
@@ -89,23 +92,22 @@ dev-seed:
 dev-shell:
 	$(COMPOSE_DEV) run --rm --entrypoint sh app
 
-# ── UI / Nuxt (container node:22, tidak bergantung Node di host) ──────────────
-# pnpm dijalankan di image service `web` sebagai UID host. Store pnpm di /tmp
-# container agar tidak tercipta web/.pnpm-store. Untuk pnpm di host (Node
-# ^22.21 + corepack): make web-install WEB_PNPM="cd web && corepack pnpm".
-WEB_PNPM ?= $(COMPOSE_DEV) run --rm --no-deps -T web corepack pnpm
+# ── UI / Nuxt (container oven/bun, tidak bergantung bun di host) ─────────────
+# bun dijalankan di image service `web` sebagai UID host (cache di /tmp
+# container). Untuk bun di host: make web-install WEB_BUN="cd web && bun".
+WEB_BUN ?= $(COMPOSE_DEV) run --rm --no-deps -T web bun
 
 web-install:
-	$(WEB_PNPM) install --store-dir /tmp/pnpm-store
+	$(WEB_BUN) install
 
 web-dev:
-	$(COMPOSE_DEV) run --rm --no-deps --service-ports web corepack pnpm dev --host 0.0.0.0
+	$(COMPOSE_DEV) run --rm --no-deps --service-ports web bun --bun run dev --host 0.0.0.0
 
 web-build:
-	$(WEB_PNPM) build
+	$(WEB_BUN) --bun run build
 
 web-typecheck:
-	$(WEB_PNPM) typecheck
+	$(WEB_BUN) run typecheck
 
 # ── Development (host) ────────────────────────────────────────────────────────
 run:
@@ -132,6 +134,7 @@ migrate-down:
 
 migrate-fresh:
 	go run ./cmd/migrate fresh
+	@echo "Catatan: signing_keys ikut terhapus. Restart app (make run / make dev-restart) agar signing key dibuat ulang."
 
 migrate-version:
 	go run ./cmd/migrate version

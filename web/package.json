@@ -23,11 +23,9 @@
     "typescript": "^5.9.0",
     "vue-tsc": "^3.3.13"
   },
-  "packageManager": "pnpm@10.34.9",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "vue-demi"
-    ]
-  }
+  "packageManager": "bun@1.3.12",
+  "trustedDependencies": [
+    "esbuild",
+    "vue-demi"
+  ]
 }

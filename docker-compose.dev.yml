@@ -22,6 +22,14 @@ x-app-env: &app-env
   CONSOLE_SOLUTION_CODE: "${CONSOLE_SOLUTION_CODE:-platform-console}"
   CONSOLE_SOLUTION_NAME: "${CONSOLE_SOLUTION_NAME:-Platform Console}"
 
+# Env runtime container web (bun). Konfigurasi Nuxt (NUXT_PUBLIC_*,
+# NUXT_WATCH_POLLING) dibaca dari web/.env milik UI — salin dari web/.env.example.
+x-web-env: &web-env
+  HOME: /tmp
+  CI: "true"
+  # Cache bun di /tmp container agar tidak tercipta folder cache di web/.
+  BUN_INSTALL_CACHE_DIR: /tmp/bun-cache
+
 # Basis service Go dev: image sama, source di-bind-mount (tanpa volume kode).
 x-dev: &dev
   build:
@@ -93,21 +101,17 @@ services:
   # UI Nuxt (SPA). Source di-bind-mount; node_modules dibuat di host agar
   # ownership cocok (container dijalankan sebagai UID host).
   web:
-    image: node:22-bookworm-slim
+    image: oven/bun:1.3.12-slim
     container_name: platform-service_web
     working_dir: /app
     user: "${DEV_UID:-1000}:${DEV_GID:-1000}"
-    environment:
-      HOME: /tmp
-      COREPACK_HOME: /tmp/corepack
-      CI: "true"
-      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-      NUXT_PUBLIC_API_BASE: "${NUXT_PUBLIC_API_BASE:-http://localhost:${APP_PORT:-8080}}"
-      NUXT_PUBLIC_DEFAULT_SOLUTION: "${CONSOLE_SOLUTION_CODE:-platform-console}"
-      NUXT_WATCH_POLLING: "${NUXT_WATCH_POLLING:-false}"
+    env_file:
+      - path: web/.env
+        required: false
+    environment: *web-env
     volumes:
       - ./web:/app
-    command: ["sh", "-c", "test -x node_modules/.bin/nuxt || (echo 'node_modules belum ada. Jalankan: make web-install'; exit 1); exec node_modules/.bin/nuxt dev --host 0.0.0.0"]
+    command: ["sh", "-c", "test -x node_modules/.bin/nuxt || (echo 'node_modules belum ada. Jalankan: make web-install'; exit 1); exec bun --bun nuxt dev --host 0.0.0.0"]
     ports:
       - "${WEB_PORT:-3000}:3000"
     depends_on:
