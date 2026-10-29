@@ -2,70 +2,46 @@
 import type {
   BranchResponse,
   CompanyMemberResponse,
-  CreateRoleAssignmentRequest,
   EffectivePermission,
+  MemberStatus,
   RoleAssignmentDetail,
   RoleResponse,
-  SolutionResponse,
 } from '~/types/api'
 
+const ctx = useCompanyContext()
 const route = useRoute()
-const auth = useAuthStore()
 const api = useApi()
 const toast = useToast()
+const { toastError } = useApiError()
+const { confirm } = useConfirm()
 
-const companyId = computed(() => String(route.params.companyId))
 const userId = computed(() => String(route.params.userId))
-const isForeignCompany = computed(
-  () => !auth.isPlatformAdmin && auth.activeCompanyId !== companyId.value,
-)
+const base = computed(() => `/companies/${ctx.companyId.value}`)
 
 const member = ref<CompanyMemberResponse | null>(null)
-const error = ref('')
-
-// Role & permission selalu dilihat per solution (bukan solution sesi console).
-const solutions = ref<SolutionResponse[]>([])
-const solutionId = ref<string | undefined>(undefined)
-const solutionItems = computed(() => solutions.value.map(s => ({ label: `${s.name} (${s.code})`, value: s.id })))
+const memberError = ref('')
+const solutionId = ref<string | undefined>()
 
 const assignments = ref<RoleAssignmentDetail[]>([])
 const permissions = ref<EffectivePermission[]>([])
-const loadingAccess = ref(false)
-const revokingId = ref<string | null>(null)
-
 const roles = ref<RoleResponse[]>([])
 const branches = ref<BranchResponse[]>([])
-const assigning = ref(false)
-const form = reactive<Required<CreateRoleAssignmentRequest>>({ role_id: '', scope_type: 'company', scope_id: '' })
-
-const roleItems = computed(() =>
-  roles.value.map(r => ({ label: `${r.name} (${r.code})${r.company_id ? ' · custom' : ''}`, value: r.id })),
-)
-const branchItems = computed(() => branches.value.map(b => ({ label: `${b.name} (${b.code})`, value: b.id })))
+const loadingAccess = ref(false)
 
 async function loadMember() {
-  error.value = ''
+  memberError.value = ''
   try {
-    const res = await api.get<CompanyMemberResponse>(`/api/v1/companies/${companyId.value}/members/${userId.value}`)
-    member.value = res.data
+    member.value = (await api.get<CompanyMemberResponse>(`/api/v1/companies/${ctx.companyId.value}/members/${userId.value}`)).data
   } catch (err) {
-    error.value = (err as { message?: string }).message || 'Gagal memuat member'
+    memberError.value = (err as { message?: string }).message || 'Gagal memuat anggota'
   }
 }
 
-async function loadOptions() {
+async function loadBranches() {
   try {
-    const [sol, br] = await Promise.all([
-      api.get<SolutionResponse[]>('/api/v1/solutions', { query: { limit: 100 } }),
-      api.get<BranchResponse[]>(`/api/v1/companies/${companyId.value}/branches`, { query: { limit: 100 } }),
-    ])
-    solutions.value = sol.data
-    branches.value = br.data
-    // Default: solution pertama selain console (role produk biasanya yang dicari).
-    const preferred = sol.data.find(s => s.id !== auth.solution?.id) ?? sol.data[0]
-    solutionId.value = preferred?.id
-  } catch (err) {
-    toast.add({ title: (err as { message?: string }).message || 'Gagal memuat solution / branch', color: 'error' })
+    branches.value = (await api.get<BranchResponse[]>(`/api/v1/companies/${ctx.companyId.value}/branches`, { query: { limit: 100 } })).data
+  } catch {
+    branches.value = []
   }
 }
 
@@ -73,208 +49,269 @@ async function loadAccess() {
   if (!solutionId.value) return
   loadingAccess.value = true
   try {
-    const base = `/api/v1/companies/${companyId.value}/users/${userId.value}`
+    const userBase = `/api/v1/companies/${ctx.companyId.value}/users/${userId.value}`
     const query = { solution_id: solutionId.value }
-    const [asg, perm, rl] = await Promise.all([
-      api.get<RoleAssignmentDetail[]>(`${base}/role-assignments`, { query }),
-      api.get<EffectivePermission[]>(`${base}/effective-permissions`, { query }),
-      api.get<RoleResponse[]>(`/api/v1/companies/${companyId.value}/solutions/${solutionId.value}/roles`, { query: { limit: 100 } }),
+    const [a, p, r] = await Promise.all([
+      api.get<RoleAssignmentDetail[]>(`${userBase}/role-assignments`, { query }),
+      api.get<EffectivePermission[]>(`${userBase}/effective-permissions`, { query }),
+      api.get<RoleResponse[]>(`/api/v1/companies/${ctx.companyId.value}/solutions/${solutionId.value}/roles`, { query: { limit: 200 } }),
     ])
-    assignments.value = asg.data
-    permissions.value = perm.data
-    roles.value = rl.data
+    assignments.value = a.data
+    permissions.value = p.data
+    roles.value = r.data
   } catch (err) {
-    toast.add({ title: (err as { message?: string }).message || 'Gagal memuat role', color: 'error' })
+    toastError(err, 'Gagal memuat role')
   } finally {
     loadingAccess.value = false
   }
 }
 
+watch(solutionId, loadAccess)
+watch(ctx.canAccess, (ok) => {
+  if (ok) {
+    loadMember()
+    loadBranches()
+  }
+}, { immediate: true })
+
+// ── Status anggota ──
+async function setStatus(next: MemberStatus) {
+  if (!member.value) return
+  if (next === 'inactive') {
+    const ok = await confirm({
+      title: `Keluarkan ${member.value.name}?`,
+      description: 'Semua role-nya di company ini ikut dicabut.',
+      confirmLabel: 'Keluarkan',
+      danger: true,
+    })
+    if (!ok) return
+  }
+  try {
+    member.value = (await api.patch<CompanyMemberResponse>(
+      `/api/v1/companies/${ctx.companyId.value}/members/${userId.value}`, { status: next },
+    )).data
+    toast.add({ title: 'Status anggota diperbarui', color: 'success' })
+    loadAccess()
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+// ── Assign role ──
+const showAssign = ref(false)
+const assigning = ref(false)
+const form = reactive<{ role_id?: string; scope_type: 'company' | 'branch'; scope_id?: string }>({ scope_type: 'company' })
+
+const roleItems = computed(() => roles.value.map(r => ({
+  label: r.name,
+  value: r.id,
+  description: `${r.code} · ${r.scope === 'company' ? 'custom' : 'global'} · ${r.permission_count} permission`,
+})))
+const branchItems = computed(() => branches.value.map(b => ({ label: b.name, value: b.id, description: b.code })))
+
+watch(showAssign, (v) => {
+  if (v) Object.assign(form, { role_id: undefined, scope_type: 'company', scope_id: undefined })
+})
+
 async function assign() {
   assigning.value = true
   try {
-    await api.post(`/api/v1/companies/${companyId.value}/users/${userId.value}/role-assignments`, {
+    await api.post(`/api/v1/companies/${ctx.companyId.value}/users/${userId.value}/role-assignments`, {
       role_id: form.role_id,
       scope_type: form.scope_type,
       scope_id: form.scope_type === 'branch' ? form.scope_id : undefined,
     })
-    toast.add({ title: 'Role di-assign', color: 'success' })
-    form.role_id = ''
-    form.scope_id = ''
-    await loadAccess()
+    toast.add({ title: 'Role ditambahkan', color: 'success' })
+    showAssign.value = false
+    loadAccess()
   } catch (err) {
-    toast.add({ title: (err as { message?: string }).message || 'Gagal assign role', color: 'error' })
+    toastError(err, 'Gagal menambahkan role')
   } finally {
     assigning.value = false
   }
 }
 
 async function revoke(a: RoleAssignmentDetail) {
-  if (!confirm(`Cabut role ${a.role_name} (${a.scope_type}: ${a.scope_name || a.scope_id})?`)) return
-  revokingId.value = a.id
+  const ok = await confirm({
+    title: `Cabut role ${a.role_name}?`,
+    description: a.scope_type === 'company' ? 'Berlaku di seluruh company.' : `Berlaku di cabang ${a.scope_name}.`,
+    confirmLabel: 'Cabut',
+    danger: true,
+  })
+  if (!ok) return
   try {
     await api.del(`/api/v1/role-assignments/${a.id}`)
     toast.add({ title: 'Role dicabut', color: 'success' })
-    await loadAccess()
+    loadAccess()
   } catch (err) {
-    toast.add({ title: (err as { message?: string }).message || 'Gagal mencabut role', color: 'error' })
-  } finally {
-    revokingId.value = null
+    toastError(err)
   }
 }
 
-function scopeLabel(scopeType: string, scopeId: string) {
-  if (scopeType === 'company') return 'Seluruh company'
-  return branches.value.find(b => b.id === scopeId)?.name ?? scopeId
-}
-
-watch(solutionId, loadAccess)
-
-onMounted(async () => {
-  if (isForeignCompany.value) return
-  await Promise.all([loadMember(), loadOptions()])
+// ── Permission efektif dikelompokkan per modul ──
+const permissionGroups = computed(() => {
+  const map = new Map<string, EffectivePermission[]>()
+  for (const p of permissions.value) {
+    const key = p.permission.includes('.') ? p.permission.split('.')[0]! : 'lainnya'
+    map.set(key, [...(map.get(key) ?? []), p])
+  }
+  return [...map.entries()].map(([name, items]) => ({ name, items }))
 })
+
+function scopeLabel(type: string, id: string) {
+  if (type === 'company') return 'seluruh company'
+  return branches.value.find(b => b.id === id)?.name ?? 'cabang'
+}
 </script>
 
 <template>
-  <div>
-    <PageHeader :title="member?.name ?? 'Member'" :subtitle="member?.email">
-      <template #actions>
-        <UButton :to="`/companies/${companyId}/members`" color="neutral" variant="outline" icon="i-lucide-arrow-left">
-          Kembali
-        </UButton>
-      </template>
-    </PageHeader>
+  <CompanyPage
+    :title="member?.name ?? 'Anggota'"
+    :section="{ label: 'Anggota', to: `${base}/members` }"
+    :trail="member ? [{ label: member.name }] : []"
+  >
+    <UAlert v-if="memberError" color="error" variant="subtle" :title="memberError" />
 
-    <UAlert
-      v-if="isForeignCompany"
-      class="mb-4"
-      color="warning"
-      variant="subtle"
-      icon="i-lucide-triangle-alert"
-      title="Company ini bukan company aktif"
-      description="Aktifkan company ini dulu (company switcher) untuk mengelola role member."
-    />
-    <UAlert v-if="error" color="error" variant="subtle" :title="error" class="mb-4" />
-
-    <template v-if="member && !isForeignCompany">
-      <UCard class="mb-6">
-        <div class="flex flex-wrap items-end gap-6">
-          <div>
-            <p class="text-xs uppercase tracking-wide text-dimmed">Status member</p>
-            <UBadge
-              class="mt-1"
-              size="sm"
-              variant="subtle"
-              :color="member.status === 'active' ? 'success' : member.status === 'inactive' ? 'error' : 'warning'"
-            >
-              {{ member.status }}
-            </UBadge>
+    <template v-else>
+      <!-- Header anggota -->
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex min-w-0 items-center gap-3">
+          <USkeleton v-if="!member" class="size-12 rounded-full" />
+          <UAvatar v-else :text="initials(member.name)" size="xl" />
+          <div class="min-w-0">
+            <USkeleton v-if="!member" class="h-5 w-40" />
+            <template v-else>
+              <p class="truncate text-lg font-semibold text-highlighted">{{ member.name }}</p>
+              <p class="flex flex-wrap items-center gap-2 text-sm text-muted">
+                {{ member.email }} <StatusBadge :status="member.status" />
+                <span class="text-dimmed">· bergabung {{ formatDate(member.joined_at) }}</span>
+              </p>
+            </template>
           </div>
-          <UFormField label="Solution" class="min-w-72">
-            <USelect v-model="solutionId" :items="solutionItems" placeholder="Pilih solution" class="w-full" />
-          </UFormField>
         </div>
-        <UAlert
-          v-if="member.status !== 'active'"
-          class="mt-4"
-          color="warning"
-          variant="subtle"
-          icon="i-lucide-info"
-          title="Member tidak aktif"
-          description="Role hanya bisa di-assign ke member active, dan permission member non-active selalu kosong."
-        />
-      </UCard>
+        <div v-if="member" class="flex gap-2">
+          <UButton v-if="member.status !== 'active'" icon="i-lucide-check" variant="soft" @click="setStatus('active')">Aktifkan</UButton>
+          <UButton v-if="member.status !== 'inactive'" icon="i-lucide-user-minus" color="error" variant="ghost" @click="setStatus('inactive')">
+            Keluarkan
+          </UButton>
+        </div>
+      </div>
+
+      <!-- Pilih solution -->
+      <div class="flex flex-wrap items-center gap-3 rounded-lg border border-default bg-elevated/30 p-3">
+        <span class="text-sm text-muted">Role dan akses untuk solution</span>
+        <SolutionSelect v-model="solutionId" />
+      </div>
 
       <div class="grid gap-6 lg:grid-cols-2">
-        <UCard>
-          <h2 class="mb-4 font-medium text-highlighted">Role assignments</h2>
+        <!-- Role -->
+        <SectionCard title="Role" description="Role menentukan permission anggota di solution ini.">
+          <template #actions>
+            <UButton
+              icon="i-lucide-plus"
+              size="sm"
+              :disabled="!solutionId || member?.status !== 'active'"
+              @click="showAssign = true"
+            >
+              Tambah role
+            </UButton>
+          </template>
 
-          <form class="mb-4 grid gap-3 sm:grid-cols-2" @submit.prevent="assign">
-            <UFormField label="Role" class="sm:col-span-2">
-              <USelect v-model="form.role_id" :items="roleItems" placeholder="Pilih role" class="w-full" />
-            </UFormField>
-            <UFormField label="Scope">
-              <USelect
-                v-model="form.scope_type"
-                :items="[{ label: 'Seluruh company', value: 'company' }, { label: 'Branch', value: 'branch' }]"
-                class="w-full"
-              />
-            </UFormField>
-            <UFormField v-if="form.scope_type === 'branch'" label="Branch">
-              <USelect v-model="form.scope_id" :items="branchItems" placeholder="Pilih branch" class="w-full" />
-            </UFormField>
-            <div class="sm:col-span-2">
-              <UButton
-                type="submit"
-                color="primary"
-                icon="i-lucide-plus"
-                :loading="assigning"
-                :disabled="!form.role_id || (form.scope_type === 'branch' && !form.scope_id) || member.status !== 'active'"
-              >
-                Assign role
-              </UButton>
-            </div>
-          </form>
-
-          <p v-if="loadingAccess" class="text-sm text-muted">Memuat...</p>
-          <p v-else-if="!assignments.length" class="text-sm text-muted">Belum ada role untuk solution ini.</p>
-          <ul v-else class="divide-y divide-default">
-            <li v-for="a in assignments" :key="a.id" class="flex items-center justify-between gap-3 py-2">
-              <div>
-                <p class="font-medium text-highlighted">
+          <div v-if="loadingAccess && !assignments.length" class="space-y-2">
+            <USkeleton v-for="i in 2" :key="i" class="h-14 w-full" />
+          </div>
+          <UEmpty
+            v-else-if="!assignments.length"
+            icon="i-lucide-shield-off"
+            title="Belum punya role"
+            :description="member?.status === 'active' ? 'Tambahkan role agar anggota punya akses.' : 'Aktifkan anggota dulu untuk menambahkan role.'"
+            variant="naked"
+          />
+          <ul v-else class="divide-y divide-default rounded-lg border border-default">
+            <li v-for="a in assignments" :key="a.id" class="flex items-center justify-between gap-3 px-4 py-3">
+              <div class="min-w-0">
+                <NuxtLink :to="`${base}/roles/${a.role_id}`" class="font-medium text-highlighted hover:text-primary">
                   {{ a.role_name }}
-                  <UBadge size="sm" variant="subtle" :color="a.role_is_global ? 'neutral' : 'primary'" class="ml-1">
+                </NuxtLink>
+                <p class="flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                  <UBadge size="xs" variant="subtle" :color="a.role_is_global ? 'neutral' : 'primary'">
                     {{ a.role_is_global ? 'global' : 'custom' }}
                   </UBadge>
-                </p>
-                <p class="text-xs text-muted">
-                  <span class="font-mono">{{ a.role_code }}</span> · {{ a.scope_type === 'company' ? 'Seluruh company' : `Branch ${a.scope_name}` }}
+                  <UIcon :name="a.scope_type === 'company' ? 'i-lucide-building-2' : 'i-lucide-git-branch'" class="size-3.5" />
+                  {{ a.scope_type === 'company' ? 'Seluruh company' : a.scope_name }}
                 </p>
               </div>
-              <UButton
-                size="xs"
-                color="error"
-                variant="outline"
-                icon="i-lucide-x"
-                :loading="revokingId === a.id"
-                @click="revoke(a)"
-              >
-                Cabut
-              </UButton>
+              <UTooltip text="Cabut role">
+                <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" aria-label="Cabut role" @click="revoke(a)" />
+              </UTooltip>
             </li>
           </ul>
-        </UCard>
+        </SectionCard>
 
-        <UCard>
-          <h2 class="mb-1 font-medium text-highlighted">Effective permissions</h2>
-          <p class="mb-4 text-sm text-muted">Semua permission yang dimiliki member di solution ini, beserta asalnya.</p>
-          <p v-if="loadingAccess" class="text-sm text-muted">Memuat...</p>
-          <p v-else-if="!permissions.length" class="text-sm text-muted">Tidak ada permission.</p>
-          <div v-else class="overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="border-b border-default text-left text-xs uppercase tracking-wide text-dimmed">
-                  <th class="px-2 py-2">Permission</th>
-                  <th class="px-2 py-2">Dari role</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="p in permissions" :key="p.permission" class="border-b border-default/60 align-top">
-                  <td class="px-2 py-2 font-mono text-xs text-highlighted">{{ p.permission }}</td>
-                  <td class="px-2 py-2">
-                    <div class="flex flex-wrap gap-1">
-                      <UBadge v-for="(g, i) in p.grants" :key="i" size="sm" color="neutral" variant="subtle">
-                        {{ g.role_code }} · {{ scopeLabel(g.scope_type, g.scope_id) }}
-                      </UBadge>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+        <!-- Permission efektif -->
+        <SectionCard title="Akses (permission)" description="Gabungan permission dari semua role di atas.">
+          <div v-if="loadingAccess && !permissions.length" class="space-y-2">
+            <USkeleton v-for="i in 3" :key="i" class="h-8 w-full" />
           </div>
-        </UCard>
+          <UEmpty v-else-if="!permissions.length" icon="i-lucide-key-round" title="Tidak ada akses" description="Anggota belum punya permission di solution ini." variant="naked" />
+          <div v-else class="space-y-4">
+            <div v-for="g in permissionGroups" :key="g.name">
+              <p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-dimmed">{{ g.name }}</p>
+              <ul class="space-y-1.5">
+                <li v-for="p in g.items" :key="p.permission" class="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span class="font-mono text-xs text-highlighted">{{ p.permission }}</span>
+                  <span class="flex flex-wrap gap-1">
+                    <UBadge v-for="(gr, i) in p.grants" :key="i" size="xs" color="neutral" variant="outline">
+                      {{ gr.role_code }} · {{ scopeLabel(gr.scope_type, gr.scope_id) }}
+                    </UBadge>
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </SectionCard>
       </div>
     </template>
-  </div>
+
+    <UModal v-model:open="showAssign" title="Tambah role" :description="member ? `Untuk ${member.name}` : undefined">
+      <template #body>
+        <div class="space-y-4">
+          <UFormField label="Role" required>
+            <USelectMenu
+              v-model="form.role_id"
+              :items="roleItems"
+              value-key="value"
+              placeholder="Pilih role"
+              :search-input="{ placeholder: 'Cari role...' }"
+              class="w-full"
+            />
+          </UFormField>
+          <UFormField label="Berlaku di">
+            <URadioGroup
+              v-model="form.scope_type"
+              :items="[
+                { label: 'Seluruh company', value: 'company', description: 'Termasuk semua cabang.' },
+                { label: 'Cabang tertentu', value: 'branch', description: 'Hanya di satu cabang.', disabled: !branches.length },
+              ]"
+            />
+          </UFormField>
+          <UFormField v-if="form.scope_type === 'branch'" label="Cabang" required>
+            <USelectMenu v-model="form.scope_id" :items="branchItems" value-key="value" placeholder="Pilih cabang" class="w-full" />
+          </UFormField>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton color="neutral" variant="ghost" @click="showAssign = false">Batal</UButton>
+          <UButton
+            :loading="assigning"
+            :disabled="!form.role_id || (form.scope_type === 'branch' && !form.scope_id)"
+            @click="assign"
+          >
+            Tambahkan
+          </UButton>
+        </div>
+      </template>
+    </UModal>
+  </CompanyPage>
 </template>

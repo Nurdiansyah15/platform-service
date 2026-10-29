@@ -68,6 +68,36 @@ func (r *Role) EnsureEditable() error {
 	return nil
 }
 
+// Update mengganti nama dan/atau deskripsi; nil = tidak diubah. Role sistem tidak boleh diubah.
+func (r *Role) Update(name, description *string, now time.Time) error {
+	if err := r.EnsureEditable(); err != nil {
+		return err
+	}
+	if name != nil {
+		n := strings.TrimSpace(*name)
+		if n == "" || utf8.RuneCountInString(n) > constant.NameMaxLength {
+			return domainerr.New(constant.CodeRoleNameInvalid)
+		}
+		r.Name = n
+	}
+	if description != nil {
+		r.Description = trimOptional(description)
+	}
+	r.UpdatedAt = now.UTC()
+	return nil
+}
+
+// Delete menandai role terhapus (soft delete). Role sistem tidak boleh dihapus.
+func (r *Role) Delete(now time.Time) error {
+	if err := r.EnsureEditable(); err != nil {
+		return err
+	}
+	t := now.UTC()
+	r.DeletedAt = &t
+	r.UpdatedAt = t
+	return nil
+}
+
 func trimOptional(v *string) *string {
 	if v == nil {
 		return nil

@@ -36,6 +36,7 @@
   "DOMAIN_SOLUTION_CODE_INVALID": "Solution code may only contain lowercase letters, numbers, and hyphens (max 100 characters).",
   "DOMAIN_SOLUTION_NAME_INVALID": "Solution name is required (max 255 characters).",
   "DOMAIN_SOLUTION_STATUS_INVALID": "Solution status must be active or inactive.",
+  "DOMAIN_SOLUTION_IN_USE_BY_SESSION": "You cannot deactivate the solution your current session is using.",
   "DOMAIN_SOLUTION_PERSISTENCE_FAILED": "Failed to save solution.",
   "DOMAIN_SOLUTION_QUERY_FAILED": "Failed to load solution.",
   "DOMAIN_USER_NOT_FOUND": "User not found.",

@@ -5,6 +5,8 @@ import "time"
 
 const (
 	TypeRoleCreated            = "role.created"
+	TypeRoleUpdated            = "role.updated"
+	TypeRoleDeleted            = "role.deleted"
 	TypeRolePermissionsChanged = "role.permissions_changed"
 )
 

@@ -271,3 +271,179 @@ func TestCompanyRole_ReplacePermissions(t *testing.T) {
 	assert.Equal(t, 404, testSrv.GET(rolePermissionsPath(roleID), strangerH).Code)
 	assert.Equal(t, 200, testSrv.GET(rolePermissionsPath(roleID), h).Code)
 }
+
+// ── Detail / Update / Delete ─────────────────────────────────────────────────
+
+func rolePath(id string) string { return "/api/v1/roles/" + id }
+func companyRolePath(companyID, roleID string) string {
+	return "/api/v1/companies/" + companyID + "/roles/" + roleID
+}
+
+type roleDetail struct {
+	ID              string  `json:"id"`
+	Name            string  `json:"name"`
+	Description     *string `json:"description"`
+	Scope           string  `json:"scope"`
+	PermissionCount int     `json:"permission_count"`
+	MemberCount     int     `json:"member_count"`
+}
+
+func TestRole_GetGlobal_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.GET(rolePath(uuid.NewString())).Code)
+}
+
+func TestRole_GetGlobal_NotFound(t *testing.T) {
+	assert.Equal(t, 404, testSrv.GET(rolePath(uuid.NewString()), adminHeader()).Code)
+	// Custom role company lain → 404.
+	h, companyID, solID := companyRoleFixture(t)
+	custom := mustCreateRole(t, companyRolesPath(companyID, solID), "secret_role", h)
+	strangerH, _, _ := mustCompanyOwner(t)
+	assert.Equal(t, 404, testSrv.GET(rolePath(custom), strangerH).Code)
+}
+
+func TestRole_GetGlobal_Success(t *testing.T) {
+	f := newAuthzFixture(t)
+	f.assign(t, f.hrAdmin, "", "")
+	w := testSrv.GET(rolePath(f.hrAdmin), adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got roleDetail
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, "global", got.Scope)
+	assert.Equal(t, 2, got.PermissionCount)
+	assert.Equal(t, 1, got.MemberCount)
+}
+
+func TestRole_UpdateGlobal_Forbidden_NonAdmin(t *testing.T) {
+	roleID := mustCreateRole(t, solutionRolesPath(roleSolution(t)), "viewer", adminHeader())
+	tok, _, _ := mustLoginNewUser(t)
+	assert.Equal(t, 403, testSrv.PATCH(rolePath(roleID), map[string]any{"name": "X"}, testhelper.BearerHeader(tok.AccessToken)).Code)
+	assert.Equal(t, 403, testSrv.DELETE(rolePath(roleID), testhelper.BearerHeader(tok.AccessToken)).Code)
+}
+
+func TestRole_UpdateGlobal_SystemImmutable(t *testing.T) {
+	roleID := mustCreateRole(t, solutionRolesPath(roleSolution(t)), "owner", adminHeader())
+	_, err := testSrv.DB.ExecContext(context.Background(), `UPDATE roles SET is_system = TRUE WHERE id = $1`, roleID)
+	require.NoError(t, err)
+	assert.Equal(t, 403, testSrv.PATCH(rolePath(roleID), map[string]any{"name": "X"}, adminHeader()).Code)
+	assert.Equal(t, 403, testSrv.DELETE(rolePath(roleID), adminHeader()).Code)
+}
+
+func TestRole_UpdateGlobal_InvalidPayload(t *testing.T) {
+	roleID := mustCreateRole(t, solutionRolesPath(roleSolution(t)), "viewer", adminHeader())
+	assert.Equal(t, 422, testSrv.PATCH(rolePath(roleID), map[string]any{"name": " "}, adminHeader()).Code)
+}
+
+func TestRole_UpdateGlobal_NotFound_CustomRole(t *testing.T) {
+	h, companyID, solID := companyRoleFixture(t)
+	custom := mustCreateRole(t, companyRolesPath(companyID, solID), "custom_x", h)
+	assert.Equal(t, 404, testSrv.PATCH(rolePath(custom), map[string]any{"name": "X"}, adminHeader()).Code)
+}
+
+func TestRole_UpdateDeleteGlobal_Success(t *testing.T) {
+	f := newAuthzFixture(t)
+	f.assign(t, f.hrAdmin, "", "")
+
+	w := testSrv.PATCH(rolePath(f.hrAdmin), map[string]any{"name": "HR Admin Baru", "description": "Kelola karyawan"}, adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got roleDetail
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, "HR Admin Baru", got.Name)
+	require.NotNil(t, got.Description)
+	assert.Equal(t, "Kelola karyawan", *got.Description)
+
+	require.Equal(t, 200, testSrv.DELETE(rolePath(f.hrAdmin), adminHeader()).Code)
+	assert.Equal(t, 404, testSrv.GET(rolePath(f.hrAdmin), adminHeader()).Code)
+	var n int
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM user_role_assignments WHERE role_id = $1`, f.hrAdmin).Scan(&n))
+	assert.Equal(t, 0, n, "assignment ikut dihapus")
+	assert.False(t, f.serviceCheck(t, "employee.read", "", "").Allowed)
+}
+
+func TestCompanyRole_Get_And_Holders(t *testing.T) {
+	f := newAuthzFixture(t)
+	f.assign(t, f.supervisor, "branch", f.b1)
+
+	w := testSrv.GET(companyRolePath(f.companyID, f.supervisor), f.ownerH)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got roleDetail
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, "company", got.Scope)
+	assert.Equal(t, 1, got.MemberCount)
+
+	// Role global juga bisa dilihat dari konteks company.
+	assert.Equal(t, 200, testSrv.GET(companyRolePath(f.companyID, f.hrAdmin), f.ownerH).Code)
+
+	w = testSrv.GET(companyRolePath(f.companyID, f.supervisor)+"/members", f.ownerH)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var holders []struct {
+		UserID    string `json:"user_id"`
+		ScopeType string `json:"scope_type"`
+		ScopeName string `json:"scope_name"`
+	}
+	testhelper.DecodeBody(t, w, &holders)
+	require.Len(t, holders, 1)
+	assert.Equal(t, f.staffID, holders[0].UserID)
+	assert.Equal(t, "Branch B1", holders[0].ScopeName)
+}
+
+func TestCompanyRole_Get_Unauthenticated_Forbidden_NotFound(t *testing.T) {
+	f := newAuthzFixture(t)
+	assert.Equal(t, 401, testSrv.GET(companyRolePath(f.companyID, f.supervisor)).Code)
+	strangerH, _, _ := mustCompanyOwner(t)
+	assert.Equal(t, 403, testSrv.GET(companyRolePath(f.companyID, f.supervisor), strangerH).Code)
+	assert.Equal(t, 404, testSrv.GET(companyRolePath(f.companyID, uuid.NewString()), f.ownerH).Code)
+	// Custom role company lain → 404.
+	other, otherCompany, otherSol := companyRoleFixture(t)
+	foreignRole := mustCreateRole(t, companyRolesPath(otherCompany, otherSol), "foreign", other)
+	assert.Equal(t, 404, testSrv.GET(companyRolePath(f.companyID, foreignRole), f.ownerH).Code)
+}
+
+func TestCompanyRole_UpdateDelete(t *testing.T) {
+	f := newAuthzFixture(t)
+	f.assign(t, f.supervisor, "branch", f.b1)
+
+	assert.Equal(t, 401, testSrv.PATCH(companyRolePath(f.companyID, f.supervisor), map[string]any{"name": "X"}).Code)
+	assert.Equal(t, 404, testSrv.PATCH(companyRolePath(f.companyID, f.hrAdmin), map[string]any{"name": "X"}, f.ownerH).Code, "role global")
+	assert.Equal(t, 422, testSrv.PATCH(companyRolePath(f.companyID, f.supervisor), map[string]any{"name": ""}, f.ownerH).Code)
+
+	w := testSrv.PATCH(companyRolePath(f.companyID, f.supervisor), map[string]any{"name": "Supervisor Cabang"}, f.ownerH)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got roleDetail
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, "Supervisor Cabang", got.Name)
+	assert.Equal(t, 1, countEvents(t, "role.updated", f.companyID))
+
+	assert.Equal(t, 404, testSrv.DELETE(companyRolePath(f.companyID, f.hrAdmin), f.ownerH).Code, "role global")
+	require.Equal(t, 200, testSrv.DELETE(companyRolePath(f.companyID, f.supervisor), f.ownerH).Code)
+	assert.Equal(t, 404, testSrv.GET(companyRolePath(f.companyID, f.supervisor), f.ownerH).Code)
+	assert.False(t, f.serviceCheck(t, "attendance.edit", "branch", f.b1).Allowed)
+	assert.Equal(t, 1, countEvents(t, "role.deleted", f.companyID))
+}
+
+func TestCompanyRole_List_KindAndCounts(t *testing.T) {
+	f := newAuthzFixture(t)
+	f.assign(t, f.supervisor, "branch", f.b1)
+
+	var resp struct {
+		Data []struct {
+			Code            string `json:"code"`
+			PermissionCount int    `json:"permission_count"`
+			MemberCount     int    `json:"member_count"`
+		} `json:"data"`
+	}
+	w := testSrv.GET(companyRolesPath(f.companyID, f.solutionID)+"?kind=custom", f.ownerH)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	require.Len(t, resp.Data, 1)
+	assert.Equal(t, "supervisor", resp.Data[0].Code)
+	assert.Equal(t, 1, resp.Data[0].PermissionCount)
+	assert.Equal(t, 1, resp.Data[0].MemberCount)
+
+	w = testSrv.GET(companyRolesPath(f.companyID, f.solutionID)+"?kind=global", f.ownerH)
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	require.Len(t, resp.Data, 1)
+	assert.Equal(t, "hr_admin", resp.Data[0].Code)
+
+	assert.Equal(t, 422, testSrv.GET(companyRolesPath(f.companyID, f.solutionID)+"?kind=system", f.ownerH).Code)
+}

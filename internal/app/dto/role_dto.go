@@ -10,6 +10,8 @@ type CreateRoleRequest struct {
 
 type ListRoleQuery struct {
 	Search *string `form:"search"`
+	// Kind — global (termasuk sistem) | custom (milik company). Kosong = semua.
+	Kind *string `form:"kind" binding:"omitempty,oneof=global custom"`
 	PaginationParams
 }
 
@@ -39,6 +41,28 @@ type RoleResponse struct {
 	Scope     string    `json:"scope"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// PermissionCount & MemberCount — jumlah permission dan user pemegang role. Dalam konteks
+	// company, MemberCount hanya menghitung pemegang di company tersebut.
+	PermissionCount int `json:"permission_count"`
+	MemberCount     int `json:"member_count"`
+}
+
+// UpdateRoleRequest — field nil tidak diubah; description "" = dikosongkan.
+type UpdateRoleRequest struct {
+	Name        *string `json:"name" binding:"omitempty,max=255"`
+	Description *string `json:"description" binding:"omitempty,max=1000"`
+}
+
+// RoleHolderResponse — satu assignment role pada user di company.
+type RoleHolderResponse struct {
+	AssignmentID string    `json:"assignment_id"`
+	UserID       string    `json:"user_id"`
+	Name         string    `json:"name"`
+	Email        string    `json:"email"`
+	ScopeType    string    `json:"scope_type"`
+	ScopeID      string    `json:"scope_id"`
+	ScopeName    string    `json:"scope_name"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type RolePermissionResponse struct {

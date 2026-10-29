@@ -97,3 +97,36 @@ func (h *SolutionHandler) Get(c *gin.Context) {
 	}
 	respond.OK(c, "solution", resp)
 }
+
+// Update godoc
+//
+//	@Summary		Update solution
+//	@Description	Ubah nama / deskripsi / status (kode tidak bisa diubah). Solution sesi admin sendiri tidak bisa dinonaktifkan.
+//	@Tags			Solutions
+//	@Security		BearerAuth
+//	@Accept			json
+//	@Produce		json
+//	@Param			solutionId			path		string						true	"Solution ID"
+//	@Param			body				body		dto.UpdateSolutionRequest	true	"Solution"
+//	@Success		200					{object}	respond.SuccessBody{data=dto.SolutionResponse}
+//	@Failure		401,403,404,422		{object}	respond.ErrorBody
+//	@Router			/api/v1/solutions/{solutionId} [patch]
+func (h *SolutionHandler) Update(c *gin.Context) {
+	var param dto.SolutionIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.UpdateSolutionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	resp, err := h.useCase.Update(c.Request.Context(), actor, param.SolutionID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "solution updated", resp)
+}

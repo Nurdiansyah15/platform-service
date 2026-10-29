@@ -31,6 +31,7 @@ type Handlers struct {
 	Role     *api.RoleHandler
 	Authz    *api.AuthzHandler
 	Webhook  *api.WebhookHandler
+	Dash     *api.DashboardHandler
 }
 
 type Deps struct {
@@ -94,4 +95,5 @@ func registerDomainRoutes(r Routes, h Handlers) {
 	RegisterRoleRoutes(r, h.Role)
 	RegisterAuthzRoutes(r, h.Authz)
 	RegisterWebhookRoutes(r, h.Webhook)
+	RegisterDashboardRoutes(r, h.Dash)
 }

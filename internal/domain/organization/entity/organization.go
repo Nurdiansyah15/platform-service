@@ -94,6 +94,34 @@ func (c *Company) ChangeStatus(raw string, now time.Time) (bool, error) {
 	return true, nil
 }
 
+// Update mengganti nama / kode / status branch; nil = tidak diubah.
+func (b *Branch) Update(name, code, status *string, now time.Time) error {
+	p := OrgUnitParams{Name: b.Name, Code: b.Code.Value(), Status: b.Status.String()}
+	if name != nil {
+		p.Name = *name
+	}
+	if code != nil {
+		p.Code = *code
+	}
+	if status != nil {
+		p.Status = *status
+	}
+	n, c, s, err := validateOrgUnit(p)
+	if err != nil {
+		return err
+	}
+	b.Name, b.Code, b.Status = n, c, s
+	b.UpdatedAt = now.UTC()
+	return nil
+}
+
+// Delete menandai branch terhapus (soft delete).
+func (b *Branch) Delete(now time.Time) {
+	t := now.UTC()
+	b.DeletedAt = &t
+	b.UpdatedAt = t
+}
+
 func NewBranch(companyID string, p OrgUnitParams, now time.Time) (*Branch, error) {
 	name, code, status, err := validateOrgUnit(p)
 	if err != nil {

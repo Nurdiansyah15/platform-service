@@ -27,6 +27,7 @@ Domain model berisi rule bisnis inti. Usecase mengatur alur. Infrastruktur hanya
 - Go 1.25, Gin, `database/sql` + `pgx/v5/stdlib` (SQL ditulis manual, tanpa ORM), golang-migrate (file di-embed), go-playground/validator (tag `binding`), golang-jwt/v5 (RS256), testify, testcontainers-go.
 - PostgreSQL 16 (minimal 15 untuk `UNIQUE NULLS NOT DISTINCT`).
 - `web/`: Nuxt 4 SPA (`ssr: false`), Nuxt UI v4 + Pinia, bun; dev via service `web` di compose (`make dev-up`) atau `make web-dev`.
+  - UI berbahasa Indonesia. Status → label/warna hanya lewat `utils/status.ts` (`StatusBadge`). Konfirmasi aksi pakai `useConfirm()` (bukan `window.confirm`); aksi permanen pakai `typeToConfirm`. Form pakai `UForm` + `validate`, error field API lewat `useApiError().fieldErrors`.
 
 ```
 cmd/{app,migrate,seeder,worker}/main.go
@@ -46,7 +47,14 @@ internal/
     middleware/ respond/ httperror/ httpquery/
     router/                  # router.go + <ctx>_routes.go (RegisterXxxRoutes)
 locales/{en,id}.json
-web/                       # UI Nuxt 4 (SPA) — auth, org, solution, authorization
+web/app/                   # UI Nuxt 4 (SPA), Nuxt UI v4 Dashboard
+  layouts/default.vue      #   shell: UDashboardSidebar (switcher company, nav Company & Platform, menu user)
+  components/              #   AppPage, CompanyPage, SolutionPage, SectionCard, StatusBadge, ConfirmModal,
+                           #   SecretModal, UserPicker, SolutionSelect, PermissionPicker, RolePermissionsEditor, ...
+  composables/             #   useApi, useListQuery (pagination+search+filter ↔ URL), useConfirm, useApiError,
+                           #   useCompanyContext, useSolutionContext
+  pages/companies/[cid]/   #   workspace company: ringkasan, members, branches, roles, settings
+  pages/admin/             #   khusus platform admin (middleware admin): companies, solutions, users
 ```
 
 ---

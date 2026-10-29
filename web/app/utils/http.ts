@@ -14,7 +14,7 @@ export function toAppError(err: unknown): AppError {
   const status = e?.response?.status ?? 0
   const body = e?.data
   const fields: Record<string, string> = {}
-  let message = e?.message || 'Terjadi kesalahan'
+  let message = status === 0 ? 'Tidak dapat terhubung ke server.' : 'Terjadi kesalahan. Coba lagi.'
 
   if (body) {
     if (typeof body.errors === 'string') {
@@ -26,7 +26,7 @@ export function toAppError(err: unknown): AppError {
       const first = Object.values(fields)[0]
       if (first) message = first
     } else if (body.error_code) {
-      message = body.error_code
+      message = 'Permintaan tidak dapat diproses.'
     }
   }
 
@@ -54,6 +54,8 @@ export async function apiFetch<T = unknown>(
       body: opts.body as Record<string, unknown> | undefined,
       query: opts.query,
       headers: {
+        // Pesan error API diterjemahkan sesuai bahasa ini (locales/id.json).
+        'Accept-Language': 'id',
         ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
         ...(opts.headers ?? {}),
       },

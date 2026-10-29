@@ -270,3 +270,60 @@ func TestCompany_Update_Success_AdminChangesStatus(t *testing.T) {
 	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(), `SELECT status FROM companies WHERE id = $1`, companyID).Scan(&status))
 	assert.Equal(t, "suspended", status)
 }
+
+// ── Summary ──────────────────────────────────────────────────────────────────
+
+func TestCompany_Summary_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.GET(companyPath(uuid.NewString())+"/summary").Code)
+}
+
+func TestCompany_Summary_Forbidden_NonMember(t *testing.T) {
+	_, _, companyID := mustCompanyOwner(t)
+	_, strangerID, _ := mustCompanyOwner(t)
+	assert.Equal(t, 403, testSrv.GET(companyPath(companyID)+"/summary", companyToken(strangerID, companyID)).Code)
+}
+
+func TestCompany_Summary_NotFound(t *testing.T) {
+	assert.Equal(t, 404, testSrv.GET(companyPath(uuid.NewString())+"/summary", adminHeader()).Code)
+}
+
+func TestCompany_Summary_Success(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	invited := mustCreateUser(t, testhelper.UniqueEmail("inv"))
+	require.Equal(t, 201, testSrv.POST(membersPath(companyID), map[string]any{"user_id": invited, "status": "invited"}, h).Code)
+	mustCreateBranch(t, h, companyID, "B1")
+
+	w := testSrv.GET(companyPath(companyID)+"/summary", h)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got struct {
+		Members struct {
+			Active, Invited, Inactive int
+		} `json:"members"`
+		Branches        int `json:"branches"`
+		CustomRoles     int `json:"custom_roles"`
+		RoleAssignments int `json:"role_assignments"`
+	}
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, 1, got.Members.Active)
+	assert.Equal(t, 1, got.Members.Invited)
+	assert.Equal(t, 1, got.Branches)
+	assert.Equal(t, 0, got.CustomRoles)
+}
+
+func TestCompany_List_IncludesMemberCount(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	other := mustCreateUser(t, testhelper.UniqueEmail("m"))
+	require.Equal(t, 201, testSrv.POST(membersPath(companyID), map[string]any{"user_id": other}, h).Code)
+
+	w := testSrv.GET("/api/v1/companies", h)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var resp struct {
+		Data []struct {
+			ID          string `json:"id"`
+			MemberCount int    `json:"member_count"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	require.Len(t, resp.Data, 1)
+	assert.Equal(t, 2, resp.Data[0].MemberCount)
+}

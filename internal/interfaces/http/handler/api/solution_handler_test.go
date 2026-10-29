@@ -248,3 +248,76 @@ func TestSolution_Get_OnPremReadAllowed(t *testing.T) {
 	w := testOnPremSrv.GET("/api/v1/solutions/"+id, userHeader())
 	assert.Equal(t, 200, w.Code, w.Body.String())
 }
+
+// ── Update ───────────────────────────────────────────────────────────────────
+
+func solutionPath(id string) string { return "/api/v1/solutions/" + id }
+
+func TestSolution_Update_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.PATCH(solutionPath(uuid.NewString()), map[string]any{"name": "X"}).Code)
+}
+
+func TestSolution_Update_Forbidden(t *testing.T) {
+	id := mustCreateSolution(t, testhelper.UniqueCode("upd"))
+	tok, _, _ := mustLoginNewUser(t)
+	assert.Equal(t, 403, testSrv.PATCH(solutionPath(id), map[string]any{"name": "X"}, testhelper.BearerHeader(tok.AccessToken)).Code)
+	w := testOnPremSrv.PATCH(solutionPath(id), map[string]any{"name": "X"}, adminHeader())
+	require.Equal(t, 403, w.Code)
+	assert.Equal(t, "LICENSE_MANAGED", testhelper.DecodeError(t, w).ErrorCode)
+}
+
+func TestSolution_Update_InvalidPayload(t *testing.T) {
+	id := mustCreateSolution(t, testhelper.UniqueCode("upd"))
+	assert.Equal(t, 422, testSrv.PATCH(solutionPath(id), map[string]any{"status": "deleted"}, adminHeader()).Code)
+	assert.Equal(t, 422, testSrv.PATCH(solutionPath(id), map[string]any{"name": " "}, adminHeader()).Code)
+}
+
+func TestSolution_Update_NotFound(t *testing.T) {
+	assert.Equal(t, 404, testSrv.PATCH(solutionPath(uuid.NewString()), map[string]any{"name": "X"}, adminHeader()).Code)
+}
+
+func TestSolution_Update_OwnSessionSolution(t *testing.T) {
+	var id string
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(), `SELECT id FROM solutions WHERE code = $1`, testConsoleSolution).Scan(&id))
+	w := testSrv.PATCH(solutionPath(id), map[string]any{"status": "inactive"}, adminHeader())
+	assert.Equal(t, 422, w.Code, w.Body.String())
+}
+
+func TestSolution_Update_Success(t *testing.T) {
+	code := testhelper.UniqueCode("upd")
+	id := mustCreateSolution(t, code)
+
+	w := testSrv.PATCH(solutionPath(id), map[string]any{"name": "Easy HR", "description": "HRIS", "status": "inactive"}, adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got solutionData
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, code, got.Code, "kode tidak berubah")
+	assert.Equal(t, "Easy HR", got.Name)
+	require.NotNil(t, got.Description)
+	assert.Equal(t, "HRIS", *got.Description)
+	assert.Equal(t, "inactive", got.Status)
+}
+
+// ── Admin summary ────────────────────────────────────────────────────────────
+
+func TestDashboard_AdminSummary(t *testing.T) {
+	assert.Equal(t, 401, testSrv.GET("/api/v1/admin/summary").Code)
+	tok, _, _ := mustLoginNewUser(t)
+	assert.Equal(t, 403, testSrv.GET("/api/v1/admin/summary", testhelper.BearerHeader(tok.AccessToken)).Code)
+
+	w := testSrv.GET("/api/v1/admin/summary", adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got struct {
+		Users struct {
+			Active int `json:"active"`
+			Admins int `json:"admins"`
+		} `json:"users"`
+		Solutions struct {
+			Active int `json:"active"`
+		} `json:"solutions"`
+	}
+	testhelper.DecodeBody(t, w, &got)
+	assert.Positive(t, got.Users.Active)
+	assert.Positive(t, got.Users.Admins)
+	assert.Positive(t, got.Solutions.Active)
+}

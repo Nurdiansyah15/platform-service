@@ -95,6 +95,7 @@ func (uc *CompanyUseCase) List(ctx context.Context, actor *principal.Principal, 
 	for _, it := range items {
 		out = append(out, dto.CompanyResponse{
 			ID: it.ID, Name: it.Name, Slug: it.Slug, Status: it.Status, CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt,
+			MemberCount: it.MemberCount,
 		})
 	}
 	return out, meta, nil
@@ -113,6 +114,20 @@ func (uc *CompanyUseCase) Get(ctx context.Context, actor *principal.Principal, c
 	}
 	resp := toCompanyResponse(c)
 	return &resp, nil
+}
+
+// Summary menampilkan ringkasan jumlah data company untuk dashboard.
+//
+// Required — auth: user (platform admin, atau member active dengan cid = companyId) atau service | scope: users:read
+func (uc *CompanyUseCase) Summary(ctx context.Context, actor *principal.Principal, companyID string) (*dto.CompanySummaryResponse, error) {
+	if _, err := accessibleCompany(ctx, uc.access, uc.deps.Companies, actor, companyID); err != nil {
+		return nil, err
+	}
+	s, err := uc.deps.CompanyQuery.Summary(ctx, companyID)
+	if err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+	return s, nil
 }
 
 // Update mengubah nama / slug company; status hanya boleh diubah platform admin.

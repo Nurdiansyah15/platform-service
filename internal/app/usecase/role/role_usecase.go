@@ -7,6 +7,7 @@ import (
 	"platform-service/internal/app/dto"
 	"platform-service/internal/app/port"
 	"platform-service/internal/app/principal"
+	authzrepo "platform-service/internal/domain/authz/repository"
 	domainerr "platform-service/internal/domain/errors"
 	orgconstant "platform-service/internal/domain/organization/constant"
 	orgrepo "platform-service/internal/domain/organization/repository"
@@ -33,6 +34,8 @@ type RoleDeps struct {
 	Members         orgrepo.CompanyMemberRepository
 	Subscriptions   subrepo.SubscriptionRepository
 	Query           port.RoleQueryReadModel
+	// Assignments — assignment role ikut dihapus saat role dihapus.
+	Assignments authzrepo.RoleAssignmentRepository
 }
 
 type RoleUseCase struct {
@@ -55,6 +58,39 @@ func (uc *RoleUseCase) ListGlobal(ctx context.Context, actor *principal.Principa
 		return nil, dto.Meta{}, err
 	}
 	return uc.list(ctx, port.RoleListReadQuery{SolutionID: solutionID, Search: req.Search, PaginationParams: req.PaginationParams})
+}
+
+// GetGlobal mengambil detail role lewat ID. Custom role hanya untuk company pemilik (selain itu 404).
+//
+// Required — auth: user / service | scope: -
+func (uc *RoleUseCase) GetGlobal(ctx context.Context, actor *principal.Principal, roleID string) (*dto.RoleResponse, error) {
+	r, err := uc.visibleRole(ctx, actor, roleID)
+	if err != nil {
+		return nil, err
+	}
+	return uc.detail(ctx, r, r.CompanyID)
+}
+
+// UpdateGlobal mengubah nama / deskripsi role global. Role sistem tidak bisa diubah.
+//
+// Required — auth: user (platform admin) | scope: -
+func (uc *RoleUseCase) UpdateGlobal(ctx context.Context, roleID string, req dto.UpdateRoleRequest) (*dto.RoleResponse, error) {
+	r, err := uc.globalRole(ctx, roleID)
+	if err != nil {
+		return nil, err
+	}
+	return uc.update(ctx, r, req, nil)
+}
+
+// DeleteGlobal menghapus role global (soft delete) beserta seluruh assignment-nya.
+//
+// Required — auth: user (platform admin) | scope: -
+func (uc *RoleUseCase) DeleteGlobal(ctx context.Context, roleID string) error {
+	r, err := uc.globalRole(ctx, roleID)
+	if err != nil {
+		return err
+	}
+	return uc.delete(ctx, r)
 }
 
 // CreateGlobal membuat role global (template) untuk solution.
@@ -110,7 +146,7 @@ func (uc *RoleUseCase) ListForCompany(ctx context.Context, actor *principal.Prin
 	if err := uc.ensureCompanySolutionAccess(ctx, actor, companyID, solutionID); err != nil {
 		return nil, dto.Meta{}, err
 	}
-	return uc.list(ctx, port.RoleListReadQuery{SolutionID: solutionID, CompanyID: &companyID, Search: req.Search, PaginationParams: req.PaginationParams})
+	return uc.list(ctx, port.RoleListReadQuery{SolutionID: solutionID, CompanyID: &companyID, Search: req.Search, Kind: req.Kind, PaginationParams: req.PaginationParams})
 }
 
 // CreateForCompany membuat custom role milik company. Company wajib subscribe solution
@@ -132,6 +168,55 @@ func (uc *RoleUseCase) CreateForCompany(ctx context.Context, actor *principal.Pr
 	return uc.create(ctx, entity.NewRoleParams{SolutionID: solutionID, CompanyID: &companyID, Code: req.Code, Name: req.Name, Description: req.Description})
 }
 
+// GetForCompany mengambil role (global atau custom milik company) dalam konteks company;
+// jumlah pemegang hanya dihitung di company tersebut.
+//
+// Required — auth: user (platform admin / member dengan cid) atau service milik solution | scope: roles:write
+func (uc *RoleUseCase) GetForCompany(ctx context.Context, actor *principal.Principal, companyID, roleID string) (*dto.RoleResponse, error) {
+	r, err := uc.companyVisibleRole(ctx, actor, companyID, roleID)
+	if err != nil {
+		return nil, err
+	}
+	return uc.detail(ctx, r, &companyID)
+}
+
+// ListHolders menampilkan pemegang role di company (user + scope assignment).
+//
+// Required — auth: user (platform admin / member dengan cid) atau service milik solution | scope: roles:write
+func (uc *RoleUseCase) ListHolders(ctx context.Context, actor *principal.Principal, companyID, roleID string) ([]dto.RoleHolderResponse, error) {
+	r, err := uc.companyVisibleRole(ctx, actor, companyID, roleID)
+	if err != nil {
+		return nil, err
+	}
+	items, err := uc.deps.Query.ListHolders(ctx, r.ID, companyID)
+	if err != nil {
+		return nil, mapRoleDomainError(err)
+	}
+	return items, nil
+}
+
+// UpdateForCompany mengubah nama / deskripsi custom role milik company.
+//
+// Required — auth: user (platform admin / member dengan cid) atau service milik solution | scope: roles:write
+func (uc *RoleUseCase) UpdateForCompany(ctx context.Context, actor *principal.Principal, companyID, roleID string, req dto.UpdateRoleRequest) (*dto.RoleResponse, error) {
+	r, err := uc.ownedRole(ctx, actor, companyID, roleID)
+	if err != nil {
+		return nil, err
+	}
+	return uc.update(ctx, r, req, &companyID)
+}
+
+// DeleteForCompany menghapus custom role milik company (soft delete) beserta assignment-nya.
+//
+// Required — auth: user (platform admin / member dengan cid) atau service milik solution | scope: roles:write
+func (uc *RoleUseCase) DeleteForCompany(ctx context.Context, actor *principal.Principal, companyID, roleID string) error {
+	r, err := uc.ownedRole(ctx, actor, companyID, roleID)
+	if err != nil {
+		return err
+	}
+	return uc.delete(ctx, r)
+}
+
 // ReplaceCompanyRolePermissions mengganti permission custom role milik company. Role global
 // atau milik company lain → 404.
 //
@@ -151,6 +236,108 @@ func (uc *RoleUseCase) ReplaceCompanyRolePermissions(ctx context.Context, actor 
 }
 
 // ── Helper ───────────────────────────────────────────────────────────────────
+
+// visibleRole — role lewat ID: global harus solution-nya terlihat; custom hanya company pemilik.
+func (uc *RoleUseCase) visibleRole(ctx context.Context, actor *principal.Principal, roleID string) (*entity.Role, error) {
+	r, err := uc.deps.Roles.FindByID(ctx, roleID)
+	if err != nil {
+		return nil, mapRoleDomainError(err)
+	}
+	if r.IsGlobal() {
+		if err := uc.ensureSolutionVisible(ctx, actor, r.SolutionID); err != nil {
+			return nil, mapRoleDomainError(domainerr.New(constant.CodeRoleNotFound))
+		}
+		return r, nil
+	}
+	if err := uc.ensureCompanyRoleAccess(ctx, actor, *r.CompanyID, r); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// companyVisibleRole — role global atau custom milik company, dilihat dari company tersebut.
+func (uc *RoleUseCase) companyVisibleRole(ctx context.Context, actor *principal.Principal, companyID, roleID string) (*entity.Role, error) {
+	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), companyID); err != nil {
+		return nil, mapRoleDomainError(err)
+	}
+	r, err := uc.deps.Roles.FindByID(ctx, roleID)
+	if err != nil {
+		return nil, mapRoleDomainError(err)
+	}
+	if (!r.IsGlobal() && !r.IsOwnedBy(companyID)) || (actor.IsService() && actor.SolutionID != r.SolutionID) {
+		return nil, mapRoleDomainError(domainerr.New(constant.CodeRoleNotFound))
+	}
+	return r, nil
+}
+
+// ownedRole — custom role milik company (role global / company lain → 404).
+func (uc *RoleUseCase) ownedRole(ctx context.Context, actor *principal.Principal, companyID, roleID string) (*entity.Role, error) {
+	r, err := uc.companyVisibleRole(ctx, actor, companyID, roleID)
+	if err != nil {
+		return nil, err
+	}
+	if !r.IsOwnedBy(companyID) {
+		return nil, mapRoleDomainError(domainerr.New(constant.CodeRoleNotFound))
+	}
+	return r, nil
+}
+
+// globalRole — role global lewat ID (custom role → 404).
+func (uc *RoleUseCase) globalRole(ctx context.Context, roleID string) (*entity.Role, error) {
+	r, err := uc.deps.Roles.FindByID(ctx, roleID)
+	if err != nil {
+		return nil, mapRoleDomainError(err)
+	}
+	if !r.IsGlobal() {
+		return nil, mapRoleDomainError(domainerr.New(constant.CodeRoleNotFound))
+	}
+	return r, nil
+}
+
+func (uc *RoleUseCase) detail(ctx context.Context, r *entity.Role, companyID *string) (*dto.RoleResponse, error) {
+	st, err := uc.deps.Query.Stats(ctx, r.ID, companyID)
+	if err != nil {
+		return nil, mapRoleDomainError(err)
+	}
+	resp := toRoleResponse(r)
+	resp.PermissionCount, resp.MemberCount = st.PermissionCount, st.MemberCount
+	return &resp, nil
+}
+
+func (uc *RoleUseCase) update(ctx context.Context, r *entity.Role, req dto.UpdateRoleRequest, companyID *string) (*dto.RoleResponse, error) {
+	if err := r.Update(req.Name, req.Description, uc.now()); err != nil {
+		return nil, mapRoleDomainError(err)
+	}
+	err := uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
+		if err := uc.deps.Roles.Save(ctx, r); err != nil {
+			return err
+		}
+		return uc.deps.Outbox.Append(ctx, roleEvent(event.TypeRoleUpdated, r, nil))
+	})
+	if err != nil {
+		return nil, mapRoleDomainError(err)
+	}
+	return uc.detail(ctx, r, companyID)
+}
+
+func (uc *RoleUseCase) delete(ctx context.Context, r *entity.Role) error {
+	if err := r.Delete(uc.now()); err != nil {
+		return mapRoleDomainError(err)
+	}
+	err := uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
+		if err := uc.deps.Roles.Save(ctx, r); err != nil {
+			return err
+		}
+		if err := uc.deps.Assignments.DeleteByRole(ctx, r.ID); err != nil {
+			return err
+		}
+		return uc.deps.Outbox.Append(ctx, roleEvent(event.TypeRoleDeleted, r, nil))
+	})
+	if err != nil {
+		return mapRoleDomainError(err)
+	}
+	return nil
+}
 
 func (uc *RoleUseCase) create(ctx context.Context, p entity.NewRoleParams) (*dto.RoleResponse, error) {
 	r, err := entity.NewRole(p, uc.now())
@@ -214,7 +401,7 @@ func (uc *RoleUseCase) list(ctx context.Context, q port.RoleListReadQuery) ([]dt
 		out = append(out, dto.RoleResponse{
 			ID: it.ID, SolutionID: it.SolutionID, CompanyID: it.CompanyID, Code: it.Code, Name: it.Name,
 			Description: it.Description, IsSystem: it.IsSystem, Scope: roleScope(it.CompanyID, it.IsSystem),
-			CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt,
+			CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt, PermissionCount: it.PermissionCount, MemberCount: it.MemberCount,
 		})
 	}
 	return out, meta, nil

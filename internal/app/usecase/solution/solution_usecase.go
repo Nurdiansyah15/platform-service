@@ -2,10 +2,13 @@ package solution
 
 import (
 	"context"
+	"time"
 
 	"platform-service/internal/app/dto"
 	"platform-service/internal/app/port"
 	"platform-service/internal/app/principal"
+	domainerr "platform-service/internal/domain/errors"
+	"platform-service/internal/domain/solution/constant"
 	"platform-service/internal/domain/solution/entity"
 	solutionrepo "platform-service/internal/domain/solution/repository"
 	"platform-service/internal/domain/solution/valueobject"
@@ -89,6 +92,28 @@ func (uc *SolutionUseCase) GetByID(ctx context.Context, actor *principal.Princip
 	}
 	if !s.IsActive() && !isPlatformAdmin(actor) {
 		return nil, errSolutionNotFound()
+	}
+	resp := toSolutionResponse(s)
+	return &resp, nil
+}
+
+// Update mengubah nama / deskripsi / status solution. Solution sesi admin sendiri tidak boleh
+// dinonaktifkan agar admin tidak terkunci dari console.
+//
+// Required — auth: user (platform admin) | scope: - | deployment: cloud (LICENSE_MANAGED di on_prem)
+func (uc *SolutionUseCase) Update(ctx context.Context, actor *principal.Principal, id string, req dto.UpdateSolutionRequest) (*dto.SolutionResponse, error) {
+	s, err := uc.deps.Repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, mapSolutionDomainError(err)
+	}
+	if req.Status != nil && *req.Status != valueobject.SolutionStatusActive.String() && s.Code.Value() == actor.SolutionCode {
+		return nil, mapSolutionDomainError(domainerr.New(constant.CodeSolutionInUseBySession))
+	}
+	if err := s.Update(req.Name, req.Description, req.Status, time.Now()); err != nil {
+		return nil, mapSolutionDomainError(err)
+	}
+	if err := uc.deps.Repo.Save(ctx, s); err != nil {
+		return nil, mapSolutionDomainError(err)
 	}
 	resp := toSolutionResponse(s)
 	return &resp, nil

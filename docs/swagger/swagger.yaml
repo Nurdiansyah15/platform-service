@@ -51,6 +51,38 @@ definitions:
       updated_at:
         type: string
     type: object
+  dto.AdminSummaryResponse:
+    properties:
+      active_clients:
+        type: integer
+      companies:
+        properties:
+          active:
+            type: integer
+          closed:
+            type: integer
+          suspended:
+            type: integer
+        type: object
+      solutions:
+        properties:
+          active:
+            type: integer
+          inactive:
+            type: integer
+        type: object
+      users:
+        properties:
+          active:
+            type: integer
+          admins:
+            type: integer
+          inactive:
+            type: integer
+          suspended:
+            type: integer
+        type: object
+    type: object
   dto.AssignedBenefitResponse:
     properties:
       aggregation_strategy:
@@ -238,6 +270,10 @@ definitions:
         type: string
       name:
         type: string
+      role_count:
+        description: RoleCount — jumlah role assignment member di company (semua solution;
+          hanya diisi di list).
+        type: integer
       status:
         type: string
       user_id:
@@ -249,6 +285,9 @@ definitions:
         type: string
       id:
         type: string
+      member_count:
+        description: MemberCount — jumlah member active (hanya diisi di list).
+        type: integer
       name:
         type: string
       slug:
@@ -257,6 +296,24 @@ definitions:
         type: string
       updated_at:
         type: string
+    type: object
+  dto.CompanySummaryResponse:
+    properties:
+      branches:
+        type: integer
+      custom_roles:
+        type: integer
+      members:
+        properties:
+          active:
+            type: integer
+          inactive:
+            type: integer
+          invited:
+            type: integer
+        type: object
+      role_assignments:
+        type: integer
     type: object
   dto.CreateAddonRequest:
     properties:
@@ -671,6 +728,15 @@ definitions:
       user:
         $ref: '#/definitions/dto.UserResponse'
     type: object
+  dto.MemberCandidateResponse:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
   dto.Meta:
     properties:
       current_page:
@@ -871,6 +937,25 @@ definitions:
       user_id:
         type: string
     type: object
+  dto.RoleHolderResponse:
+    properties:
+      assignment_id:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      name:
+        type: string
+      scope_id:
+        type: string
+      scope_name:
+        type: string
+      scope_type:
+        type: string
+      user_id:
+        type: string
+    type: object
   dto.RolePermissionResponse:
     properties:
       code:
@@ -896,8 +981,15 @@ definitions:
         type: string
       is_system:
         type: boolean
+      member_count:
+        type: integer
       name:
         type: string
+      permission_count:
+        description: |-
+          PermissionCount & MemberCount — jumlah permission dan user pemegang role. Dalam konteks
+          company, MemberCount hanya menghitung pemegang di company tersebut.
+        type: integer
       scope:
         description: Scope — "system" | "global" | "company".
         type: string
@@ -1153,6 +1245,29 @@ definitions:
         minLength: 8
         type: string
     type: object
+  dto.UpdateOrgUnitRequest:
+    properties:
+      code:
+        maxLength: 100
+        type: string
+      name:
+        maxLength: 255
+        type: string
+      status:
+        enum:
+        - active
+        - inactive
+        type: string
+    type: object
+  dto.UpdateRoleRequest:
+    properties:
+      description:
+        maxLength: 1000
+        type: string
+      name:
+        maxLength: 255
+        type: string
+    type: object
   dto.UpdateSolutionClientRequest:
     properties:
       name:
@@ -1162,6 +1277,20 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  dto.UpdateSolutionRequest:
+    properties:
+      description:
+        maxLength: 1000
+        type: string
+      name:
+        maxLength: 255
+        type: string
+      status:
+        enum:
+        - active
+        - inactive
+        type: string
     type: object
   dto.UpdateUserRequest:
     properties:
@@ -1431,6 +1560,35 @@ paths:
       summary: Replace add-on benefits
       tags:
       - Add-ons
+  /api/v1/admin/summary:
+    get:
+      description: Jumlah user, company, solution, dan client aktif untuk dashboard
+        admin.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.AdminSummaryResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Platform summary
+      tags:
+      - Dashboard
   /api/v1/auth/companies:
     get:
       description: Company tempat user member active, company active, dan subscribe
@@ -1745,6 +1903,97 @@ paths:
       summary: Get benefit
       tags:
       - Benefits
+  /api/v1/branches/{branchId}:
+    delete:
+      description: Soft delete. Role assignment ber-scope branch ini ikut dihapus.
+      parameters:
+      - description: Branch ID
+        in: path
+        name: branchId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/respond.SuccessBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Delete branch
+      tags:
+      - Organization
+    patch:
+      consumes:
+      - application/json
+      description: Ubah nama / kode / status. Branch milik company yang tidak bisa
+        diakses dilaporkan 404.
+      parameters:
+      - description: Branch ID
+        in: path
+        name: branchId
+        required: true
+        type: string
+      - description: Branch
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateOrgUnitRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.BranchResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Update branch
+      tags:
+      - Organization
   /api/v1/companies:
     get:
       description: Platform admin melihat semua company; user lain hanya company tempat
@@ -2070,6 +2319,56 @@ paths:
       summary: Create branch
       tags:
       - Organization
+  /api/v1/companies/{companyId}/member-candidates:
+    get:
+      description: Cari user terdaftar (active) berdasarkan email / nama yang belum
+        menjadi member active / invited. Minimal 3 karakter, maksimal 10 hasil.
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: Email / nama (min. 3 karakter)
+        in: query
+        name: search
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.MemberCandidateResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Search member candidates
+      tags:
+      - Companies
   /api/v1/companies/{companyId}/members:
     get:
       parameters:
@@ -2336,6 +2635,199 @@ paths:
       summary: Update company member
       tags:
       - Companies
+  /api/v1/companies/{companyId}/roles/{roleId}:
+    delete:
+      description: Soft delete; assignment role ini ikut dihapus. Role global / company
+        lain → 404.
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: Role ID
+        in: path
+        name: roleId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/respond.SuccessBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Delete company custom role
+      tags:
+      - Roles
+    get:
+      description: Role global atau custom milik company; jumlah pemegang hanya dihitung
+        di company ini.
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: Role ID
+        in: path
+        name: roleId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.RoleResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Get role in company context
+      tags:
+      - Roles
+    patch:
+      consumes:
+      - application/json
+      description: Ubah nama / deskripsi custom role milik company. Role global /
+        company lain → 404.
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: Role ID
+        in: path
+        name: roleId
+        required: true
+        type: string
+      - description: Role
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.RoleResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Update company custom role
+      tags:
+      - Roles
+  /api/v1/companies/{companyId}/roles/{roleId}/members:
+    get:
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: Role ID
+        in: path
+        name: roleId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.RoleHolderResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List role holders in company
+      tags:
+      - Roles
   /api/v1/companies/{companyId}/roles/{roleId}/permissions:
     put:
       consumes:
@@ -2869,6 +3361,49 @@ paths:
       summary: Create subscription
       tags:
       - Subscriptions
+  /api/v1/companies/{companyId}/summary:
+    get:
+      description: Jumlah member per status, branch, custom role, dan role assignment
+        (untuk dashboard).
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.CompanySummaryResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Company summary
+      tags:
+      - Companies
   /api/v1/companies/{companyId}/users/{userId}/effective-permissions:
     get:
       description: Seluruh permission user di company untuk satu solution beserta
@@ -3267,6 +3802,136 @@ paths:
       summary: Revoke role assignment
       tags:
       - Authorization
+  /api/v1/roles/{roleId}:
+    delete:
+      description: Soft delete; seluruh assignment role ini ikut dihapus. Role sistem
+        tidak bisa dihapus.
+      parameters:
+      - description: Role ID
+        in: path
+        name: roleId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/respond.SuccessBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Delete global role
+      tags:
+      - Roles
+    get:
+      description: Detail role beserta jumlah permission & pemegang. Custom role hanya
+        untuk company pemilik (selain itu 404).
+      parameters:
+      - description: Role ID
+        in: path
+        name: roleId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.RoleResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Get role
+      tags:
+      - Roles
+    patch:
+      consumes:
+      - application/json
+      description: Ubah nama / deskripsi. Role sistem tidak bisa diubah; custom role
+        company → 404.
+      parameters:
+      - description: Role ID
+        in: path
+        name: roleId
+        required: true
+        type: string
+      - description: Role
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.RoleResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Update global role
+      tags:
+      - Roles
   /api/v1/roles/{roleId}/permissions:
     get:
       description: Custom role hanya terlihat oleh company pemiliknya (selain itu
@@ -3684,6 +4349,56 @@ paths:
       summary: Get solution
       tags:
       - Solution Catalog
+    patch:
+      consumes:
+      - application/json
+      description: Ubah nama / deskripsi / status (kode tidak bisa diubah). Solution
+        sesi admin sendiri tidak bisa dinonaktifkan.
+      parameters:
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Solution
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateSolutionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.SolutionResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Update solution
+      tags:
+      - Solutions
   /api/v1/solutions/{solutionId}/addons:
     get:
       description: Non-admin hanya melihat add-on aktif dari solution aktif.

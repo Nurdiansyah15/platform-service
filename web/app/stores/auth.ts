@@ -42,11 +42,22 @@ export const useAuthStore = defineStore('auth', () => {
       body: { email, password, solution: solutionCode },
     })
     applyTokens(res.data)
-    await loadMe()
+    await Promise.all([loadMe(), loadCompanies()])
     return res.data
   }
 
-  async function tryRefresh(): Promise<boolean> {
+  // Satu refresh berjalan sekaligus: 401 paralel menunggu hasil refresh yang sama
+  // (refresh token dirotasi, jadi refresh kedua dengan token lama akan gagal).
+  let refreshing: Promise<boolean> | null = null
+
+  function tryRefresh(): Promise<boolean> {
+    refreshing ??= doRefresh().finally(() => {
+      refreshing = null
+    })
+    return refreshing
+  }
+
+  async function doRefresh(): Promise<boolean> {
     const token = refreshToken.value ?? (import.meta.client ? localStorage.getItem(REFRESH_KEY) : null)
     if (!token) return false
     try {
@@ -92,7 +103,7 @@ export const useAuthStore = defineStore('auth', () => {
       token: accessToken.value,
     })
     applyTokens(res.data)
-    await loadMe()
+    await Promise.all([loadMe(), loadCompanies()])
     return res.data
   }
 

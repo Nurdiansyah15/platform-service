@@ -7,6 +7,8 @@ const (
 	TypeCompanyCreated       = "company.created"
 	TypeCompanyUpdated       = "company.updated"
 	TypeBranchCreated        = "branch.created"
+	TypeBranchUpdated        = "branch.updated"
+	TypeBranchDeleted        = "branch.deleted"
 	TypeCompanyMemberAdded   = "company_member.added"
 	TypeCompanyMemberUpdated = "company_member.updated"
 	TypeCompanyMemberRemoved = "company_member.removed"

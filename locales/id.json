@@ -36,6 +36,7 @@
   "DOMAIN_SOLUTION_CODE_INVALID": "Code solution hanya boleh huruf kecil, angka, dan tanda hubung (maks 100 karakter).",
   "DOMAIN_SOLUTION_NAME_INVALID": "Nama solution wajib diisi (maks 255 karakter).",
   "DOMAIN_SOLUTION_STATUS_INVALID": "Status solution harus active atau inactive.",
+  "DOMAIN_SOLUTION_IN_USE_BY_SESSION": "Solution yang sedang dipakai sesi Anda tidak bisa dinonaktifkan.",
   "DOMAIN_SOLUTION_PERSISTENCE_FAILED": "Gagal menyimpan solution.",
   "DOMAIN_SOLUTION_QUERY_FAILED": "Gagal memuat solution.",
   "DOMAIN_USER_NOT_FOUND": "User tidak ditemukan.",

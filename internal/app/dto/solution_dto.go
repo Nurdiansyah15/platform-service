@@ -16,6 +16,13 @@ type ListSolutionQuery struct {
 	PaginationParams
 }
 
+// UpdateSolutionRequest — field nil tidak diubah. Kode solution tidak bisa diubah.
+type UpdateSolutionRequest struct {
+	Name        *string `json:"name" binding:"omitempty,max=255"`
+	Description *string `json:"description" binding:"omitempty,max=1000"`
+	Status      *string `json:"status" binding:"omitempty,oneof=active inactive"`
+}
+
 type SolutionIDParam struct {
 	SolutionID string `uri:"solutionId" binding:"required,uuid"`
 }

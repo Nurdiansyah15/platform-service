@@ -68,6 +68,23 @@ func (r *PostgresRoleAssignmentRepository) Delete(ctx context.Context, id string
 	return nil
 }
 
+func (r *PostgresRoleAssignmentRepository) DeleteByScope(ctx context.Context, scopeType, scopeID string) error {
+	_, err := execFromContext(ctx, r.db).ExecContext(ctx,
+		`DELETE FROM user_role_assignments WHERE scope_type = $1 AND scope_id = $2`, scopeType, scopeID)
+	if err != nil {
+		return domainerr.Wrap(constant.CodeAuthzPersistenceFailed, err)
+	}
+	return nil
+}
+
+func (r *PostgresRoleAssignmentRepository) DeleteByRole(ctx context.Context, roleID string) error {
+	_, err := execFromContext(ctx, r.db).ExecContext(ctx, `DELETE FROM user_role_assignments WHERE role_id = $1`, roleID)
+	if err != nil {
+		return domainerr.Wrap(constant.CodeAuthzPersistenceFailed, err)
+	}
+	return nil
+}
+
 func (r *PostgresRoleAssignmentRepository) DeleteByMember(ctx context.Context, companyID, userID string) error {
 	_, err := execFromContext(ctx, r.db).ExecContext(ctx,
 		`DELETE FROM user_role_assignments WHERE company_id = $1 AND user_id = $2`, companyID, userID)

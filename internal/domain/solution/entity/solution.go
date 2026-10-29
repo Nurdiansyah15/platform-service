@@ -61,6 +61,30 @@ func NewSolution(p NewSolutionParams) (*Solution, error) {
 	}, nil
 }
 
+// Update mengganti nama / deskripsi / status; nil = tidak diubah. Kode tidak bisa diubah
+// karena menjadi audience token (aud) solution.
+func (s *Solution) Update(name, description, status *string, now time.Time) error {
+	if name != nil {
+		n := strings.TrimSpace(*name)
+		if n == "" || utf8.RuneCountInString(n) > constant.NameMaxLength {
+			return domainerr.New(constant.CodeSolutionNameInvalid)
+		}
+		s.Name = n
+	}
+	if description != nil {
+		s.Description = normalizeOptional(description)
+	}
+	if status != nil {
+		st, err := valueobject.NewSolutionStatus(*status)
+		if err != nil {
+			return err
+		}
+		s.Status = st
+	}
+	s.UpdatedAt = now.UTC()
+	return nil
+}
+
 func (s *Solution) IsActive() bool {
 	return s.Status == valueobject.SolutionStatusActive
 }

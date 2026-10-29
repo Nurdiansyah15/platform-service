@@ -22,6 +22,8 @@ type CompanyReadItem struct {
 	Status    string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	// MemberCount — jumlah member active.
+	MemberCount int
 }
 
 type CompanyMemberListReadQuery struct {
@@ -37,9 +39,14 @@ type CompanyMemberReadItem struct {
 	Name     string
 	Status   string
 	JoinedAt time.Time
+	// RoleCount — jumlah role assignment member di company.
+	RoleCount int
 }
 
 type CompanyQueryReadModel interface {
 	ListCompanies(ctx context.Context, q CompanyListReadQuery) ([]CompanyReadItem, dto.Meta, error)
 	ListMembers(ctx context.Context, q CompanyMemberListReadQuery) ([]CompanyMemberReadItem, dto.Meta, error)
+	// SearchMemberCandidates — user active (email / nama cocok) yang belum member active / invited.
+	SearchMemberCandidates(ctx context.Context, companyID, search string, limit int) ([]dto.MemberCandidateResponse, error)
+	Summary(ctx context.Context, companyID string) (*dto.CompanySummaryResponse, error)
 }

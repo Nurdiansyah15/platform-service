@@ -388,10 +388,11 @@ Pola sama: usecase + handler + handler test wajib.
 ### L2 — Company & Organization
 - [x] `PATCH /companies/{companyId}` (status khusus platform admin)
 - [x] `PATCH /companies/{companyId}/members/{userId}`, `DELETE /companies/{companyId}/members/{userId}` (status `inactive` + hapus role assignment)
-- [ ] `GET/PATCH/DELETE /companies/{companyId}`, `GET/PATCH/DELETE /branches/{branchId}`
+- [x] `PATCH/DELETE /branches/{branchId}` (soft delete + hapus assignment ber-scope branch)
+- [ ] `DELETE /companies/{companyId}`, `GET /branches/{branchId}`
 
 ### L3 — Catalog
-- [ ] `PATCH /solutions/{solutionId}`
+- [x] `PATCH /solutions/{solutionId}` (kode tidak bisa diubah; solution sesi sendiri tidak bisa dinonaktifkan)
 - [ ] `GET/PATCH/DELETE /plans/{planId}`, `PUT/DELETE /plans/{planId}/benefits/{benefitId}`
 - [ ] `GET/PATCH/DELETE /addons/{addonId}`, `PUT/DELETE /addons/{addonId}/benefits/{benefitId}`
 - [ ] `PATCH /benefits/{benefitId}`, `GET /benefits/{benefitId}/plans`, `GET /benefits/{benefitId}/addons`
@@ -405,8 +406,9 @@ Pola sama: usecase + handler + handler test wajib.
 - [ ] `GET /companies/{companyId}/solutions/{solutionId}/usage`, `GET .../usage/{benefitCode}`
 
 ### L6 — RBAC
-- [ ] `GET/PATCH/DELETE /roles/{roleId}`
-- [ ] `GET/PATCH/DELETE /companies/{companyId}/roles/{roleId}`, `GET /companies/{companyId}/roles/{roleId}/permissions`
+- [x] `GET/PATCH/DELETE /roles/{roleId}` (hapus = soft delete + hapus assignment)
+- [x] `GET/PATCH/DELETE /companies/{companyId}/roles/{roleId}` (+ `GET .../members`: pemegang role)
+- [ ] `GET /companies/{companyId}/roles/{roleId}/permissions` (sementara: `GET /roles/{roleId}/permissions`)
 - [ ] `POST /solutions/{solutionId}/permissions`, `GET/PATCH /permissions/{permissionId}`
 - [ ] `PUT /solutions/{solutionId}/roles/sync`, `GET /solutions/{solutionId}/catalog-version`
 - [x] `GET /companies/{companyId}/users/{userId}/role-assignments`, `DELETE /role-assignments/{assignmentId}`
@@ -434,3 +436,10 @@ Pola sama: usecase + handler + handler test wajib.
 
 - ~~Policy akses endpoint company-scoped untuk user~~ — diputuskan di Fase 15: tetap "platform admin atau member aktif"; pembatasan administrasi company dilakukan solution/console lewat `authz/check`.
 - **Implementasi `KeyStore` produksi** (KMS / Vault) — dev & test memakai file lokal / fake.
+
+### Endpoint pembantu UI console (bukan spec)
+- [x] `GET /companies/{companyId}/member-candidates?search=` — cari user terdaftar untuk ditambahkan sebagai member (min. 3 karakter, maks. 10 hasil, field minimal)
+- [x] `GET /companies/{companyId}/summary` — jumlah member/branch/custom role/assignment
+- [x] `GET /admin/summary` — jumlah user/company/solution/client (platform admin)
+- [x] `GET /companies/{companyId}/members/{userId}` — detail satu member
+- [x] Pengayaan list: `member_count` (companies), `role_count` (members), `permission_count`/`member_count` + filter `kind` (roles)

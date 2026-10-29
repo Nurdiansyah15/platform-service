@@ -7,6 +7,8 @@ import (
 	"platform-service/internal/app/dto"
 	"platform-service/internal/app/port"
 	"platform-service/internal/app/principal"
+	domainerr "platform-service/internal/domain/errors"
+	"platform-service/internal/domain/organization/constant"
 	"platform-service/internal/domain/organization/entity"
 	"platform-service/internal/domain/organization/event"
 	"platform-service/internal/domain/organization/service"
@@ -77,4 +79,83 @@ func (uc *BranchUseCase) List(ctx context.Context, actor *principal.Principal, c
 		})
 	}
 	return out, meta, nil
+}
+
+// Update mengubah nama / kode / status branch. Branch milik company yang tidak bisa diakses
+// dilaporkan 404.
+//
+// Required — auth: user (platform admin, atau member active dengan cid) atau service | scope: org:write
+func (uc *BranchUseCase) Update(ctx context.Context, actor *principal.Principal, branchID string, req dto.UpdateOrgUnitRequest) (*dto.BranchResponse, error) {
+	b, err := uc.accessibleBranch(ctx, actor, branchID)
+	if err != nil {
+		return nil, err
+	}
+	if err := b.Update(req.Name, req.Code, req.Status, uc.now()); err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+	err = uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
+		if err := uc.deps.Branches.Save(ctx, b); err != nil {
+			return err
+		}
+		return uc.deps.Outbox.Append(ctx, branchEvent(event.TypeBranchUpdated, b))
+	})
+	if err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+	resp := toBranchResponse(b)
+	return &resp, nil
+}
+
+// Delete menghapus branch (soft delete). Role assignment ber-scope branch ini ikut dihapus.
+//
+// Required — auth: user (platform admin, atau member active dengan cid) atau service | scope: org:write
+func (uc *BranchUseCase) Delete(ctx context.Context, actor *principal.Principal, branchID string) error {
+	b, err := uc.accessibleBranch(ctx, actor, branchID)
+	if err != nil {
+		return err
+	}
+	b.Delete(uc.now())
+	err = uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
+		if err := uc.deps.Branches.Save(ctx, b); err != nil {
+			return err
+		}
+		if err := uc.deps.RoleAssignments.DeleteByScope(ctx, branchScopeType, b.ID); err != nil {
+			return err
+		}
+		return uc.deps.Outbox.Append(ctx, branchEvent(event.TypeBranchDeleted, b))
+	})
+	if err != nil {
+		return mapCompanyDomainError(err)
+	}
+	return nil
+}
+
+// branchScopeType — scope_type role assignment untuk branch (authz valueobject.ScopeBranch).
+const branchScopeType = "branch"
+
+// accessibleBranch memuat branch lalu memeriksa akses ke company pemiliknya; ditolak → 404.
+func (uc *BranchUseCase) accessibleBranch(ctx context.Context, actor *principal.Principal, branchID string) (*entity.Branch, error) {
+	b, err := uc.deps.Branches.FindByID(ctx, branchID)
+	if err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), b.CompanyID); err != nil {
+		if isDomainCode(err, constant.CodeCompanyAccessDenied) {
+			return nil, mapCompanyDomainError(domainerr.New(constant.CodeBranchNotFound))
+		}
+		return nil, mapCompanyDomainError(err)
+	}
+	return b, nil
+}
+
+func branchEvent(eventType string, b *entity.Branch) port.OutboxEvent {
+	return port.OutboxEvent{
+		EventType: eventType,
+		CompanyID: &b.CompanyID,
+		Payload: event.BranchPayload{
+			ID: b.ID, CompanyID: b.CompanyID, Code: b.Code.Value(), Name: b.Name,
+			Status: b.Status.String(), UpdatedAt: b.UpdatedAt,
+		},
+		OccurredAt: b.UpdatedAt,
+	}
 }

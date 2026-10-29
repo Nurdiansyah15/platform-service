@@ -242,3 +242,198 @@ func (h *RoleHandler) ReplaceCompanyRolePermissions(c *gin.Context) {
 	}
 	respond.OK(c, "role permissions replaced", items)
 }
+
+// GetGlobal godoc
+//
+//	@Summary	Get role
+//	@Description	Detail role beserta jumlah permission & pemegang. Custom role hanya untuk company pemilik (selain itu 404).
+//	@Tags		Roles
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Param		roleId			path		string	true	"Role ID"
+//	@Success	200				{object}	respond.SuccessBody{data=dto.RoleResponse}
+//	@Failure	401,403,404,422	{object}	respond.ErrorBody
+//	@Router		/api/v1/roles/{roleId} [get]
+func (h *RoleHandler) GetGlobal(c *gin.Context) {
+	var param dto.RoleIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	resp, err := h.useCase.GetGlobal(c.Request.Context(), actor, param.RoleID)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "role", resp)
+}
+
+// UpdateGlobal godoc
+//
+//	@Summary		Update global role
+//	@Description	Ubah nama / deskripsi. Role sistem tidak bisa diubah; custom role company → 404.
+//	@Tags			Roles
+//	@Security		BearerAuth
+//	@Accept			json
+//	@Produce		json
+//	@Param			roleId				path		string					true	"Role ID"
+//	@Param			body				body		dto.UpdateRoleRequest	true	"Role"
+//	@Success		200					{object}	respond.SuccessBody{data=dto.RoleResponse}
+//	@Failure		401,403,404,422		{object}	respond.ErrorBody
+//	@Router			/api/v1/roles/{roleId} [patch]
+func (h *RoleHandler) UpdateGlobal(c *gin.Context) {
+	var param dto.RoleIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.UpdateRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	resp, err := h.useCase.UpdateGlobal(c.Request.Context(), param.RoleID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "role updated", resp)
+}
+
+// DeleteGlobal godoc
+//
+//	@Summary		Delete global role
+//	@Description	Soft delete; seluruh assignment role ini ikut dihapus. Role sistem tidak bisa dihapus.
+//	@Tags			Roles
+//	@Security		BearerAuth
+//	@Produce		json
+//	@Param			roleId			path		string	true	"Role ID"
+//	@Success		200				{object}	respond.SuccessBody
+//	@Failure		401,403,404,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/roles/{roleId} [delete]
+func (h *RoleHandler) DeleteGlobal(c *gin.Context) {
+	var param dto.RoleIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	if err := h.useCase.DeleteGlobal(c.Request.Context(), param.RoleID); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "role deleted", nil)
+}
+
+// GetForCompany godoc
+//
+//	@Summary	Get role in company context
+//	@Description	Role global atau custom milik company; jumlah pemegang hanya dihitung di company ini.
+//	@Tags		Roles
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Param		companyId		path		string	true	"Company ID"
+//	@Param		roleId			path		string	true	"Role ID"
+//	@Success	200				{object}	respond.SuccessBody{data=dto.RoleResponse}
+//	@Failure	401,403,404,422	{object}	respond.ErrorBody
+//	@Router		/api/v1/companies/{companyId}/roles/{roleId} [get]
+func (h *RoleHandler) GetForCompany(c *gin.Context) {
+	var param dto.CompanyRoleParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	resp, err := h.useCase.GetForCompany(c.Request.Context(), actor, param.CompanyID, param.RoleID)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "role", resp)
+}
+
+// ListHolders godoc
+//
+//	@Summary	List role holders in company
+//	@Tags		Roles
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Param		companyId		path		string	true	"Company ID"
+//	@Param		roleId			path		string	true	"Role ID"
+//	@Success	200				{object}	respond.SuccessBody{data=[]dto.RoleHolderResponse}
+//	@Failure	401,403,404,422	{object}	respond.ErrorBody
+//	@Router		/api/v1/companies/{companyId}/roles/{roleId}/members [get]
+func (h *RoleHandler) ListHolders(c *gin.Context) {
+	var param dto.CompanyRoleParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	items, err := h.useCase.ListHolders(c.Request.Context(), actor, param.CompanyID, param.RoleID)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "role holders", items)
+}
+
+// UpdateForCompany godoc
+//
+//	@Summary		Update company custom role
+//	@Description	Ubah nama / deskripsi custom role milik company. Role global / company lain → 404.
+//	@Tags			Roles
+//	@Security		BearerAuth
+//	@Accept			json
+//	@Produce		json
+//	@Param			companyId		path		string					true	"Company ID"
+//	@Param			roleId			path		string					true	"Role ID"
+//	@Param			body			body		dto.UpdateRoleRequest	true	"Role"
+//	@Success		200				{object}	respond.SuccessBody{data=dto.RoleResponse}
+//	@Failure		401,403,404,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/companies/{companyId}/roles/{roleId} [patch]
+func (h *RoleHandler) UpdateForCompany(c *gin.Context) {
+	var param dto.CompanyRoleParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.UpdateRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	resp, err := h.useCase.UpdateForCompany(c.Request.Context(), actor, param.CompanyID, param.RoleID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "role updated", resp)
+}
+
+// DeleteForCompany godoc
+//
+//	@Summary		Delete company custom role
+//	@Description	Soft delete; assignment role ini ikut dihapus. Role global / company lain → 404.
+//	@Tags			Roles
+//	@Security		BearerAuth
+//	@Produce		json
+//	@Param			companyId		path		string	true	"Company ID"
+//	@Param			roleId			path		string	true	"Role ID"
+//	@Success		200				{object}	respond.SuccessBody
+//	@Failure		401,403,404,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/companies/{companyId}/roles/{roleId} [delete]
+func (h *RoleHandler) DeleteForCompany(c *gin.Context) {
+	var param dto.CompanyRoleParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	if err := h.useCase.DeleteForCompany(c.Request.Context(), actor, param.CompanyID, param.RoleID); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "role deleted", nil)
+}

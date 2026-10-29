@@ -1,49 +1,62 @@
 <script setup lang="ts">
-import type { UpdateMeRequest, UserResponse } from '~/types/api'
+import type { FormError, FormSubmitEvent } from '@nuxt/ui'
+import type { UpdateMeRequest } from '~/types/api'
 
 const auth = useAuthStore()
 const api = useApi()
 const toast = useToast()
+const colorMode = useColorMode()
+const { toastError, fieldErrors } = useApiError()
+const pwForm = useTemplateRef('pwForm')
 
-const name = ref(auth.user?.name ?? '')
+const profile = reactive({ name: auth.user?.name ?? '' })
 const savingName = ref(false)
-
 const pw = reactive({ current: '', next: '', confirm: '' })
 const savingPassword = ref(false)
-const pwError = computed(() => {
-  if (pw.next && pw.next.length < 8) return 'Password baru minimal 8 karakter.'
-  if (pw.confirm && pw.next !== pw.confirm) return 'Konfirmasi password tidak sama.'
-  return ''
-})
 
-async function update(body: UpdateMeRequest, successTitle: string) {
-  const res = await api.patch<UserResponse>('/api/v1/users/me', body)
+const themes = [
+  { label: 'Terang', value: 'light', icon: 'i-lucide-sun' },
+  { label: 'Gelap', value: 'dark', icon: 'i-lucide-moon' },
+  { label: 'Sistem', value: 'system', icon: 'i-lucide-monitor' },
+]
+
+async function update(body: UpdateMeRequest) {
+  await api.patch('/api/v1/users/me', body)
   await auth.loadMe()
-  toast.add({ title: successTitle, color: 'success' })
-  return res.data
 }
 
-async function saveName() {
+async function saveName(e: FormSubmitEvent<typeof profile>) {
   savingName.value = true
   try {
-    const u = await update({ name: name.value }, 'Nama diperbarui')
-    name.value = u.name
+    await update({ name: e.data.name.trim() })
+    toast.add({ title: 'Nama diperbarui', color: 'success' })
   } catch (err) {
-    toast.add({ title: (err as { message?: string }).message || 'Gagal memperbarui nama', color: 'error' })
+    toastError(err, 'Gagal memperbarui nama')
   } finally {
     savingName.value = false
   }
 }
 
-async function savePassword() {
+function validatePw(s: typeof pw): FormError[] {
+  const errors: FormError[] = []
+  if (!s.current) errors.push({ name: 'current', message: 'Wajib diisi' })
+  if (s.next.length < 8) errors.push({ name: 'next', message: 'Minimal 8 karakter' })
+  if (s.confirm !== s.next) errors.push({ name: 'confirm', message: 'Konfirmasi tidak sama' })
+  return errors
+}
+
+async function savePassword(e: FormSubmitEvent<typeof pw>) {
   savingPassword.value = true
   try {
-    await update({ password: pw.next, current_password: pw.current }, 'Password diganti')
+    await update({ password: e.data.next, current_password: e.data.current })
+    toast.add({ title: 'Password diganti', color: 'success' })
     pw.current = ''
     pw.next = ''
     pw.confirm = ''
   } catch (err) {
-    toast.add({ title: (err as { message?: string }).message || 'Gagal mengganti password', color: 'error' })
+    const fields = fieldErrors(err)
+    if (fields.length) pwForm.value?.setErrors(fields)
+    else pwForm.value?.setErrors([{ name: 'current', message: (err as { message?: string }).message ?? 'Gagal' }])
   } finally {
     savingPassword.value = false
   }
@@ -51,48 +64,51 @@ async function savePassword() {
 </script>
 
 <template>
-  <div>
-    <PageHeader title="Profil" subtitle="Data akunmu di platform." />
+  <AppPage title="Profil" narrow>
+    <SectionCard title="Data diri" description="Nama yang tampil untuk anggota lain.">
+      <UForm :state="profile" class="space-y-4" @submit="saveName">
+        <UFormField label="Email" help="Hubungi admin platform untuk mengubah email.">
+          <UInput :model-value="auth.user?.email" disabled class="w-full" />
+        </UFormField>
+        <UFormField label="Nama" name="name" required>
+          <UInput v-model="profile.name" class="w-full" />
+        </UFormField>
+        <UButton type="submit" :loading="savingName" :disabled="!profile.name.trim() || profile.name.trim() === auth.user?.name">
+          Simpan
+        </UButton>
+      </UForm>
+    </SectionCard>
 
-    <div class="grid max-w-4xl gap-6 lg:grid-cols-2">
-      <UCard>
-        <h2 class="mb-4 font-medium text-highlighted">Data diri</h2>
-        <form class="space-y-4" @submit.prevent="saveName">
-          <UFormField label="Email" hint="hubungi admin platform untuk mengubah">
-            <UInput :model-value="auth.user?.email" disabled class="w-full" />
-          </UFormField>
-          <UFormField label="Nama" required>
-            <UInput v-model="name" class="w-full" />
-          </UFormField>
-          <UButton type="submit" color="primary" :loading="savingName" :disabled="!name.trim() || name === auth.user?.name">
-            Simpan
-          </UButton>
-        </form>
-      </UCard>
-
-      <UCard>
-        <h2 class="mb-4 font-medium text-highlighted">Ganti password</h2>
-        <form class="space-y-4" @submit.prevent="savePassword">
-          <UFormField label="Password lama" required>
-            <UInput v-model="pw.current" type="password" autocomplete="current-password" class="w-full" />
-          </UFormField>
-          <UFormField label="Password baru" required>
+    <SectionCard title="Ganti password" description="Gunakan minimal 8 karakter.">
+      <UForm ref="pwForm" :state="pw" :validate="validatePw" :validate-on="['blur']" class="space-y-4" @submit="savePassword">
+        <UFormField label="Password saat ini" name="current" required>
+          <UInput v-model="pw.current" type="password" autocomplete="current-password" class="w-full" />
+        </UFormField>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <UFormField label="Password baru" name="next" required>
             <UInput v-model="pw.next" type="password" autocomplete="new-password" class="w-full" />
           </UFormField>
-          <UFormField label="Ulangi password baru" required>
+          <UFormField label="Ulangi password baru" name="confirm" required>
             <UInput v-model="pw.confirm" type="password" autocomplete="new-password" class="w-full" />
           </UFormField>
-          <UAlert v-if="pwError" color="warning" variant="subtle" :title="pwError" />
-          <UButton
-            type="submit"
-            color="primary"
-            :loading="savingPassword"
-            :disabled="!pw.current || !pw.next || pw.next !== pw.confirm || !!pwError"
-          >
-            Ganti password
-          </UButton>
-        </form>
-      </UCard>
-    </div>
-  </div>
+        </div>
+        <UButton type="submit" :loading="savingPassword">Ganti password</UButton>
+      </UForm>
+    </SectionCard>
+
+    <SectionCard title="Tampilan" description="Tema console di perangkat ini.">
+      <div class="flex flex-wrap gap-2">
+        <UButton
+          v-for="t in themes"
+          :key="t.value"
+          :icon="t.icon"
+          :color="colorMode.preference === t.value ? 'primary' : 'neutral'"
+          :variant="colorMode.preference === t.value ? 'soft' : 'outline'"
+          @click="colorMode.preference = t.value"
+        >
+          {{ t.label }}
+        </UButton>
+      </div>
+    </SectionCard>
+  </AppPage>
 </template>

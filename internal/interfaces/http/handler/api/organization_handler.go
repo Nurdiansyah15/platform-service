@@ -360,3 +360,119 @@ func (h *OrganizationHandler) ListBranches(c *gin.Context) {
 	}
 	respond.SuccessWithMeta(c, 200, "branches", items, meta)
 }
+
+// Summary godoc
+//
+//	@Summary	Company summary
+//	@Description	Jumlah member per status, branch, custom role, dan role assignment (untuk dashboard).
+//	@Tags		Companies
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Param		companyId		path		string	true	"Company ID"
+//	@Success	200				{object}	respond.SuccessBody{data=dto.CompanySummaryResponse}
+//	@Failure	401,403,404,422	{object}	respond.ErrorBody
+//	@Router		/api/v1/companies/{companyId}/summary [get]
+func (h *OrganizationHandler) Summary(c *gin.Context) {
+	var param dto.CompanyIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	resp, err := h.companies.Summary(c.Request.Context(), actor, param.CompanyID)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "company summary", resp)
+}
+
+// MemberCandidates godoc
+//
+//	@Summary	Search member candidates
+//	@Description	Cari user terdaftar (active) berdasarkan email / nama yang belum menjadi member active / invited. Minimal 3 karakter, maksimal 10 hasil.
+//	@Tags		Companies
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Param		companyId		path		string	true	"Company ID"
+//	@Param		search			query		string	true	"Email / nama (min. 3 karakter)"
+//	@Success	200				{object}	respond.SuccessBody{data=[]dto.MemberCandidateResponse}
+//	@Failure	401,403,404,422	{object}	respond.ErrorBody
+//	@Router		/api/v1/companies/{companyId}/member-candidates [get]
+func (h *OrganizationHandler) MemberCandidates(c *gin.Context) {
+	var param dto.CompanyIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.MemberCandidateQuery
+	if err := c.ShouldBindQuery(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	items, err := h.members.Candidates(c.Request.Context(), actor, param.CompanyID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "member candidates", items)
+}
+
+// UpdateBranch godoc
+//
+//	@Summary		Update branch
+//	@Description	Ubah nama / kode / status. Branch milik company yang tidak bisa diakses dilaporkan 404.
+//	@Tags			Organization
+//	@Security		BearerAuth
+//	@Accept			json
+//	@Produce		json
+//	@Param			branchId			path		string						true	"Branch ID"
+//	@Param			body				body		dto.UpdateOrgUnitRequest	true	"Branch"
+//	@Success		200					{object}	respond.SuccessBody{data=dto.BranchResponse}
+//	@Failure		401,403,404,409,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/branches/{branchId} [patch]
+func (h *OrganizationHandler) UpdateBranch(c *gin.Context) {
+	var param dto.BranchIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.UpdateOrgUnitRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	resp, err := h.branches.Update(c.Request.Context(), actor, param.BranchID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "branch updated", resp)
+}
+
+// DeleteBranch godoc
+//
+//	@Summary		Delete branch
+//	@Description	Soft delete. Role assignment ber-scope branch ini ikut dihapus.
+//	@Tags			Organization
+//	@Security		BearerAuth
+//	@Produce		json
+//	@Param			branchId		path		string	true	"Branch ID"
+//	@Success		200				{object}	respond.SuccessBody
+//	@Failure		401,403,404,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/branches/{branchId} [delete]
+func (h *OrganizationHandler) DeleteBranch(c *gin.Context) {
+	var param dto.BranchIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	if err := h.branches.Delete(c.Request.Context(), actor, param.BranchID); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "branch deleted", nil)
+}

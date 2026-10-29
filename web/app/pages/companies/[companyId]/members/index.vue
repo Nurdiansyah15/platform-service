@@ -1,258 +1,179 @@
 <script setup lang="ts">
-import type { CompanyMemberResponse, Meta, AddCompanyMemberRequest, MemberStatus } from '~/types/api'
+import { h, resolveComponent } from 'vue'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
+import type { CompanyMemberResponse, MemberCandidate, MemberStatus } from '~/types/api'
 
+const ctx = useCompanyContext()
 const route = useRoute()
-const auth = useAuthStore()
 const api = useApi()
 const toast = useToast()
+const { toastError } = useApiError()
+const { confirm } = useConfirm()
 
-const companyId = computed(() => String(route.params.companyId))
-const isForeignCompany = computed(
-  () => !auth.isPlatformAdmin && auth.activeCompanyId !== companyId.value,
-)
-
-const items = ref<CompanyMemberResponse[]>([])
-const meta = ref<Meta | null>(null)
-const loading = ref(false)
-const error = ref('')
-
-const page = ref(1)
-const search = ref('')
 const status = ref<string | undefined>(undefined)
+const list = useListQuery<CompanyMemberResponse>(
+  () => (ctx.canAccess.value ? `/api/v1/companies/${ctx.companyId.value}/members` : null),
+  { filters: { status }, syncUrl: true },
+)
+const base = computed(() => `/companies/${ctx.companyId.value}/members`)
 
-const showAdd = ref(false)
-const saving = ref(false)
-const form = reactive<AddCompanyMemberRequest>({ email: '', user_id: '', status: 'active' })
+// ── Tambah anggota ──
+const showAdd = ref(route.query.add === '1')
+const candidate = ref<MemberCandidate | undefined>()
+const addStatus = ref<'active' | 'invited'>('active')
+const adding = ref(false)
 
-const statusItems = [
-  { label: 'Semua status', value: undefined },
-  { label: 'Active', value: 'active' },
-  { label: 'Invited', value: 'invited' },
-  { label: 'Inactive', value: 'inactive' },
-]
-
-async function load() {
-  if (isForeignCompany.value) return
-  loading.value = true
-  error.value = ''
-  try {
-    const res = await api.get<CompanyMemberResponse[]>(
-      `/api/v1/companies/${companyId.value}/members`,
-      { query: { page: page.value, limit: 20, search: search.value || undefined, status: status.value } },
-    )
-    items.value = res.data
-    meta.value = res.meta ?? null
-  } catch (err) {
-    error.value = (err as { message?: string }).message || 'Gagal memuat member'
-  } finally {
-    loading.value = false
+watch(showAdd, (v) => {
+  if (v) {
+    candidate.value = undefined
+    addStatus.value = 'active'
   }
-}
+})
 
 async function addMember() {
-  saving.value = true
+  if (!candidate.value) return
+  adding.value = true
   try {
-    const body: AddCompanyMemberRequest = { status: form.status || 'active' }
-    if (form.user_id) body.user_id = form.user_id
-    if (form.email) body.email = form.email
-    await api.post(`/api/v1/companies/${companyId.value}/members`, body)
-    toast.add({ title: 'Member ditambahkan', color: 'success' })
+    await api.post(`/api/v1/companies/${ctx.companyId.value}/members`, { user_id: candidate.value.id, status: addStatus.value })
+    toast.add({ title: `${candidate.value.name} ditambahkan`, color: 'success' })
     showAdd.value = false
-    form.email = ''
-    form.user_id = ''
-    await load()
+    list.reload()
   } catch (err) {
-    toast.add({ title: (err as { message?: string }).message || 'Gagal menambah member', color: 'error' })
+    toastError(err, 'Gagal menambah anggota')
   } finally {
-    saving.value = false
+    adding.value = false
   }
 }
 
-const busyId = ref<string | null>(null)
-
-async function changeStatus(m: CompanyMemberResponse, next: MemberStatus) {
-  busyId.value = m.user_id
+// ── Aksi baris ──
+async function setStatus(m: CompanyMemberResponse, next: MemberStatus) {
   try {
-    await api.patch(`/api/v1/companies/${companyId.value}/members/${m.user_id}`, { status: next })
-    toast.add({ title: 'Status member diperbarui', color: 'success' })
-    await load()
+    await api.patch(`/api/v1/companies/${ctx.companyId.value}/members/${m.user_id}`, { status: next })
+    toast.add({ title: next === 'active' ? 'Anggota diaktifkan' : 'Status diperbarui', color: 'success' })
+    list.reload()
   } catch (err) {
-    toast.add({ title: (err as { message?: string }).message || 'Gagal mengubah status', color: 'error' })
-  } finally {
-    busyId.value = null
+    toastError(err)
   }
 }
 
-async function removeMember(m: CompanyMemberResponse) {
-  if (!confirm(`Keluarkan ${m.email} dari company? Role assignment-nya di company ini ikut dihapus.`)) return
-  busyId.value = m.user_id
+async function remove(m: CompanyMemberResponse) {
+  const ok = await confirm({
+    title: `Keluarkan ${m.name}?`,
+    description: 'Semua role-nya di company ini ikut dicabut. Kamu bisa menambahkannya lagi nanti.',
+    confirmLabel: 'Keluarkan',
+    danger: true,
+  })
+  if (!ok) return
   try {
-    await api.del(`/api/v1/companies/${companyId.value}/members/${m.user_id}`)
-    toast.add({ title: 'Member dikeluarkan', color: 'success' })
-    await load()
+    await api.del(`/api/v1/companies/${ctx.companyId.value}/members/${m.user_id}`)
+    toast.add({ title: `${m.name} dikeluarkan`, color: 'success' })
+    list.reload()
   } catch (err) {
-    toast.add({ title: (err as { message?: string }).message || 'Gagal mengeluarkan member', color: 'error' })
-  } finally {
-    busyId.value = null
+    toastError(err)
   }
 }
 
-let debounce: ReturnType<typeof setTimeout> | undefined
-watch(search, () => {
-  clearTimeout(debounce)
-  debounce = setTimeout(() => {
-    page.value = 1
-    load()
-  }, 300)
-})
-watch(status, () => {
-  page.value = 1
-  load()
-})
+function rowActions(m: CompanyMemberResponse): DropdownMenuItem[][] {
+  const items: DropdownMenuItem[][] = [[{ label: 'Lihat role & akses', icon: 'i-lucide-shield', to: `${base.value}/${m.user_id}` }]]
+  const second: DropdownMenuItem[] = []
+  if (m.status !== 'active') second.push({ label: 'Aktifkan', icon: 'i-lucide-check', onSelect: () => setStatus(m, 'active') })
+  if (m.status !== 'inactive') second.push({ label: 'Keluarkan', icon: 'i-lucide-user-minus', color: 'error', onSelect: () => remove(m) })
+  return second.length ? [...items, second] : items
+}
 
-onMounted(load)
+const UAvatar = resolveComponent('UAvatar')
+const UButton = resolveComponent('UButton')
+const UDropdownMenu = resolveComponent('UDropdownMenu')
+const StatusBadge = resolveComponent('StatusBadge')
+
+const columns: TableColumn<CompanyMemberResponse>[] = [
+  {
+    accessorKey: 'name',
+    header: 'Anggota',
+    cell: ({ row }) => h('div', { class: 'flex items-center gap-3' }, [
+      h(UAvatar, { text: initials(row.original.name), size: 'sm' }),
+      h('div', { class: 'min-w-0' }, [
+        h('p', { class: 'truncate font-medium text-highlighted' }, row.original.name),
+        h('p', { class: 'truncate text-xs text-muted' }, row.original.email),
+      ]),
+    ]),
+  },
+  { accessorKey: 'status', header: 'Status', cell: ({ row }) => h(StatusBadge, { status: row.original.status }) },
+  {
+    accessorKey: 'role_count',
+    header: 'Role',
+    cell: ({ row }) => h('span', { class: row.original.role_count ? 'text-highlighted' : 'text-dimmed' },
+      row.original.role_count ? `${row.original.role_count} role` : 'Belum ada'),
+  },
+  { accessorKey: 'joined_at', header: 'Bergabung', cell: ({ row }) => h('span', { class: 'text-muted' }, formatDate(row.original.joined_at)) },
+  {
+    id: 'actions',
+    cell: ({ row }) => h('div', { class: 'text-right' }, h(UDropdownMenu, { items: rowActions(row.original), content: { align: 'end' } },
+      () => h(UButton, { icon: 'i-lucide-ellipsis-vertical', color: 'neutral', variant: 'ghost', 'aria-label': 'Aksi', onClick: (e: Event) => e.stopPropagation() }))),
+  },
+]
+
+function onSelect(_e: Event, row: { original: CompanyMemberResponse }) {
+  navigateTo(`${base.value}/${row.original.user_id}`)
+}
 </script>
 
 <template>
-  <div>
-    <PageHeader title="Members" subtitle="Anggota company. Klik nama untuk mengatur role per solution.">
-      <template #actions>
-        <UButton
-          icon="i-lucide-user-plus"
-          color="primary"
-          :disabled="isForeignCompany"
-          @click="showAdd = !showAdd"
-        >
-          Tambah member
-        </UButton>
+  <CompanyPage title="Anggota" :section="{ label: 'Anggota', to: base }">
+    <template #actions>
+      <UButton icon="i-lucide-user-plus" @click="showAdd = true">Tambah anggota</UButton>
+    </template>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <UInput v-model="list.search.value" icon="i-lucide-search" placeholder="Cari nama atau email" class="w-full sm:w-72" />
+      <USelect v-model="status" :items="statusOptions(['active', 'invited', 'inactive'])" placeholder="Semua status" class="w-40" />
+    </div>
+
+    <UAlert v-if="list.error.value" color="error" variant="subtle" :title="list.error.value"
+      :actions="[{ label: 'Coba lagi', color: 'neutral', variant: 'outline', onClick: list.reload }]" />
+
+    <UTable
+      :data="list.items.value"
+      :columns="columns"
+      :loading="list.loading.value"
+      class="rounded-lg border border-default"
+      :ui="{ tr: 'cursor-pointer' }"
+      @select="onSelect"
+    >
+      <template #empty>
+        <UEmpty
+          icon="i-lucide-users"
+          :title="list.search.value || status ? 'Tidak ada anggota yang cocok' : 'Belum ada anggota'"
+          :description="list.search.value || status ? 'Coba ubah pencarian atau filter.' : 'Tambahkan user terdaftar sebagai anggota company.'"
+          variant="naked"
+        />
       </template>
-    </PageHeader>
+    </UTable>
 
-    <UAlert
-      v-if="isForeignCompany"
-      class="mb-4"
-      color="warning"
-      variant="subtle"
-      icon="i-lucide-triangle-alert"
-      title="Company ini bukan company aktif"
-      description="Aktifkan company ini dulu (company switcher) untuk mengelola membernya."
-    />
+    <ListPagination v-model:page="list.page.value" :meta="list.meta.value" />
 
-    <UCard v-if="showAdd && !isForeignCompany" class="mb-4">
-      <form class="grid gap-4 sm:grid-cols-4" @submit.prevent="addMember">
-        <UFormField label="Email" hint="atau User ID">
-          <UInput v-model="form.email" class="w-full" placeholder="user@perusahaan.com" />
-        </UFormField>
-        <UFormField label="User ID" hint="opsional">
-          <UInput v-model="form.user_id" class="w-full" placeholder="uuid" />
-        </UFormField>
-        <UFormField label="Status">
-          <USelect
-            v-model="form.status"
-            :items="[{ label: 'Active', value: 'active' }, { label: 'Invited', value: 'invited' }]"
-            class="w-full"
-          />
-        </UFormField>
-        <div class="flex items-end">
-          <UButton type="submit" :loading="saving" color="primary">Simpan</UButton>
+    <UModal v-model:open="showAdd" title="Tambah anggota" description="Cari user yang sudah terdaftar di platform.">
+      <template #body>
+        <div class="space-y-4">
+          <UFormField label="User" required>
+            <UserPicker v-model="candidate" :company-id="ctx.companyId.value" />
+          </UFormField>
+          <UFormField label="Status" help="Diundang = belum aktif; bisa diaktifkan nanti.">
+            <URadioGroup
+              v-model="addStatus"
+              orientation="horizontal"
+              :items="[{ label: 'Aktif', value: 'active' }, { label: 'Diundang', value: 'invited' }]"
+            />
+          </UFormField>
+          <p class="text-xs text-muted">User belum terdaftar? Minta admin platform membuatkan akunnya.</p>
         </div>
-      </form>
-    </UCard>
-
-    <UCard>
-      <div class="mb-4 flex flex-wrap items-center gap-3">
-        <UInput v-model="search" icon="i-lucide-search" placeholder="Cari email / nama" class="w-64" />
-        <USelect v-model="status" :items="statusItems" class="w-44" />
-        <UButton color="neutral" variant="outline" icon="i-lucide-refresh-cw" @click="load">Muat ulang</UButton>
-      </div>
-
-      <UAlert v-if="error" color="error" variant="subtle" :title="error" class="mb-4" />
-
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-default text-left text-xs uppercase tracking-wide text-dimmed">
-              <th class="px-3 py-2">Nama</th>
-              <th class="px-3 py-2">Email</th>
-              <th class="px-3 py-2">Status</th>
-              <th class="px-3 py-2">Bergabung</th>
-              <th class="px-3 py-2" />
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="loading">
-              <td colspan="5" class="px-3 py-6 text-center text-muted">Memuat...</td>
-            </tr>
-            <tr v-else-if="!items.length">
-              <td colspan="5" class="px-3 py-6 text-center text-muted">Tidak ada member.</td>
-            </tr>
-            <template v-else>
-              <tr v-for="m in items" :key="m.user_id" class="border-b border-default/60">
-                <td class="px-3 py-2">
-                  <NuxtLink
-                    v-if="!isForeignCompany"
-                    :to="`/companies/${companyId}/members/${m.user_id}`"
-                    class="font-medium text-highlighted hover:text-primary"
-                  >
-                    {{ m.name }}
-                  </NuxtLink>
-                  <span v-else class="font-medium text-highlighted">{{ m.name }}</span>
-                </td>
-                <td class="px-3 py-2 text-muted">{{ m.email }}</td>
-                <td class="px-3 py-2">
-                  <UBadge
-                    size="sm"
-                    variant="subtle"
-                    :color="m.status === 'active' ? 'success' : m.status === 'inactive' ? 'error' : 'warning'"
-                  >
-                    {{ m.status }}
-                  </UBadge>
-                </td>
-                <td class="px-3 py-2 text-muted">{{ new Date(m.joined_at).toLocaleDateString() }}</td>
-                <td class="px-3 py-2">
-                  <div v-if="!isForeignCompany" class="flex justify-end gap-1">
-                    <UButton
-                      v-if="m.status === 'invited'"
-                      size="xs"
-                      color="neutral"
-                      variant="outline"
-                      icon="i-lucide-check"
-                      :loading="busyId === m.user_id"
-                      @click="changeStatus(m, 'active')"
-                    >
-                      Aktifkan
-                    </UButton>
-                    <UButton
-                      v-if="m.status === 'inactive'"
-                      size="xs"
-                      color="neutral"
-                      variant="outline"
-                      icon="i-lucide-undo-2"
-                      :loading="busyId === m.user_id"
-                      @click="changeStatus(m, 'active')"
-                    >
-                      Aktifkan lagi
-                    </UButton>
-                    <UButton
-                      v-if="m.status !== 'inactive'"
-                      size="xs"
-                      color="error"
-                      variant="outline"
-                      icon="i-lucide-user-minus"
-                      :loading="busyId === m.user_id"
-                      @click="removeMember(m)"
-                    >
-                      Keluarkan
-                    </UButton>
-                  </div>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-
-      <AppPaginator v-if="meta" :meta="meta" @change="(p) => { page = p; load() }" />
-    </UCard>
-  </div>
+      </template>
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton color="neutral" variant="ghost" @click="showAdd = false">Batal</UButton>
+          <UButton :disabled="!candidate" :loading="adding" @click="addMember">Tambahkan</UButton>
+        </div>
+      </template>
+    </UModal>
+  </CompanyPage>
 </template>

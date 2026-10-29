@@ -27,6 +27,8 @@ type CompanyResponse struct {
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// MemberCount — jumlah member active (hanya diisi di list).
+	MemberCount int `json:"member_count"`
 }
 
 // AddCompanyMemberRequest — isi salah satu: user_id atau email (user harus sudah terdaftar).
@@ -49,6 +51,8 @@ type CompanyMemberResponse struct {
 	Name      string    `json:"name"`
 	Status    string    `json:"status"`
 	JoinedAt  time.Time `json:"joined_at"`
+	// RoleCount — jumlah role assignment member di company (semua solution; hanya diisi di list).
+	RoleCount int `json:"role_count"`
 }
 
 type CompanyMemberParam struct {
@@ -59,4 +63,27 @@ type CompanyMemberParam struct {
 // UpdateCompanyMemberRequest — status inactive = member dikeluarkan (role assignment ikut dihapus).
 type UpdateCompanyMemberRequest struct {
 	Status string `json:"status" binding:"required,oneof=invited active inactive"`
+}
+
+// MemberCandidateQuery — pencarian user terdaftar untuk ditambahkan sebagai member.
+type MemberCandidateQuery struct {
+	Search string `form:"search" binding:"required,min=3,max=100"`
+}
+
+// MemberCandidateResponse — data minimal user (tanpa status / flag admin).
+type MemberCandidateResponse struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+type CompanySummaryResponse struct {
+	Members struct {
+		Active   int `json:"active"`
+		Invited  int `json:"invited"`
+		Inactive int `json:"inactive"`
+	} `json:"members"`
+	Branches        int `json:"branches"`
+	CustomRoles     int `json:"custom_roles"`
+	RoleAssignments int `json:"role_assignments"`
 }

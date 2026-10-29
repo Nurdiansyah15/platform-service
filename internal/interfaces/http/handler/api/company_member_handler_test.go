@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"encoding/json"
+	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
@@ -270,4 +271,66 @@ func TestCompanyMember_Get_Success(t *testing.T) {
 	assert.Equal(t, companyID, got.CompanyID)
 	assert.Equal(t, "active", got.Status)
 	assert.NotEmpty(t, got.Email)
+}
+
+// ── Candidates ───────────────────────────────────────────────────────────────
+
+func candidatesPath(companyID, search string) string {
+	return "/api/v1/companies/" + companyID + "/member-candidates?search=" + search
+}
+
+func TestCompanyMember_Candidates_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.GET(candidatesPath(uuid.NewString(), "abc")).Code)
+}
+
+func TestCompanyMember_Candidates_Forbidden_NonMember(t *testing.T) {
+	_, _, companyID := mustCompanyOwner(t)
+	_, strangerID, _ := mustCompanyOwner(t)
+	assert.Equal(t, 403, testSrv.GET(candidatesPath(companyID, "abc"), companyToken(strangerID, companyID)).Code)
+}
+
+func TestCompanyMember_Candidates_InvalidQuery(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	assert.Equal(t, 422, testSrv.GET(candidatesPath(companyID, "ab"), h).Code, "kurang dari 3 karakter")
+	assert.Equal(t, 422, testSrv.GET("/api/v1/companies/"+companyID+"/member-candidates", h).Code, "tanpa search")
+}
+
+func TestCompanyMember_Candidates_NotFound(t *testing.T) {
+	assert.Equal(t, 404, testSrv.GET(candidatesPath(uuid.NewString(), "abc"), adminHeader()).Code)
+}
+
+func TestCompanyMember_Candidates_Success(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	marker := testhelper.UniqueCode("cand")
+	free := mustCreateUser(t, marker+"-free@example.com")
+	member := mustCreateUser(t, marker+"-member@example.com")
+	require.Equal(t, 201, testSrv.POST(membersPath(companyID), map[string]any{"user_id": member}, h).Code)
+	suspended := mustCreateUser(t, marker+"-suspended@example.com")
+	require.Equal(t, 200, testSrv.PATCH("/api/v1/users/"+suspended+"/status", map[string]any{"status": "suspended"}, adminHeader()).Code)
+
+	w := testSrv.GET(candidatesPath(companyID, marker), h)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got []map[string]any
+	testhelper.DecodeBody(t, w, &got)
+	require.Len(t, got, 1, "hanya user active yang belum member")
+	assert.Equal(t, free, got[0]["id"])
+	assert.NotContains(t, got[0], "status")
+	assert.NotContains(t, got[0], "is_platform_admin")
+}
+
+func TestCompanyMember_List_IncludesRoleCount(t *testing.T) {
+	f := newAuthzFixture(t)
+	f.assign(t, f.hrAdmin, "", "")
+	f.assign(t, f.supervisor, "branch", f.b1)
+
+	w := testSrv.GET(membersPath(f.companyID)+"?search="+url.QueryEscape(f.staffEmail), f.ownerH)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var resp struct {
+		Data []struct {
+			RoleCount int `json:"role_count"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	require.Len(t, resp.Data, 1)
+	assert.Equal(t, 2, resp.Data[0].RoleCount)
 }

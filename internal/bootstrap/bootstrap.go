@@ -19,6 +19,7 @@ import (
 	"platform-service/internal/app/usecase/auth"
 	"platform-service/internal/app/usecase/authz"
 	"platform-service/internal/app/usecase/benefit"
+	"platform-service/internal/app/usecase/dashboard"
 	"platform-service/internal/app/usecase/entitlement"
 	"platform-service/internal/app/usecase/organization"
 	"platform-service/internal/app/usecase/permission"
@@ -250,6 +251,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Members:         memberRepo,
 		Subscriptions:   subscriptionRepo,
 		Query:           roleQuery,
+		Assignments:     assignmentRepo,
 	})
 	authzUC := authz.NewAuthzUseCase(authz.AuthzDeps{
 		Tx:            transactor,
@@ -335,6 +337,9 @@ func New(ctx context.Context, opts Options) (*App, error) {
 			Role:     api.NewRoleHandler(roleUC),
 			Authz:    api.NewAuthzHandler(authzUC),
 			Webhook:  api.NewWebhookHandler(webhookUC),
+			Dash: api.NewDashboardHandler(dashboard.NewDashboardUseCase(dashboard.DashboardDeps{
+				Query: persistence.NewPostgresDashboardQuery(opts.DB),
+			})),
 		},
 	})
 

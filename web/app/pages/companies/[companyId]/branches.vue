@@ -1,173 +1,158 @@
 <script setup lang="ts">
-import type { BranchResponse, Meta } from '~/types/api'
+import { h, resolveComponent } from 'vue'
+import type { FormError, FormSubmitEvent, TableColumn } from '@nuxt/ui'
+import type { BranchResponse } from '~/types/api'
 
+const ctx = useCompanyContext()
 const route = useRoute()
-const auth = useAuthStore()
 const api = useApi()
 const toast = useToast()
+const { toastError, fieldErrors } = useApiError()
+const { confirm } = useConfirm()
+const formRef = useTemplateRef('formRef')
 
-const companyId = computed(() => String(route.params.companyId))
-const isForeignCompany = computed(
-  () => !auth.isPlatformAdmin && auth.activeCompanyId !== companyId.value,
-)
-
-const items = ref<BranchResponse[]>([])
-const meta = ref<Meta | null>(null)
-const loading = ref(false)
-const error = ref('')
-
-const page = ref(1)
-const search = ref('')
 const status = ref<string | undefined>(undefined)
+const list = useListQuery<BranchResponse>(
+  () => (ctx.canAccess.value ? `/api/v1/companies/${ctx.companyId.value}/branches` : null),
+  { filters: { status }, syncUrl: true },
+)
+const base = computed(() => `/companies/${ctx.companyId.value}/branches`)
 
-const showCreate = ref(false)
+// ── Form buat / ubah (modal yang sama) ──
+const showForm = ref(route.query.add === '1')
+const editing = ref<BranchResponse | null>(null)
 const saving = ref(false)
-const form = reactive({ name: '', code: '', status: 'active' as 'active' | 'inactive' })
+const state = reactive({ name: '', code: '', active: true })
 
-const statusItems = [
-  { label: 'Semua status', value: undefined },
-  { label: 'Active', value: 'active' },
-  { label: 'Inactive', value: 'inactive' },
-]
-
-async function load() {
-  if (isForeignCompany.value) return
-  loading.value = true
-  error.value = ''
-  try {
-    const res = await api.get<BranchResponse[]>(
-      `/api/v1/companies/${companyId.value}/branches`,
-      { query: { page: page.value, limit: 20, search: search.value || undefined, status: status.value } },
-    )
-    items.value = res.data
-    meta.value = res.meta ?? null
-  } catch (err) {
-    error.value = (err as { message?: string }).message || 'Gagal memuat branch'
-  } finally {
-    loading.value = false
-  }
+function openCreate() {
+  editing.value = null
+  Object.assign(state, { name: '', code: '', active: true })
+  showForm.value = true
 }
 
-async function createBranch() {
+function openEdit(b: BranchResponse) {
+  editing.value = b
+  Object.assign(state, { name: b.name, code: b.code, active: b.status === 'active' })
+  showForm.value = true
+}
+
+function validate(s: typeof state): FormError[] {
+  const errors: FormError[] = []
+  if (!s.name.trim()) errors.push({ name: 'name', message: 'Nama wajib diisi' })
+  if (!s.code.trim()) errors.push({ name: 'code', message: 'Kode wajib diisi' })
+  return errors
+}
+
+async function onSubmit(e: FormSubmitEvent<typeof state>) {
   saving.value = true
+  const body = { name: e.data.name.trim(), code: e.data.code.trim(), status: e.data.active ? 'active' : 'inactive' }
   try {
-    await api.post(`/api/v1/companies/${companyId.value}/branches`, {
-      name: form.name,
-      code: form.code,
-      status: form.status,
-    })
-    toast.add({ title: 'Branch dibuat', color: 'success' })
-    showCreate.value = false
-    form.name = ''
-    form.code = ''
-    await load()
+    if (editing.value) await api.patch(`/api/v1/branches/${editing.value.id}`, body)
+    else await api.post(`/api/v1/companies/${ctx.companyId.value}/branches`, body)
+    toast.add({ title: editing.value ? 'Cabang diperbarui' : 'Cabang dibuat', color: 'success' })
+    showForm.value = false
+    list.reload()
   } catch (err) {
-    toast.add({ title: (err as { message?: string }).message || 'Gagal membuat branch', color: 'error' })
+    const fields = fieldErrors(err)
+    if (fields.length) formRef.value?.setErrors(fields)
+    else toastError(err, 'Gagal menyimpan cabang')
   } finally {
     saving.value = false
   }
 }
 
-let debounce: ReturnType<typeof setTimeout> | undefined
-watch(search, () => {
-  clearTimeout(debounce)
-  debounce = setTimeout(() => {
-    page.value = 1
-    load()
-  }, 300)
-})
-watch(status, () => {
-  page.value = 1
-  load()
-})
+async function remove(b: BranchResponse) {
+  const ok = await confirm({
+    title: `Hapus cabang ${b.name}?`,
+    description: 'Role anggota yang berlaku khusus di cabang ini ikut dicabut. Tindakan ini tidak bisa dibatalkan.',
+    confirmLabel: 'Hapus cabang',
+    danger: true,
+    typeToConfirm: b.code,
+  })
+  if (!ok) return
+  try {
+    await api.del(`/api/v1/branches/${b.id}`)
+    toast.add({ title: 'Cabang dihapus', color: 'success' })
+    list.reload()
+  } catch (err) {
+    toastError(err)
+  }
+}
 
-onMounted(load)
+const UButton = resolveComponent('UButton')
+const UDropdownMenu = resolveComponent('UDropdownMenu')
+const StatusBadge = resolveComponent('StatusBadge')
+
+const columns: TableColumn<BranchResponse>[] = [
+  {
+    accessorKey: 'name',
+    header: 'Cabang',
+    cell: ({ row }) => h('div', [
+      h('p', { class: 'font-medium text-highlighted' }, row.original.name),
+      h('p', { class: 'font-mono text-xs text-muted' }, row.original.code),
+    ]),
+  },
+  { accessorKey: 'status', header: 'Status', cell: ({ row }) => h(StatusBadge, { status: row.original.status }) },
+  { accessorKey: 'created_at', header: 'Dibuat', cell: ({ row }) => h('span', { class: 'text-muted' }, formatDate(row.original.created_at)) },
+  {
+    id: 'actions',
+    cell: ({ row }) => h('div', { class: 'text-right' }, h(UDropdownMenu, {
+      content: { align: 'end' },
+      items: [
+        [{ label: 'Ubah', icon: 'i-lucide-pencil', onSelect: () => openEdit(row.original) }],
+        [{ label: 'Hapus', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => remove(row.original) }],
+      ],
+    }, () => h(UButton, { icon: 'i-lucide-ellipsis-vertical', color: 'neutral', variant: 'ghost', 'aria-label': 'Aksi' }))),
+  },
+]
 </script>
 
 <template>
-  <div>
-    <PageHeader title="Branches" subtitle="Unit organisasi di dalam company.">
-      <template #actions>
-        <UButton icon="i-lucide-plus" color="primary" :disabled="isForeignCompany" @click="showCreate = !showCreate">
-          Branch baru
-        </UButton>
+  <CompanyPage title="Cabang" :section="{ label: 'Cabang', to: base }">
+    <template #actions>
+      <UButton icon="i-lucide-plus" @click="openCreate">Tambah cabang</UButton>
+    </template>
+
+    <p class="text-sm text-muted">Cabang dipakai untuk membatasi role anggota ke lokasi atau unit tertentu.</p>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <UInput v-model="list.search.value" icon="i-lucide-search" placeholder="Cari nama atau kode" class="w-full sm:w-72" />
+      <USelect v-model="status" :items="statusOptions(['active', 'inactive'])" placeholder="Semua status" class="w-40" />
+    </div>
+
+    <UAlert v-if="list.error.value" color="error" variant="subtle" :title="list.error.value"
+      :actions="[{ label: 'Coba lagi', color: 'neutral', variant: 'outline', onClick: list.reload }]" />
+
+    <UTable :data="list.items.value" :columns="columns" :loading="list.loading.value" class="rounded-lg border border-default">
+      <template #empty>
+        <UEmpty
+          icon="i-lucide-git-branch"
+          :title="list.search.value || status ? 'Tidak ada cabang yang cocok' : 'Belum ada cabang'"
+          :description="list.search.value || status ? 'Coba ubah pencarian atau filter.' : 'Tambahkan cabang pertama company ini.'"
+          :actions="list.search.value || status ? [] : [{ label: 'Tambah cabang', icon: 'i-lucide-plus', onClick: openCreate }]"
+          variant="naked"
+        />
       </template>
-    </PageHeader>
+    </UTable>
 
-    <UAlert
-      v-if="isForeignCompany"
-      class="mb-4"
-      color="warning"
-      variant="subtle"
-      icon="i-lucide-triangle-alert"
-      title="Company ini bukan company aktif"
-      description="Aktifkan company ini dulu untuk mengelola branch."
-    />
+    <ListPagination v-model:page="list.page.value" :meta="list.meta.value" />
 
-    <UCard v-if="showCreate && !isForeignCompany" class="mb-4">
-      <form class="grid gap-4 sm:grid-cols-4" @submit.prevent="createBranch">
-        <UFormField label="Nama">
-          <UInput v-model="form.name" class="w-full" placeholder="Cabang Jakarta" />
-        </UFormField>
-        <UFormField label="Kode">
-          <UInput v-model="form.code" class="w-full" placeholder="JKT" />
-        </UFormField>
-        <UFormField label="Status">
-          <USelect
-            v-model="form.status"
-            :items="[{ label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }]"
-            class="w-full"
-          />
-        </UFormField>
-        <div class="flex items-end">
-          <UButton type="submit" :loading="saving" color="primary">Simpan</UButton>
-        </div>
-      </form>
-    </UCard>
-
-    <UCard>
-      <div class="mb-4 flex flex-wrap items-center gap-3">
-        <UInput v-model="search" icon="i-lucide-search" placeholder="Cari kode / nama" class="w-64" />
-        <USelect v-model="status" :items="statusItems" class="w-44" />
-        <UButton color="neutral" variant="outline" icon="i-lucide-refresh-cw" @click="load">Muat ulang</UButton>
-      </div>
-
-      <UAlert v-if="error" color="error" variant="subtle" :title="error" class="mb-4" />
-
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-default text-left text-xs uppercase tracking-wide text-dimmed">
-              <th class="px-3 py-2">Kode</th>
-              <th class="px-3 py-2">Nama</th>
-              <th class="px-3 py-2">Status</th>
-              <th class="px-3 py-2">Dibuat</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="loading">
-              <td colspan="4" class="px-3 py-6 text-center text-muted">Memuat...</td>
-            </tr>
-            <tr v-else-if="!items.length">
-              <td colspan="4" class="px-3 py-6 text-center text-muted">Belum ada branch.</td>
-            </tr>
-            <template v-else>
-              <tr v-for="b in items" :key="b.id" class="border-b border-default/60">
-                <td class="px-3 py-2 font-mono text-xs text-highlighted">{{ b.code }}</td>
-                <td class="px-3 py-2 text-highlighted">{{ b.name }}</td>
-                <td class="px-3 py-2">
-                  <UBadge size="sm" variant="subtle" :color="b.status === 'active' ? 'success' : 'neutral'">
-                    {{ b.status }}
-                  </UBadge>
-                </td>
-                <td class="px-3 py-2 text-muted">{{ new Date(b.created_at).toLocaleDateString() }}</td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-
-      <AppPaginator v-if="meta" :meta="meta" @change="(p) => { page = p; load() }" />
-    </UCard>
-  </div>
+    <UModal v-model:open="showForm" :title="editing ? 'Ubah cabang' : 'Tambah cabang'">
+      <template #body>
+        <UForm ref="formRef" :state="state" :validate="validate" class="space-y-4" @submit="onSubmit">
+          <UFormField label="Nama" name="name" required>
+            <UInput v-model="state.name" placeholder="Cabang Jakarta Selatan" class="w-full" autofocus />
+          </UFormField>
+          <UFormField label="Kode" name="code" required help="Unik di company ini; otomatis huruf besar.">
+            <UInput v-model="state.code" placeholder="JKT-S" class="w-full" />
+          </UFormField>
+          <USwitch v-model="state.active" label="Aktif" description="Cabang nonaktif tetap tersimpan." />
+          <div class="flex justify-end gap-2 pt-2">
+            <UButton color="neutral" variant="ghost" @click="showForm = false">Batal</UButton>
+            <UButton type="submit" :loading="saving">{{ editing ? 'Simpan' : 'Tambah' }}</UButton>
+          </div>
+        </UForm>
+      </template>
+    </UModal>
+  </CompanyPage>
 </template>

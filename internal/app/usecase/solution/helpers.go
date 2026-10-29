@@ -21,7 +21,8 @@ func mapSolutionDomainError(err error) error {
 		return errSolutionNotFound()
 	case constant.CodeSolutionCodeDuplicate:
 		return apperror.Conflict(string(de.Code), err)
-	case constant.CodeSolutionCodeInvalid, constant.CodeSolutionNameInvalid, constant.CodeSolutionStatusInvalid:
+	case constant.CodeSolutionCodeInvalid, constant.CodeSolutionNameInvalid, constant.CodeSolutionStatusInvalid,
+		constant.CodeSolutionInUseBySession:
 		return apperror.Unprocessable(string(de.Code), nil, err)
 	default:
 		return apperror.Internal(string(de.Code), err)

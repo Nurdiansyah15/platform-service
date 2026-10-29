@@ -11,4 +11,5 @@ func RegisterSolutionRoutes(r Routes, h *api.SolutionHandler) {
 	g.GET("", h.List)
 	g.GET("/:solutionId", h.Get)
 	g.POST("", middleware.RequirePlatformAdmin(), r.Deployment.LicenseManaged(), h.Create)
+	g.PATCH("/:solutionId", middleware.RequirePlatformAdmin(), r.Deployment.LicenseManaged(), h.Update)
 }

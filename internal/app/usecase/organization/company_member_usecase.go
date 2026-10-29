@@ -44,6 +44,7 @@ func (uc *CompanyMemberUseCase) List(ctx context.Context, actor *principal.Princ
 	for _, it := range items {
 		out = append(out, dto.CompanyMemberResponse{
 			CompanyID: companyID, UserID: it.UserID, Email: it.Email, Name: it.Name, Status: it.Status, JoinedAt: it.JoinedAt,
+			RoleCount: it.RoleCount,
 		})
 	}
 	return out, meta, nil
@@ -90,6 +91,24 @@ func (uc *CompanyMemberUseCase) Add(ctx context.Context, actor *principal.Princi
 	return &dto.CompanyMemberResponse{
 		CompanyID: companyID, UserID: u.ID, Email: u.Email.Value(), Name: u.Name, Status: m.Status.String(), JoinedAt: m.JoinedAt,
 	}, nil
+}
+
+// memberCandidateLimit — jumlah maksimal hasil pencarian kandidat member.
+const memberCandidateLimit = 10
+
+// Candidates mencari user terdaftar (active) yang bisa ditambahkan sebagai member: cocok
+// email / nama dan belum member active / invited. Hasil dibatasi dan hanya berisi data minimal.
+//
+// Required — auth: user (platform admin, atau member active dengan cid = companyId) atau service | scope: users:write
+func (uc *CompanyMemberUseCase) Candidates(ctx context.Context, actor *principal.Principal, companyID string, req dto.MemberCandidateQuery) ([]dto.MemberCandidateResponse, error) {
+	if err := uc.ensureCompany(ctx, actor, companyID); err != nil {
+		return nil, err
+	}
+	items, err := uc.deps.CompanyQuery.SearchMemberCandidates(ctx, companyID, req.Search, memberCandidateLimit)
+	if err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+	return items, nil
 }
 
 // Get mengambil satu member company beserta data user.

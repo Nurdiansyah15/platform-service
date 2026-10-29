@@ -109,6 +109,19 @@ export interface CreateSolutionRequest {
   status?: 'active' | 'inactive'
 }
 
+export interface UpdateSolutionRequest {
+  name?: string
+  description?: string
+  status?: 'active' | 'inactive'
+}
+
+export interface AdminSummary {
+  users: { active: number; inactive: number; suspended: number; admins: number }
+  companies: { active: number; suspended: number; closed: number }
+  solutions: { active: number; inactive: number }
+  active_clients: number
+}
+
 export interface ListSolutionQuery extends PaginationParams {
   status?: string
   search?: string
@@ -166,6 +179,21 @@ export interface CompanyResponse {
   status: string
   created_at: string
   updated_at: string
+  /** Jumlah member active (hanya diisi di list). */
+  member_count?: number
+}
+
+export interface CompanySummary {
+  members: { active: number; invited: number; inactive: number }
+  branches: number
+  custom_roles: number
+  role_assignments: number
+}
+
+export interface MemberCandidate {
+  id: string
+  name: string
+  email: string
 }
 
 export interface CreateCompanyRequest {
@@ -194,6 +222,8 @@ export interface CompanyMemberResponse {
   name: string
   status: string
   joined_at: string
+  /** Jumlah role assignment di company (hanya diisi di list). */
+  role_count?: number
 }
 
 export interface AddCompanyMemberRequest {
@@ -217,6 +247,12 @@ export interface BranchResponse {
   status: string
   created_at: string
   updated_at: string
+}
+
+export interface UpdateOrgUnitRequest {
+  name?: string
+  code?: string
+  status?: 'active' | 'inactive'
 }
 
 export interface CreateOrgUnitRequest {
@@ -282,6 +318,24 @@ export interface RoleResponse {
   scope: 'system' | 'global' | 'company'
   created_at: string
   updated_at: string
+  permission_count: number
+  member_count: number
+}
+
+export interface UpdateRoleRequest {
+  name?: string
+  description?: string
+}
+
+export interface RoleHolder {
+  assignment_id: string
+  user_id: string
+  name: string
+  email: string
+  scope_type: 'company' | 'branch'
+  scope_id: string
+  scope_name: string
+  created_at: string
 }
 
 export interface CreateRoleRequest {
@@ -366,27 +420,6 @@ export interface RoleAssignmentDetail {
   scope_id: string
   scope_name: string
   created_at: string
-}
-
-/** `POST /authz/check-batch` — tetap dipakai composable usePermission. */
-export interface AuthzCheckItem {
-  permission: string
-  scope_type?: 'company' | 'branch'
-  scope_id?: string
-}
-
-export interface AuthzCheckResult {
-  permission: string
-  scope_type: string
-  scope_id: string
-  allowed: boolean
-  granted_by: string[] | null
-}
-
-export interface AuthzCheckBatchResponse {
-  company_id: string
-  user_id: string
-  results: AuthzCheckResult[]
 }
 
 export interface EffectivePermission {

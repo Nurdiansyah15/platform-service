@@ -14,6 +14,17 @@ type ListOrgUnitQuery struct {
 	PaginationParams
 }
 
+// UpdateOrgUnitRequest — field nil tidak diubah.
+type UpdateOrgUnitRequest struct {
+	Name   *string `json:"name" binding:"omitempty,max=255"`
+	Code   *string `json:"code" binding:"omitempty,max=100"`
+	Status *string `json:"status" binding:"omitempty,oneof=active inactive"`
+}
+
+type BranchIDParam struct {
+	BranchID string `uri:"branchId" binding:"required,uuid"`
+}
+
 type CompanyIDParam struct {
 	CompanyID string `uri:"companyId" binding:"required,uuid"`
 }

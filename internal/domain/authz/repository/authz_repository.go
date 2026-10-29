@@ -12,6 +12,10 @@ type RoleAssignmentRepository interface {
 	// FindByID memuat assignment beserta ringkasan role-nya. Tidak ada → CodeAssignmentNotFound.
 	FindByID(ctx context.Context, id string) (*entity.RoleAssignment, error)
 	Delete(ctx context.Context, id string) error
+	// DeleteByScope menghapus semua assignment pada scope tertentu (mis. branch dihapus).
+	DeleteByScope(ctx context.Context, scopeType, scopeID string) error
+	// DeleteByRole menghapus semua assignment role tertentu (role dihapus).
+	DeleteByRole(ctx context.Context, roleID string) error
 	// DeleteByMember menghapus semua assignment user di company (member dikeluarkan).
 	DeleteByMember(ctx context.Context, companyID, userID string) error
 }

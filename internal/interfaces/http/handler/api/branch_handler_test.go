@@ -106,3 +106,87 @@ func TestBranch_List_Success(t *testing.T) {
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 	assert.Equal(t, []string{"B1", "B2"}, orgCodes(resp.Data))
 }
+
+// ── Update / Delete ──────────────────────────────────────────────────────────
+
+func branchPath(id string) string {
+	return "/api/v1/branches/" + id
+}
+
+func TestBranch_Update_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.PATCH(branchPath(uuid.NewString()), map[string]any{"name": "X"}).Code)
+}
+
+func TestBranch_Update_NotFound_OtherCompany(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	id := mustCreateBranch(t, h, companyID, "B1")
+	strangerH, _, _ := mustCompanyOwner(t)
+	assert.Equal(t, 404, testSrv.PATCH(branchPath(id), map[string]any{"name": "X"}, strangerH).Code, "company lain → 404")
+	assert.Equal(t, 404, testSrv.PATCH(branchPath(uuid.NewString()), map[string]any{"name": "X"}, h).Code)
+}
+
+func TestBranch_Update_InvalidPayload(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	id := mustCreateBranch(t, h, companyID, "B1")
+	assert.Equal(t, 422, testSrv.PATCH(branchPath(id), map[string]any{"status": "closed"}, h).Code)
+	assert.Equal(t, 422, testSrv.PATCH(branchPath(id), map[string]any{"name": " "}, h).Code)
+	assert.Equal(t, 422, testSrv.PATCH(branchPath("bukan-uuid"), map[string]any{"name": "X"}, h).Code)
+}
+
+func TestBranch_Update_Duplicate(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	mustCreateBranch(t, h, companyID, "B1")
+	id := mustCreateBranch(t, h, companyID, "B2")
+	assert.Equal(t, 409, testSrv.PATCH(branchPath(id), map[string]any{"code": "b1"}, h).Code)
+}
+
+func TestBranch_Update_Success(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	id := mustCreateBranch(t, h, companyID, "B1")
+
+	w := testSrv.PATCH(branchPath(id), map[string]any{"name": "Cabang Utama", "code": "hq", "status": "inactive"}, h)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got struct {
+		Name   string `json:"name"`
+		Code   string `json:"code"`
+		Status string `json:"status"`
+	}
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, "Cabang Utama", got.Name)
+	assert.Equal(t, "HQ", got.Code)
+	assert.Equal(t, "inactive", got.Status)
+	assert.Equal(t, 1, countEvents(t, "branch.updated", companyID))
+}
+
+func TestBranch_Delete_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.DELETE(branchPath(uuid.NewString())).Code)
+}
+
+func TestBranch_Delete_NotFound_OtherCompany(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	id := mustCreateBranch(t, h, companyID, "B1")
+	strangerH, _, _ := mustCompanyOwner(t)
+	assert.Equal(t, 404, testSrv.DELETE(branchPath(id), strangerH).Code)
+}
+
+func TestBranch_Delete_Success_RemovesScopedAssignments(t *testing.T) {
+	f := newAuthzFixture(t)
+	f.assign(t, f.supervisor, "branch", f.b1)
+	f.assign(t, f.hrAdmin, "", "")
+
+	w := testSrv.DELETE(branchPath(f.b1), f.ownerH)
+	require.Equal(t, 200, w.Code, w.Body.String())
+
+	var deletedAt *string
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(), `SELECT deleted_at::text FROM branches WHERE id = $1`, f.b1).Scan(&deletedAt))
+	assert.NotNil(t, deletedAt)
+	var n int
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM user_role_assignments WHERE company_id = $1 AND user_id = $2`, f.companyID, f.staffID).Scan(&n))
+	assert.Equal(t, 1, n, "hanya assignment ber-scope branch yang dihapus")
+	assert.Equal(t, 1, countEvents(t, "branch.deleted", f.companyID))
+
+	assert.Equal(t, 404, testSrv.DELETE(branchPath(f.b1), f.ownerH).Code, "sudah dihapus")
+	w = testSrv.GET(branchesPath(f.companyID), f.ownerH)
+	assert.NotContains(t, w.Body.String(), f.b1)
+}
