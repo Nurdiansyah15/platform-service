@@ -153,3 +153,91 @@ func TestCompanyMember_Add_RejoinInactiveMember(t *testing.T) {
 	testhelper.DecodeBody(t, w, &got)
 	assert.Equal(t, "active", got.Status)
 }
+
+// ── Update / Remove ──────────────────────────────────────────────────────────
+
+func memberPath(companyID, userID string) string {
+	return membersPath(companyID) + "/" + userID
+}
+
+func TestCompanyMember_Update_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.PATCH(memberPath(uuid.NewString(), uuid.NewString()), map[string]any{"status": "active"}).Code)
+}
+
+func TestCompanyMember_Update_Forbidden_NonMember(t *testing.T) {
+	_, ownerID, companyID := mustCompanyOwner(t)
+	_, strangerID, _ := mustCompanyOwner(t)
+	w := testSrv.PATCH(memberPath(companyID, ownerID), map[string]any{"status": "invited"}, companyToken(strangerID, companyID))
+	assert.Equal(t, 403, w.Code, w.Body.String())
+}
+
+func TestCompanyMember_Update_InvalidPayload(t *testing.T) {
+	h, ownerID, companyID := mustCompanyOwner(t)
+	assert.Equal(t, 422, testSrv.PATCH(memberPath(companyID, ownerID), map[string]any{"status": "banned"}, h).Code)
+	assert.Equal(t, 422, testSrv.PATCH(memberPath(companyID, ownerID), map[string]any{}, h).Code)
+	assert.Equal(t, 422, testSrv.PATCH(memberPath(companyID, "bukan-uuid"), map[string]any{"status": "active"}, h).Code)
+}
+
+func TestCompanyMember_Update_NotFound(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	notMember := mustCreateUser(t, testhelper.UniqueEmail("nm"))
+	assert.Equal(t, 404, testSrv.PATCH(memberPath(companyID, notMember), map[string]any{"status": "active"}, h).Code)
+	assert.Equal(t, 404, testSrv.PATCH(memberPath(uuid.NewString(), notMember), map[string]any{"status": "active"}, adminHeader()).Code)
+}
+
+func TestCompanyMember_Update_Success(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	userID := mustCreateUser(t, testhelper.UniqueEmail("m"))
+	require.Equal(t, 201, testSrv.POST(membersPath(companyID), map[string]any{"user_id": userID}, h).Code)
+
+	w := testSrv.PATCH(memberPath(companyID, userID), map[string]any{"status": "invited"}, h)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got memberData
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, userID, got.UserID)
+	assert.Equal(t, "invited", got.Status)
+	assert.NotEmpty(t, got.Email)
+	assert.Equal(t, 1, countEvents(t, "company_member.updated", companyID))
+
+	// Status sama → tidak ada event baru.
+	require.Equal(t, 200, testSrv.PATCH(memberPath(companyID, userID), map[string]any{"status": "invited"}, h).Code)
+	assert.Equal(t, 1, countEvents(t, "company_member.updated", companyID))
+}
+
+func TestCompanyMember_Remove_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.DELETE(memberPath(uuid.NewString(), uuid.NewString())).Code)
+}
+
+func TestCompanyMember_Remove_Forbidden_NonMember(t *testing.T) {
+	_, ownerID, companyID := mustCompanyOwner(t)
+	_, strangerID, _ := mustCompanyOwner(t)
+	assert.Equal(t, 403, testSrv.DELETE(memberPath(companyID, ownerID), companyToken(strangerID, companyID)).Code)
+}
+
+func TestCompanyMember_Remove_NotFound(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	assert.Equal(t, 404, testSrv.DELETE(memberPath(companyID, uuid.NewString()), h).Code)
+}
+
+func TestCompanyMember_Remove_Success(t *testing.T) {
+	f := newAuthzFixture(t)
+	f.assign(t, f.hrAdmin, "", "")
+
+	w := testSrv.DELETE(memberPath(f.companyID, f.staffID), f.ownerH)
+	require.Equal(t, 200, w.Code, w.Body.String())
+
+	var status string
+	var assignments int
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
+		`SELECT status FROM company_members WHERE company_id = $1 AND user_id = $2`, f.companyID, f.staffID).Scan(&status))
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM user_role_assignments WHERE company_id = $1 AND user_id = $2`, f.companyID, f.staffID).Scan(&assignments))
+	assert.Equal(t, "inactive", status)
+	assert.Equal(t, 0, assignments, "role assignment ikut dihapus")
+	assert.Equal(t, 1, countEvents(t, "company_member.removed", f.companyID))
+	assert.False(t, f.serviceCheck(t, "employee.read", "", "").Allowed)
+
+	// Idempotent.
+	assert.Equal(t, 200, testSrv.DELETE(memberPath(f.companyID, f.staffID), f.ownerH).Code)
+	assert.Equal(t, 1, countEvents(t, "company_member.removed", f.companyID))
+}

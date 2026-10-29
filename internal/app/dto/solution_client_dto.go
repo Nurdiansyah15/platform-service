@@ -10,6 +10,18 @@ type CreateSolutionClientRequest struct {
 	Scopes []string `json:"scopes" binding:"omitempty,dive,max=50"`
 }
 
+// UpdateSolutionClientRequest — field nil tidak diubah; scopes menggantikan seluruh scope client.
+type UpdateSolutionClientRequest struct {
+	Name   *string  `json:"name" binding:"omitempty,max=255"`
+	Scopes []string `json:"scopes" binding:"omitempty,dive,max=50"`
+}
+
+type ListSolutionClientQuery struct {
+	Status *string `form:"status" binding:"omitempty,oneof=active revoked"`
+	Search *string `form:"search"`
+	PaginationParams
+}
+
 type SolutionClientIDParam struct {
 	ClientID string `uri:"clientId" binding:"required,uuid"`
 }

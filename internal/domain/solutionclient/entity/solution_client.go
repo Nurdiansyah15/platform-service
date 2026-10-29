@@ -84,6 +84,29 @@ func (c *SolutionClient) RotateSecret(newHash string, now time.Time) error {
 	return nil
 }
 
+// Update mengganti nama dan/atau scope client; nil = tidak diubah. Client revoked tidak bisa diubah.
+func (c *SolutionClient) Update(name *string, scopes []string, now time.Time) error {
+	if !c.IsActive() {
+		return domainerr.New(constant.CodeClientRevoked)
+	}
+	if name != nil {
+		n := strings.TrimSpace(*name)
+		if n == "" || utf8.RuneCountInString(n) > constant.NameMaxLength {
+			return domainerr.New(constant.CodeClientNameInvalid)
+		}
+		c.Name = n
+	}
+	if scopes != nil {
+		s, err := valueobject.NewScopes(scopes)
+		if err != nil {
+			return err
+		}
+		c.Scopes = s
+	}
+	c.UpdatedAt = now.UTC()
+	return nil
+}
+
 // Revoke menonaktifkan client secara permanen. Idempotent.
 func (c *SolutionClient) Revoke(now time.Time) {
 	if !c.IsActive() {

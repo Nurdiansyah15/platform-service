@@ -190,3 +190,83 @@ func TestCompany_Get_Forbidden_InactiveMember(t *testing.T) {
 
 	assert.Equal(t, 403, testSrv.GET("/api/v1/companies/"+companyID, h).Code)
 }
+
+// ── Update ───────────────────────────────────────────────────────────────────
+
+func companyPath(companyID string) string {
+	return "/api/v1/companies/" + companyID
+}
+
+func TestCompany_Update_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.PATCH(companyPath(uuid.NewString()), map[string]any{"name": "X"}).Code)
+}
+
+func TestCompany_Update_Forbidden_NonMember(t *testing.T) {
+	_, _, companyID := mustCompanyOwner(t)
+	_, strangerID, _ := mustCompanyOwner(t)
+	w := testSrv.PATCH(companyPath(companyID), map[string]any{"name": "X"}, companyToken(strangerID, companyID))
+	assert.Equal(t, 403, w.Code, w.Body.String())
+}
+
+func TestCompany_Update_Forbidden_StatusByMember(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	w := testSrv.PATCH(companyPath(companyID), map[string]any{"status": "suspended"}, h)
+	assert.Equal(t, 403, w.Code, w.Body.String())
+}
+
+func TestCompany_Update_InvalidPayload(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	for name, body := range map[string]map[string]any{
+		"status tak dikenal": {"status": "deleted"},
+		"name kosong":        {"name": "   "},
+		"slug tidak valid":   {"slug": "Bukan Slug!"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := testSrv.PATCH(companyPath(companyID), body, h)
+			assert.Equal(t, 422, w.Code, w.Body.String())
+		})
+	}
+	assert.Equal(t, 422, testSrv.PATCH(companyPath("bukan-uuid"), map[string]any{"name": "X"}, adminHeader()).Code)
+}
+
+func TestCompany_Update_NotFound(t *testing.T) {
+	assert.Equal(t, 404, testSrv.PATCH(companyPath(uuid.NewString()), map[string]any{"name": "X"}, adminHeader()).Code)
+}
+
+func TestCompany_Update_Duplicate(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	other := mustCreateCompany(t, adminHeader())
+	var otherSlug string
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(), `SELECT slug FROM companies WHERE id = $1`, other).Scan(&otherSlug))
+
+	w := testSrv.PATCH(companyPath(companyID), map[string]any{"slug": otherSlug}, h)
+	assert.Equal(t, 409, w.Code, w.Body.String())
+}
+
+func TestCompany_Update_Success(t *testing.T) {
+	h, _, companyID := mustCompanyOwner(t)
+	slug := testhelper.UniqueCode("renamed")
+
+	w := testSrv.PATCH(companyPath(companyID), map[string]any{"name": "  Acme Baru  ", "slug": slug}, h)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got companyData
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, "Acme Baru", got.Name)
+	assert.Equal(t, slug, got.Slug)
+	assert.Equal(t, "active", got.Status)
+	assert.Equal(t, 1, countEvents(t, "company.updated", companyID))
+}
+
+func TestCompany_Update_Success_AdminChangesStatus(t *testing.T) {
+	_, _, companyID := mustCompanyOwner(t)
+
+	w := testSrv.PATCH(companyPath(companyID), map[string]any{"status": "suspended"}, adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got companyData
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, "suspended", got.Status)
+
+	var status string
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(), `SELECT status FROM companies WHERE id = $1`, companyID).Scan(&status))
+	assert.Equal(t, "suspended", status)
+}

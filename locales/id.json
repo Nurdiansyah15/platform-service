@@ -65,6 +65,7 @@
   "DOMAIN_COMPANY_NAME_INVALID": "Nama company wajib diisi (maks 255 karakter).",
   "DOMAIN_COMPANY_STATUS_INVALID": "Status company harus active, suspended, atau closed.",
   "DOMAIN_COMPANY_ACCESS_DENIED": "Anda tidak memiliki akses ke company ini.",
+  "DOMAIN_COMPANY_STATUS_FORBIDDEN": "Status company hanya dapat diubah oleh admin platform.",
   "DOMAIN_COMPANY_PERSISTENCE_FAILED": "Gagal menyimpan company.",
   "DOMAIN_COMPANY_QUERY_FAILED": "Gagal memuat company.",
   "DOMAIN_COMPANY_MEMBER_NOT_FOUND": "Member company tidak ditemukan.",

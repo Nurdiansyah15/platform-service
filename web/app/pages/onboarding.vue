@@ -35,17 +35,21 @@ async function createCompany() {
       return
     }
 
-    try {
-      await auth.switchCompany(company.id)
-      await navigateTo('/')
-    } catch {
-      toast.add({
-        title: 'Company dibuat',
-        description: 'Company belum bisa diaktifkan (butuh subscription). Hubungi admin platform.',
-        color: 'warning',
-      })
-      await auth.loadCompanies()
-    }
+    // GATE-SUBSCRIPTION (nonaktif sementara): company baru langsung bisa dipilih tanpa
+    // subscription, jadi fallback "butuh subscription" tidak dipakai.
+    // try {
+    //   await auth.switchCompany(company.id)
+    //   await navigateTo('/')
+    // } catch {
+    //   toast.add({
+    //     title: 'Company dibuat',
+    //     description: 'Company belum bisa diaktifkan (butuh subscription). Hubungi admin platform.',
+    //     color: 'warning',
+    //   })
+    //   await auth.loadCompanies()
+    // }
+    await auth.switchCompany(company.id)
+    await navigateTo('/')
   } catch (err) {
     toast.add({ title: (err as { message?: string }).message || 'Gagal membuat company', color: 'error' })
   } finally {

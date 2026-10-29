@@ -68,7 +68,9 @@ func TestAuthCompanies_Unauthenticated(t *testing.T) {
 func TestAuthCompanies_OnlySelectable(t *testing.T) {
 	u := newUserWithSolution(t)
 	subscribed := u.mustOwnedCompany(t, true)
-	u.mustOwnedCompany(t, false) // member tapi company tidak subscribe solution ini
+	// GATE-SUBSCRIPTION (nonaktif sementara): company tanpa subscription tetap bisa dipilih.
+	// u.mustOwnedCompany(t, false) // member tapi company tidak subscribe solution ini
+	notSubscribed := u.mustOwnedCompany(t, false)
 	suspended := u.mustOwnedCompany(t, true)
 	_, err := testSrv.DB.ExecContext(context.Background(), `UPDATE companies SET status = 'suspended' WHERE id = $1`, suspended)
 	require.NoError(t, err)
@@ -77,7 +79,8 @@ func TestAuthCompanies_OnlySelectable(t *testing.T) {
 	notMember := mustCreateCompany(t, adminHeader())
 	mustSubscribe(t, notMember, u.planID)
 
-	assert.Equal(t, []string{subscribed}, selectableIDs(t, u.tok.AccessToken))
+	// assert.Equal(t, []string{subscribed}, selectableIDs(t, u.tok.AccessToken))
+	assert.ElementsMatch(t, []string{subscribed, notSubscribed}, selectableIDs(t, u.tok.AccessToken))
 }
 
 // ── POST /auth/switch-company ─────────────────────────────────────────────────
@@ -95,7 +98,8 @@ func TestSwitchCompany_Forbidden(t *testing.T) {
 	u := newUserWithSolution(t)
 	h := testhelper.BearerHeader(u.tok.AccessToken)
 
-	notSubscribed := u.mustOwnedCompany(t, false)
+	// GATE-SUBSCRIPTION (nonaktif sementara): kasus "tidak subscribe" dicakup TestSwitchCompany_WithoutSubscription_Success.
+	// notSubscribed := u.mustOwnedCompany(t, false)
 	notMember := mustCreateCompany(t, adminHeader())
 	mustSubscribe(t, notMember, u.planID)
 	suspended := u.mustOwnedCompany(t, true)
@@ -103,13 +107,25 @@ func TestSwitchCompany_Forbidden(t *testing.T) {
 	require.NoError(t, err)
 
 	for name, companyID := range map[string]string{
-		"tidak subscribe": notSubscribed, "bukan member": notMember, "company suspended": suspended, "tidak ada": uuid.NewString(),
+		// "tidak subscribe": notSubscribed,
+		"bukan member": notMember, "company suspended": suspended, "tidak ada": uuid.NewString(),
 	} {
 		t.Run(name, func(t *testing.T) {
 			w := testSrv.POST("/api/v1/auth/switch-company", map[string]any{"company_id": companyID}, h)
 			assert.Equal(t, 403, w.Code, w.Body.String())
 		})
 	}
+}
+
+// GATE-SUBSCRIPTION (nonaktif sementara): company yang belum subscribe solution sesi tetap bisa dipilih.
+func TestSwitchCompany_WithoutSubscription_Success(t *testing.T) {
+	u := newUserWithSolution(t)
+	companyID := u.mustOwnedCompany(t, false)
+
+	switched := mustSwitchCompany(t, u.tok.AccessToken, companyID)
+	require.NotNil(t, switched.CompanyID)
+	assert.Equal(t, companyID, *switched.CompanyID)
+	assert.Equal(t, 200, testSrv.GET("/api/v1/companies/"+companyID, testhelper.BearerHeader(switched.AccessToken)).Code)
 }
 
 func TestSwitchCompany_Success(t *testing.T) {

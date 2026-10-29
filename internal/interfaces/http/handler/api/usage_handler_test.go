@@ -83,8 +83,9 @@ func TestUsage_Report_Forbidden(t *testing.T) {
 	other := newUsageFixture(t)
 	assert.Equal(t, 403, testSrv.POST(usagePath(f.companyID, other.solutionID), body, f.auth).Code, "solution path bukan milik client")
 
-	unsubscribed := mustCreateCompany(t, adminHeader())
-	assert.Equal(t, 403, testSrv.POST(usagePath(unsubscribed, f.solutionID), body, f.auth).Code, "company tidak subscribe")
+	// GATE-SUBSCRIPTION (nonaktif sementara): AccessPolicy tidak lagi menolak company yang belum subscribe.
+	// unsubscribed := mustCreateCompany(t, adminHeader())
+	// assert.Equal(t, 403, testSrv.POST(usagePath(unsubscribed, f.solutionID), body, f.auth).Code, "company tidak subscribe")
 }
 
 // ── Validasi ─────────────────────────────────────────────────────────────────

@@ -4,9 +4,12 @@ package event
 import "time"
 
 const (
-	TypeCompanyCreated     = "company.created"
-	TypeBranchCreated      = "branch.created"
-	TypeCompanyMemberAdded = "company_member.added"
+	TypeCompanyCreated       = "company.created"
+	TypeCompanyUpdated       = "company.updated"
+	TypeBranchCreated        = "branch.created"
+	TypeCompanyMemberAdded   = "company_member.added"
+	TypeCompanyMemberUpdated = "company_member.updated"
+	TypeCompanyMemberRemoved = "company_member.removed"
 )
 
 type CompanyPayload struct {

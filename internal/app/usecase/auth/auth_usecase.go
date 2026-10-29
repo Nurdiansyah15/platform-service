@@ -205,6 +205,7 @@ func (uc *AuthUseCase) Me(ctx context.Context, actor *principal.Principal) (*dto
 
 // Companies menampilkan company yang bisa dipilih untuk solution sesi: user member active,
 // company active, dan company subscribe solution (trialing / active).
+// GATE-SUBSCRIPTION (nonaktif sementara): syarat subscribe tidak diterapkan.
 //
 // Required — auth: user (cid boleh kosong) | scope: -
 func (uc *AuthUseCase) Companies(ctx context.Context, actor *principal.Principal) ([]dto.SelectableCompanyResponse, error) {
@@ -247,13 +248,14 @@ func (uc *AuthUseCase) SwitchCompany(ctx context.Context, actor *principal.Princ
 	if !ok {
 		return nil, notSelectable
 	}
-	usable, err := uc.deps.Subscriptions.HasUsable(ctx, req.CompanyID, session.SolutionID)
-	if err != nil {
-		return nil, mapAuthDomainError(err)
-	}
-	if !usable {
-		return nil, notSelectable
-	}
+	// GATE-SUBSCRIPTION (nonaktif sementara): company tidak wajib subscribe solution sesi.
+	// usable, err := uc.deps.Subscriptions.HasUsable(ctx, req.CompanyID, session.SolutionID)
+	// if err != nil {
+	// 	return nil, mapAuthDomainError(err)
+	// }
+	// if !usable {
+	// 	return nil, notSelectable
+	// }
 
 	refreshToken, refreshHash, err := newRefreshToken()
 	if err != nil {

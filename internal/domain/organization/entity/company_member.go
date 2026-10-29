@@ -40,6 +40,25 @@ func (m *CompanyMember) Rejoin(status string, now time.Time) error {
 	return nil
 }
 
+// ChangeStatus mengganti status member (invited / active / inactive).
+// Mengembalikan true bila status benar-benar berubah.
+func (m *CompanyMember) ChangeStatus(raw string) (bool, error) {
+	st, err := valueobject.NewMemberStatus(raw)
+	if err != nil {
+		return false, err
+	}
+	if st == m.Status {
+		return false, nil
+	}
+	m.Status = st
+	return true, nil
+}
+
+// IsRemoved — member dikeluarkan dari company (status inactive).
+func (m *CompanyMember) IsRemoved() bool {
+	return m.Status == valueobject.MemberStatusInactive
+}
+
 func (m *CompanyMember) IsActive() bool {
 	return m.Status == valueobject.MemberStatusActive
 }

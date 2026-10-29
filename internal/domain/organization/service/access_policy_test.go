@@ -52,7 +52,9 @@ func TestAccessPolicy(t *testing.T) {
 		{"member inactive", service.Accessor{UserID: "inactive", ActiveCompanyID: "c1"}, constant.CodeCompanyAccessDenied},
 		{"bukan member", service.Accessor{UserID: "stranger", ActiveCompanyID: "c1"}, constant.CodeCompanyAccessDenied},
 		{"service, company subscribe solution", service.Accessor{ServiceSolutionID: "sol-a"}, ""},
-		{"service, company tidak subscribe", service.Accessor{ServiceSolutionID: "sol-b"}, constant.CodeCompanyAccessDenied},
+		// GATE-SUBSCRIPTION (nonaktif sementara): token service boleh mengakses company mana pun.
+		// {"service, company tidak subscribe", service.Accessor{ServiceSolutionID: "sol-b"}, constant.CodeCompanyAccessDenied},
+		{"service, company tidak subscribe", service.Accessor{ServiceSolutionID: "sol-b"}, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

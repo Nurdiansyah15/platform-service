@@ -13,6 +13,13 @@ type ListCompanyQuery struct {
 	PaginationParams
 }
 
+// UpdateCompanyRequest — field nil tidak diubah. status hanya boleh diubah platform admin.
+type UpdateCompanyRequest struct {
+	Name   *string `json:"name" binding:"omitempty,max=255"`
+	Slug   *string `json:"slug" binding:"omitempty,max=100"`
+	Status *string `json:"status" binding:"omitempty,oneof=active suspended closed"`
+}
+
 type CompanyResponse struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
@@ -42,4 +49,14 @@ type CompanyMemberResponse struct {
 	Name      string    `json:"name"`
 	Status    string    `json:"status"`
 	JoinedAt  time.Time `json:"joined_at"`
+}
+
+type CompanyMemberParam struct {
+	CompanyID string `uri:"companyId" binding:"required,uuid"`
+	UserID    string `uri:"userId" binding:"required,uuid"`
+}
+
+// UpdateCompanyMemberRequest — status inactive = member dikeluarkan (role assignment ikut dihapus).
+type UpdateCompanyMemberRequest struct {
+	Status string `json:"status" binding:"required,oneof=invited active inactive"`
 }

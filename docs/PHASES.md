@@ -386,8 +386,8 @@ Pola sama: usecase + handler + handler test wajib.
 - [ ] `GET /users`, `GET /users/{userId}`, `PATCH /users/{userId}`, `PATCH /users/{userId}/status`
 
 ### L2 — Company & Organization
-- [ ] `PATCH /companies/{companyId}`
-- [ ] `PATCH /companies/{companyId}/members/{userId}`, `DELETE /companies/{companyId}/members/{userId}` (status `inactive` + hapus role assignment)
+- [x] `PATCH /companies/{companyId}` (status khusus platform admin)
+- [x] `PATCH /companies/{companyId}/members/{userId}`, `DELETE /companies/{companyId}/members/{userId}` (status `inactive` + hapus role assignment)
 - [ ] `GET/PATCH/DELETE /companies/{companyId}`, `GET/PATCH/DELETE /branches/{branchId}`
 
 ### L3 — Catalog
@@ -415,7 +415,7 @@ Pola sama: usecase + handler + handler test wajib.
 ### L7 — Service Auth & Keys
 - [ ] `GET /.well-known/openid-configuration`
 - [ ] `GET /admin/signing-keys`, `POST /admin/signing-keys/rotate`
-- [ ] `GET /solutions/{solutionId}/clients`, `GET/PATCH /solution-clients/{clientId}`, `POST /solution-clients/{clientId}/revoke`
+- [x] `GET /solutions/{solutionId}/clients`, `GET/PATCH /solution-clients/{clientId}`, `POST /solution-clients/{clientId}/revoke`
 
 ### L8 — Webhooks & Events
 - [ ] `GET /solutions/{solutionId}/webhooks`, `GET/PATCH/DELETE /webhooks/{webhookId}`

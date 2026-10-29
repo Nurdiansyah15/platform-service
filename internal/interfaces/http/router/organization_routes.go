@@ -27,8 +27,11 @@ func RegisterOrganizationRoutes(r Routes, h *api.OrganizationHandler) {
 
 	g := r.Authenticated.Group("/companies")
 	g.GET("/:companyId", middleware.RequireUserOrService(scopeUsersRead), h.Get)
+	g.PATCH("/:companyId", middleware.RequireUserOrService(scopeOrgWrite), h.Update)
 	g.GET("/:companyId/members", middleware.RequireUserOrService(scopeUsersRead), h.ListMembers)
 	g.POST("/:companyId/members", middleware.RequireUserOrService(scopeUsersWrite), h.AddMember)
+	g.PATCH("/:companyId/members/:userId", middleware.RequireUserOrService(scopeUsersWrite), h.UpdateMember)
+	g.DELETE("/:companyId/members/:userId", middleware.RequireUserOrService(scopeUsersWrite), h.RemoveMember)
 	g.GET("/:companyId/branches", middleware.RequireUserOrService(scopeOrgRead), h.ListBranches)
 	g.POST("/:companyId/branches", middleware.RequireUserOrService(scopeOrgWrite), h.CreateBranch)
 }

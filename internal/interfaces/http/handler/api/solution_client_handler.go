@@ -52,6 +52,122 @@ func (h *SolutionClientHandler) Create(c *gin.Context) {
 	respond.Created(c, "solution client created", resp)
 }
 
+// List godoc
+//
+//	@Summary	List solution clients
+//	@Tags		Solution Clients
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Param		solutionId		path		string	true	"Solution ID"
+//	@Param		status			query		string	false	"active | revoked"
+//	@Param		search			query		string	false	"Cari di name / client_id"
+//	@Param		page			query		int		false	"Halaman"
+//	@Param		limit			query		int		false	"Jumlah per halaman (maks 100)"
+//	@Param		sort_by			query		string	false	"name | created_at | last_used_at"
+//	@Param		sort_type		query		string	false	"asc | desc"
+//	@Success	200				{object}	respond.SuccessBody{data=[]dto.SolutionClientResponse,meta=dto.Meta}
+//	@Failure	401,403,404,422	{object}	respond.ErrorBody
+//	@Router		/api/v1/solutions/{solutionId}/clients [get]
+func (h *SolutionClientHandler) List(c *gin.Context) {
+	var param dto.SolutionIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.ListSolutionClientQuery
+	if err := c.ShouldBindQuery(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	items, meta, err := h.useCase.List(c.Request.Context(), param.SolutionID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.SuccessWithMeta(c, http.StatusOK, "solution clients", items, meta)
+}
+
+// Get godoc
+//
+//	@Summary	Get solution client
+//	@Tags		Solution Clients
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Param		clientId		path		string	true	"Solution client ID (UUID)"
+//	@Success	200				{object}	respond.SuccessBody{data=dto.SolutionClientResponse}
+//	@Failure	401,403,404,422	{object}	respond.ErrorBody
+//	@Router		/api/v1/solution-clients/{clientId} [get]
+func (h *SolutionClientHandler) Get(c *gin.Context) {
+	var param dto.SolutionClientIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	resp, err := h.useCase.Get(c.Request.Context(), param.ClientID)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "solution client", resp)
+}
+
+// Update godoc
+//
+//	@Summary		Update solution client
+//	@Description	Ubah nama / scope. Scope baru langsung berlaku untuk token yang sudah terbit.
+//	@Tags			Solution Clients
+//	@Security		BearerAuth
+//	@Accept			json
+//	@Produce		json
+//	@Param			clientId			path		string							true	"Solution client ID (UUID)"
+//	@Param			body				body		dto.UpdateSolutionClientRequest	true	"Client"
+//	@Success		200					{object}	respond.SuccessBody{data=dto.SolutionClientResponse}
+//	@Failure		401,403,404,409,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/solution-clients/{clientId} [patch]
+func (h *SolutionClientHandler) Update(c *gin.Context) {
+	var param dto.SolutionClientIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.UpdateSolutionClientRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	resp, err := h.useCase.Update(c.Request.Context(), param.ClientID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "solution client updated", resp)
+}
+
+// Revoke godoc
+//
+//	@Summary		Revoke solution client
+//	@Description	Permanen; token yang sudah terbit langsung ditolak. Idempotent.
+//	@Tags			Solution Clients
+//	@Security		BearerAuth
+//	@Produce		json
+//	@Param			clientId		path		string	true	"Solution client ID (UUID)"
+//	@Success		200				{object}	respond.SuccessBody{data=dto.SolutionClientResponse}
+//	@Failure		401,403,404,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/solution-clients/{clientId}/revoke [post]
+func (h *SolutionClientHandler) Revoke(c *gin.Context) {
+	var param dto.SolutionClientIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	resp, err := h.useCase.Revoke(c.Request.Context(), param.ClientID)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "solution client revoked", resp)
+}
+
 // RotateSecret godoc
 //
 //	@Summary		Rotate client secret

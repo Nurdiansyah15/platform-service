@@ -114,20 +114,21 @@ func (uc *RoleUseCase) ListForCompany(ctx context.Context, actor *principal.Prin
 }
 
 // CreateForCompany membuat custom role milik company. Company wajib subscribe solution
-// (trialing / active).
+// (trialing / active) — GATE-SUBSCRIPTION (nonaktif sementara).
 //
 // Required — auth: user (platform admin / member dengan tid) atau service milik solution | scope: roles:write
 func (uc *RoleUseCase) CreateForCompany(ctx context.Context, actor *principal.Principal, companyID, solutionID string, req dto.CreateRoleRequest) (*dto.RoleResponse, error) {
 	if err := uc.ensureCompanySolutionAccess(ctx, actor, companyID, solutionID); err != nil {
 		return nil, err
 	}
-	ok, err := uc.deps.Subscriptions.HasUsable(ctx, companyID, solutionID)
-	if err != nil {
-		return nil, mapRoleDomainError(err)
-	}
-	if !ok {
-		return nil, mapRoleDomainError(domainerr.New(constant.CodeRoleCompanyNotSubscribed))
-	}
+	// GATE-SUBSCRIPTION (nonaktif sementara): company tidak wajib subscribe solution.
+	// ok, err := uc.deps.Subscriptions.HasUsable(ctx, companyID, solutionID)
+	// if err != nil {
+	// 	return nil, mapRoleDomainError(err)
+	// }
+	// if !ok {
+	// 	return nil, mapRoleDomainError(domainerr.New(constant.CodeRoleCompanyNotSubscribed))
+	// }
 	return uc.create(ctx, entity.NewRoleParams{SolutionID: solutionID, CompanyID: &companyID, Code: req.Code, Name: req.Name, Description: req.Description})
 }
 

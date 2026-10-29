@@ -208,11 +208,19 @@ func TestCompanyRole_Create(t *testing.T) {
 	mustCreateRole(t, solutionRolesPath(solID), "supervisor", adminHeader())
 }
 
-func TestCompanyRole_Create_CompanyNotSubscribed(t *testing.T) {
+// GATE-SUBSCRIPTION (nonaktif sementara): custom role boleh dibuat walau company belum subscribe.
+// func TestCompanyRole_Create_CompanyNotSubscribed(t *testing.T) {
+// 	solID := roleSolution(t)
+// 	companyID := mustCreateCompany(t, adminHeader())
+// 	w := testSrv.POST(companyRolesPath(companyID, solID), map[string]any{"code": "x", "name": "X"}, adminHeader())
+// 	assert.Equal(t, 403, w.Code, w.Body.String())
+// }
+
+func TestCompanyRole_Create_WithoutSubscription_Success(t *testing.T) {
 	solID := roleSolution(t)
 	companyID := mustCreateCompany(t, adminHeader())
 	w := testSrv.POST(companyRolesPath(companyID, solID), map[string]any{"code": "x", "name": "X"}, adminHeader())
-	assert.Equal(t, 403, w.Code, w.Body.String())
+	assert.Equal(t, 201, w.Code, w.Body.String())
 }
 
 func TestCompanyRole_Create_ServiceToken(t *testing.T) {

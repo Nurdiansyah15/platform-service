@@ -104,6 +104,39 @@ func (h *OrganizationHandler) Get(c *gin.Context) {
 	respond.OK(c, "company", resp)
 }
 
+// Update godoc
+//
+//	@Summary		Update company
+//	@Description	Ubah name / slug (field kosong tidak diubah). status hanya boleh diubah platform admin.
+//	@Tags			Companies
+//	@Security		BearerAuth
+//	@Accept			json
+//	@Produce		json
+//	@Param			companyId			path		string						true	"Company ID"
+//	@Param			body				body		dto.UpdateCompanyRequest	true	"Company"
+//	@Success		200					{object}	respond.SuccessBody{data=dto.CompanyResponse}
+//	@Failure		401,403,404,409,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/companies/{companyId} [patch]
+func (h *OrganizationHandler) Update(c *gin.Context) {
+	var param dto.CompanyIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.UpdateCompanyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	resp, err := h.companies.Update(c.Request.Context(), actor, param.CompanyID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "company updated", resp)
+}
+
 // ListMembers godoc
 //
 //	@Summary	List company members
@@ -171,6 +204,66 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 		return
 	}
 	respond.Created(c, "company member added", resp)
+}
+
+// UpdateMember godoc
+//
+//	@Summary		Update company member
+//	@Description	Ubah status member. inactive = member dikeluarkan (role assignment di company ini dihapus).
+//	@Tags			Companies
+//	@Security		BearerAuth
+//	@Accept			json
+//	@Produce		json
+//	@Param			companyId		path		string							true	"Company ID"
+//	@Param			userId			path		string							true	"User ID"
+//	@Param			body			body		dto.UpdateCompanyMemberRequest	true	"Member"
+//	@Success		200				{object}	respond.SuccessBody{data=dto.CompanyMemberResponse}
+//	@Failure		401,403,404,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/companies/{companyId}/members/{userId} [patch]
+func (h *OrganizationHandler) UpdateMember(c *gin.Context) {
+	var param dto.CompanyMemberParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.UpdateCompanyMemberRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	resp, err := h.members.Update(c.Request.Context(), actor, param.CompanyID, param.UserID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "company member updated", resp)
+}
+
+// RemoveMember godoc
+//
+//	@Summary		Remove company member
+//	@Description	Soft: status inactive + hapus role assignment user di company ini. Idempotent.
+//	@Tags			Companies
+//	@Security		BearerAuth
+//	@Produce		json
+//	@Param			companyId		path		string	true	"Company ID"
+//	@Param			userId			path		string	true	"User ID"
+//	@Success		200				{object}	respond.SuccessBody
+//	@Failure		401,403,404,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/companies/{companyId}/members/{userId} [delete]
+func (h *OrganizationHandler) RemoveMember(c *gin.Context) {
+	var param dto.CompanyMemberParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	if err := h.members.Remove(c.Request.Context(), actor, param.CompanyID, param.UserID); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "company member removed", nil)
 }
 
 // CreateBranch godoc

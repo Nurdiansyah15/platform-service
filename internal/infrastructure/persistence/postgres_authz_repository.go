@@ -36,6 +36,15 @@ func (r *PostgresRoleAssignmentRepository) Create(ctx context.Context, a *entity
 	return nil
 }
 
+func (r *PostgresRoleAssignmentRepository) DeleteByMember(ctx context.Context, companyID, userID string) error {
+	_, err := execFromContext(ctx, r.db).ExecContext(ctx,
+		`DELETE FROM user_role_assignments WHERE company_id = $1 AND user_id = $2`, companyID, userID)
+	if err != nil {
+		return domainerr.Wrap(constant.CodeAuthzPersistenceFailed, err)
+	}
+	return nil
+}
+
 // PostgresGrantReader implements repository.GrantReader.
 type PostgresGrantReader struct {
 	db *sql.DB

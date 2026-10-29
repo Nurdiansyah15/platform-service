@@ -24,6 +24,7 @@ const (
 
 type SolutionClientDeps struct {
 	Repo      clientrepo.SolutionClientRepository
+	Query     port.SolutionClientQueryReadModel
 	Solutions solutionrepo.SolutionRepository
 	Tokens    port.TokenIssuer
 	Logger    *slog.Logger
@@ -69,6 +70,72 @@ func (uc *SolutionClientUseCase) Create(ctx context.Context, solutionID string, 
 		return nil, mapSolutionClientDomainError(err)
 	}
 	return &dto.SolutionClientWithSecretResponse{SolutionClientResponse: toResponse(c), ClientSecret: secret}, nil
+}
+
+// List menampilkan client milik solution (tanpa secret).
+//
+// Required — auth: user (platform admin) | scope: -
+func (uc *SolutionClientUseCase) List(ctx context.Context, solutionID string, req dto.ListSolutionClientQuery) ([]dto.SolutionClientResponse, dto.Meta, error) {
+	if _, err := uc.deps.Solutions.FindByID(ctx, solutionID); err != nil {
+		return nil, dto.Meta{}, mapSolutionClientDomainError(err)
+	}
+	items, meta, err := uc.deps.Query.List(ctx, port.SolutionClientListReadQuery{
+		SolutionID: solutionID, Status: req.Status, Search: req.Search, PaginationParams: req.PaginationParams,
+	})
+	if err != nil {
+		return nil, dto.Meta{}, mapSolutionClientDomainError(err)
+	}
+	return items, meta, nil
+}
+
+// Get mengambil detail client (tanpa secret).
+//
+// Required — auth: user (platform admin) | scope: -
+func (uc *SolutionClientUseCase) Get(ctx context.Context, id string) (*dto.SolutionClientResponse, error) {
+	c, err := uc.deps.Repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, mapSolutionClientDomainError(err)
+	}
+	resp := toResponse(c)
+	return &resp, nil
+}
+
+// Update mengubah nama / scope client. Scope baru langsung berlaku untuk token yang sudah
+// terbit karena ResolveServicePrincipal meng-intersect dengan scope client terkini.
+//
+// Required — auth: user (platform admin) | scope: -
+func (uc *SolutionClientUseCase) Update(ctx context.Context, id string, req dto.UpdateSolutionClientRequest) (*dto.SolutionClientResponse, error) {
+	c, err := uc.deps.Repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, mapSolutionClientDomainError(err)
+	}
+	if err := c.Update(req.Name, req.Scopes, uc.now()); err != nil {
+		return nil, mapSolutionClientDomainError(err)
+	}
+	if err := uc.deps.Repo.Save(ctx, c); err != nil {
+		return nil, mapSolutionClientDomainError(err)
+	}
+	resp := toResponse(c)
+	return &resp, nil
+}
+
+// Revoke menonaktifkan client secara permanen; token yang sudah terbit langsung ditolak.
+// Idempotent.
+//
+// Required — auth: user (platform admin) | scope: -
+func (uc *SolutionClientUseCase) Revoke(ctx context.Context, id string) (*dto.SolutionClientResponse, error) {
+	c, err := uc.deps.Repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, mapSolutionClientDomainError(err)
+	}
+	if c.IsActive() {
+		c.Revoke(uc.now())
+		if err := uc.deps.Repo.Save(ctx, c); err != nil {
+			return nil, mapSolutionClientDomainError(err)
+		}
+	}
+	resp := toResponse(c)
+	return &resp, nil
 }
 
 // RotateSecret membuat secret baru; secret lama langsung tidak berlaku.

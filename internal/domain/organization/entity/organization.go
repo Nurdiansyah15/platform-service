@@ -59,6 +59,41 @@ func (c *Company) IsActive() bool {
 	return c.Status == valueobject.CompanyStatusActive
 }
 
+// Update mengganti nama dan/atau slug company; nil = tidak diubah.
+func (c *Company) Update(name, slug *string, now time.Time) error {
+	if name != nil {
+		n := strings.TrimSpace(*name)
+		if n == "" || utf8.RuneCountInString(n) > constant.NameMaxLength {
+			return domainerr.New(constant.CodeCompanyNameInvalid)
+		}
+		c.Name = n
+	}
+	if slug != nil {
+		s, err := valueobject.NewSlug(*slug)
+		if err != nil {
+			return err
+		}
+		c.Slug = s
+	}
+	c.UpdatedAt = now.UTC()
+	return nil
+}
+
+// ChangeStatus mengganti status company (active / suspended / closed).
+// Mengembalikan true bila status benar-benar berubah.
+func (c *Company) ChangeStatus(raw string, now time.Time) (bool, error) {
+	st, err := valueobject.NewCompanyStatus(raw)
+	if err != nil {
+		return false, err
+	}
+	if st == c.Status {
+		return false, nil
+	}
+	c.Status = st
+	c.UpdatedAt = now.UTC()
+	return true, nil
+}
+
 func NewBranch(companyID string, p OrgUnitParams, now time.Time) (*Branch, error) {
 	name, code, status, err := validateOrgUnit(p)
 	if err != nil {

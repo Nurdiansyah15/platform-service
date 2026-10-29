@@ -21,6 +21,7 @@ async function load() {
 const links = computed(() => [
   { to: `/solutions/${solutionId.value}/roles`, label: 'Global Roles', icon: 'i-lucide-shield', desc: 'Role global milik solution.' },
   { to: `/solutions/${solutionId.value}/permissions`, label: 'Permissions', icon: 'i-lucide-key-round', desc: 'Katalog permission solution.' },
+  { to: `/solutions/${solutionId.value}/clients`, label: 'Clients', icon: 'i-lucide-plug', desc: 'Kredensial service (client credentials) backend solution.' },
 ])
 
 onMounted(load)

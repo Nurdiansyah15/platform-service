@@ -7,6 +7,9 @@ import (
 	"platform-service/internal/app/dto"
 	"platform-service/internal/app/port"
 	"platform-service/internal/app/principal"
+	authzrepo "platform-service/internal/domain/authz/repository"
+	domainerr "platform-service/internal/domain/errors"
+	"platform-service/internal/domain/organization/constant"
 	"platform-service/internal/domain/organization/entity"
 	"platform-service/internal/domain/organization/event"
 	orgrepo "platform-service/internal/domain/organization/repository"
@@ -24,6 +27,8 @@ type OrganizationDeps struct {
 	Users        userrepo.UserRepository
 	CompanyQuery port.CompanyQueryReadModel
 	BranchQuery  port.OrganizationQueryReadModel
+	// RoleAssignments dipakai saat member dikeluarkan (assignment-nya ikut dihapus).
+	RoleAssignments authzrepo.RoleAssignmentRepository
 	// Subscriptions dipakai AccessPolicy untuk akses token service.
 	Subscriptions service.SubscriptionChecker
 }
@@ -110,14 +115,67 @@ func (uc *CompanyUseCase) Get(ctx context.Context, actor *principal.Principal, c
 	return &resp, nil
 }
 
+// Update mengubah nama / slug company; status hanya boleh diubah platform admin.
+//
+// Required — auth: user (platform admin, atau member active dengan cid = companyId) atau service | scope: org:write
+func (uc *CompanyUseCase) Update(ctx context.Context, actor *principal.Principal, companyID string, req dto.UpdateCompanyRequest) (*dto.CompanyResponse, error) {
+	isPlatformAdmin := actor.IsUser() && actor.IsPlatformAdmin
+	if req.Status != nil && !isPlatformAdmin {
+		return nil, mapCompanyDomainError(domainerr.New(constant.CodeCompanyStatusForbidden))
+	}
+	c, err := accessibleCompany(ctx, uc.access, uc.deps.Companies, actor, companyID)
+	if err != nil {
+		return nil, err
+	}
+
+	now := uc.now()
+	if err := c.Update(req.Name, req.Slug, now); err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+	if req.Status != nil {
+		if _, err := c.ChangeStatus(*req.Status, now); err != nil {
+			return nil, mapCompanyDomainError(err)
+		}
+	}
+
+	err = uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
+		if err := uc.deps.Companies.Save(ctx, c); err != nil {
+			return err
+		}
+		return uc.deps.Outbox.Append(ctx, companyEvent(event.TypeCompanyUpdated, c))
+	})
+	if err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+
+	resp := toCompanyResponse(c)
+	return &resp, nil
+}
+
+func companyEvent(eventType string, c *entity.Company) port.OutboxEvent {
+	companyID := c.ID
+	return port.OutboxEvent{
+		EventType: eventType,
+		CompanyID: &companyID,
+		Payload: event.CompanyPayload{
+			ID: c.ID, Slug: c.Slug.Value(), Name: c.Name, Status: c.Status.String(), UpdatedAt: c.UpdatedAt,
+		},
+		OccurredAt: c.UpdatedAt,
+	}
+}
+
 func memberAddedEvent(m *entity.CompanyMember) port.OutboxEvent {
+	return memberEvent(event.TypeCompanyMemberAdded, m, m.JoinedAt)
+}
+
+func memberEvent(eventType string, m *entity.CompanyMember, at time.Time) port.OutboxEvent {
 	companyID := m.CompanyID
 	return port.OutboxEvent{
-		EventType: event.TypeCompanyMemberAdded,
+		EventType: eventType,
 		CompanyID: &companyID,
 		Payload: event.CompanyMemberPayload{
 			CompanyID: m.CompanyID, UserID: m.UserID, Status: m.Status.String(), JoinedAt: m.JoinedAt,
 		},
-		OccurredAt: m.JoinedAt,
+		OccurredAt: at,
 	}
 }

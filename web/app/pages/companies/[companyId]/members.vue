@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CompanyMemberResponse, Meta, AddCompanyMemberRequest } from '~/types/api'
+import type { CompanyMemberResponse, Meta, AddCompanyMemberRequest, MemberStatus } from '~/types/api'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -65,6 +65,35 @@ async function addMember() {
     toast.add({ title: (err as { message?: string }).message || 'Gagal menambah member', color: 'error' })
   } finally {
     saving.value = false
+  }
+}
+
+const busyId = ref<string | null>(null)
+
+async function changeStatus(m: CompanyMemberResponse, next: MemberStatus) {
+  busyId.value = m.user_id
+  try {
+    await api.patch(`/api/v1/companies/${companyId.value}/members/${m.user_id}`, { status: next })
+    toast.add({ title: 'Status member diperbarui', color: 'success' })
+    await load()
+  } catch (err) {
+    toast.add({ title: (err as { message?: string }).message || 'Gagal mengubah status', color: 'error' })
+  } finally {
+    busyId.value = null
+  }
+}
+
+async function removeMember(m: CompanyMemberResponse) {
+  if (!confirm(`Keluarkan ${m.email} dari company? Role assignment-nya di company ini ikut dihapus.`)) return
+  busyId.value = m.user_id
+  try {
+    await api.del(`/api/v1/companies/${companyId.value}/members/${m.user_id}`)
+    toast.add({ title: 'Member dikeluarkan', color: 'success' })
+    await load()
+  } catch (err) {
+    toast.add({ title: (err as { message?: string }).message || 'Gagal mengeluarkan member', color: 'error' })
+  } finally {
+    busyId.value = null
   }
 }
 
@@ -147,14 +176,15 @@ onMounted(load)
               <th class="px-3 py-2">Email</th>
               <th class="px-3 py-2">Status</th>
               <th class="px-3 py-2">Bergabung</th>
+              <th class="px-3 py-2" />
             </tr>
           </thead>
           <tbody>
             <tr v-if="loading">
-              <td colspan="4" class="px-3 py-6 text-center text-muted">Memuat...</td>
+              <td colspan="5" class="px-3 py-6 text-center text-muted">Memuat...</td>
             </tr>
             <tr v-else-if="!items.length">
-              <td colspan="4" class="px-3 py-6 text-center text-muted">Tidak ada member.</td>
+              <td colspan="5" class="px-3 py-6 text-center text-muted">Tidak ada member.</td>
             </tr>
             <template v-else>
               <tr v-for="m in items" :key="m.user_id" class="border-b border-default/60">
@@ -170,6 +200,43 @@ onMounted(load)
                   </UBadge>
                 </td>
                 <td class="px-3 py-2 text-muted">{{ new Date(m.joined_at).toLocaleDateString() }}</td>
+                <td class="px-3 py-2">
+                  <div v-if="!isForeignCompany" class="flex justify-end gap-1">
+                    <UButton
+                      v-if="m.status === 'invited'"
+                      size="xs"
+                      color="neutral"
+                      variant="outline"
+                      icon="i-lucide-check"
+                      :loading="busyId === m.user_id"
+                      @click="changeStatus(m, 'active')"
+                    >
+                      Aktifkan
+                    </UButton>
+                    <UButton
+                      v-if="m.status === 'inactive'"
+                      size="xs"
+                      color="neutral"
+                      variant="outline"
+                      icon="i-lucide-undo-2"
+                      :loading="busyId === m.user_id"
+                      @click="changeStatus(m, 'active')"
+                    >
+                      Aktifkan lagi
+                    </UButton>
+                    <UButton
+                      v-if="m.status !== 'inactive'"
+                      size="xs"
+                      color="error"
+                      variant="outline"
+                      icon="i-lucide-user-minus"
+                      :loading="busyId === m.user_id"
+                      @click="removeMember(m)"
+                    >
+                      Keluarkan
+                    </UButton>
+                  </div>
+                </td>
               </tr>
             </template>
           </tbody>

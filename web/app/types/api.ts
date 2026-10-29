@@ -114,6 +114,50 @@ export interface ListSolutionQuery extends PaginationParams {
   search?: string
 }
 
+// ── Solution Client ─────────────────────────────────────────────────────────
+export interface SolutionClientResponse {
+  id: string
+  solution_id: string
+  name: string
+  client_id: string
+  scopes: string[]
+  status: 'active' | 'revoked'
+  last_used_at: string | null
+  created_at: string
+  updated_at: string
+  revoked_at: string | null
+}
+
+/** Dikembalikan saat create / rotate-secret; secret hanya terlihat sekali. */
+export interface SolutionClientWithSecretResponse extends SolutionClientResponse {
+  client_secret: string
+}
+
+export interface CreateSolutionClientRequest {
+  name: string
+  scopes: string[]
+}
+
+export interface UpdateSolutionClientRequest {
+  name?: string
+  scopes?: string[]
+}
+
+/** Scope service yang dikenal platform (spec §2.8). */
+export const SERVICE_SCOPES = [
+  'users:read',
+  'users:write',
+  'org:read',
+  'org:write',
+  'authz:check',
+  'roles:write',
+  'entitlements:read',
+  'usage:write',
+  'catalog:sync',
+  'events:read',
+  'license:read',
+] as const
+
 // ── Company & Organization ──────────────────────────────────────────────────
 export interface CompanyResponse {
   id: string
@@ -127,6 +171,15 @@ export interface CompanyResponse {
 export interface CreateCompanyRequest {
   name: string
   slug: string
+}
+
+export type CompanyStatus = 'active' | 'suspended' | 'closed'
+
+/** Field yang tidak dikirim tidak diubah. `status` hanya boleh diubah platform admin. */
+export interface UpdateCompanyRequest {
+  name?: string
+  slug?: string
+  status?: CompanyStatus
 }
 
 export interface ListCompanyQuery extends PaginationParams {
@@ -147,6 +200,13 @@ export interface AddCompanyMemberRequest {
   user_id?: string
   email?: string
   status?: 'active' | 'invited'
+}
+
+export type MemberStatus = 'active' | 'invited' | 'inactive'
+
+/** `inactive` = member dikeluarkan (role assignment di company ikut dihapus). */
+export interface UpdateCompanyMemberRequest {
+  status: MemberStatus
 }
 
 export interface BranchResponse {

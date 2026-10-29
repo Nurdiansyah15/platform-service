@@ -134,14 +134,17 @@ func (r *PostgresSubscriptionQuery) GetSubscriptionAddon(ctx context.Context, id
 }
 
 func (r *PostgresSubscriptionQuery) ListSelectableCompanies(ctx context.Context, userID, solutionID string) ([]port.SelectableCompanyReadItem, error) {
+	// GATE-SUBSCRIPTION (nonaktif sementara): company tidak wajib subscribe solution sesi.
+	// Aktifkan lagi dengan menambah klausa berikut ke WHERE dan argumen solutionID, valueobject.UsableStatuses:
+	//   AND EXISTS (SELECT 1 FROM subscriptions s
+	//               WHERE s.company_id = t.id AND s.solution_id = $2 AND s.status = ANY($3::text[]))
+	_, _ = solutionID, valueobject.UsableStatuses
 	rows, err := execFromContext(ctx, r.db).QueryContext(ctx, `
 		SELECT t.id, t.name, t.slug, t.status
 		FROM companies t
 		JOIN company_members m ON m.company_id = t.id AND m.user_id = $1 AND m.status = 'active'
 		WHERE t.status = 'active'
-		  AND EXISTS (SELECT 1 FROM subscriptions s
-		              WHERE s.company_id = t.id AND s.solution_id = $2 AND s.status = ANY($3::text[]))
-		ORDER BY t.name, t.id`, userID, solutionID, valueobject.UsableStatuses)
+		ORDER BY t.name, t.id`, userID)
 	if err != nil {
 		return nil, domainerr.Wrap(constant.CodeSubscriptionQueryFailed, err)
 	}

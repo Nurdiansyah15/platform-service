@@ -107,6 +107,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	userRepo := persistence.NewPostgresUserRepository(opts.DB)
 	sessionRepo := persistence.NewPostgresAuthSessionRepository(opts.DB)
 	clientRepo := persistence.NewPostgresSolutionClientRepository(opts.DB)
+	clientQuery := persistence.NewPostgresSolutionClientQuery(opts.DB)
 	companyRepo := persistence.NewPostgresCompanyRepository(opts.DB)
 	memberRepo := persistence.NewPostgresCompanyMemberRepository(opts.DB)
 	companyQuery := persistence.NewPostgresCompanyQuery(opts.DB)
@@ -178,6 +179,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 
 	clientUC := solutionclient.NewSolutionClientUseCase(solutionclient.SolutionClientDeps{
 		Repo:      clientRepo,
+		Query:     clientQuery,
 		Solutions: solutionRepo,
 		Tokens:    tokenIssuer,
 		Logger:    opts.Logger,
@@ -192,7 +194,10 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Users:        userRepo,
 		CompanyQuery: companyQuery,
 		BranchQuery:  orgQuery,
-		// AccessPolicy: token service hanya untuk company yang subscribe solution-nya.
+		// Member dikeluarkan → role assignment-nya ikut dihapus.
+		RoleAssignments: assignmentRepo,
+		// AccessPolicy: token service hanya untuk company yang subscribe solution-nya
+		// (GATE-SUBSCRIPTION nonaktif sementara).
 		Subscriptions: subscriptionRepo,
 	}
 	companyUC := organization.NewCompanyUseCase(orgDeps)

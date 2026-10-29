@@ -233,8 +233,10 @@ func TestSubscription_List_ServiceToken_OnlyOwnSolution(t *testing.T) {
 func TestSubscription_List_ServiceToken_Forbidden(t *testing.T) {
 	f := newSubFixture(t) // company belum subscribe
 	c := mustCreateClient(t, f.solutionID, "entitlements:read", "users:read")
-	assert.Equal(t, 403, testSrv.GET(subscriptionsPath(f.companyID), testhelper.BearerHeader(mustServiceToken(t, c, ""))).Code,
-		"company tidak subscribe solution client")
+	// GATE-SUBSCRIPTION (nonaktif sementara): company tanpa subscription tetap bisa diakses token service.
+	// assert.Equal(t, 403, testSrv.GET(subscriptionsPath(f.companyID), testhelper.BearerHeader(mustServiceToken(t, c, ""))).Code,
+	// 	"company tidak subscribe solution client")
+	assert.Equal(t, 200, testSrv.GET(subscriptionsPath(f.companyID), testhelper.BearerHeader(mustServiceToken(t, c, ""))).Code)
 
 	mustSubscribe(t, f.companyID, f.basicPlan)
 	assert.Equal(t, 403, testSrv.GET(subscriptionsPath(f.companyID), testhelper.BearerHeader(mustServiceToken(t, c, "users:read"))).Code,

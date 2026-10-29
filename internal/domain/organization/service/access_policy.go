@@ -29,6 +29,7 @@ type SubscriptionChecker interface {
 // Aturan (spec §2.7, §2.8 + keputusan Fase 5 & 10):
 //   - platform admin: selalu boleh
 //   - token service: company harus berlangganan (trialing / active) solution milik client
+//     — GATE-SUBSCRIPTION (nonaktif sementara): saat ini semua company boleh diakses
 //   - user lain: company harus menjadi company aktif di token (cid) DAN user member active
 type AccessPolicy struct {
 	members       repository.CompanyMemberRepository
@@ -44,13 +45,15 @@ func (p *AccessPolicy) EnsureCanAccess(ctx context.Context, a Accessor, companyI
 		return nil
 	}
 	if a.ServiceSolutionID != "" {
-		ok, err := p.subscriptions.HasUsable(ctx, companyID, a.ServiceSolutionID)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return domainerr.New(constant.CodeCompanyAccessDenied)
-		}
+		// GATE-SUBSCRIPTION (nonaktif sementara): plan/entitlement belum dipakai sebagai
+		// batasan, jadi token service boleh mengakses company mana pun.
+		// ok, err := p.subscriptions.HasUsable(ctx, companyID, a.ServiceSolutionID)
+		// if err != nil {
+		// 	return err
+		// }
+		// if !ok {
+		// 	return domainerr.New(constant.CodeCompanyAccessDenied)
+		// }
 		return nil
 	}
 	if a.ActiveCompanyID == "" {

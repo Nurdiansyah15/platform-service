@@ -4,13 +4,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	// "github.com/stretchr/testify/require" // dipakai TestServiceAccess_CompanyNotSubscribed (GATE-SUBSCRIPTION)
 
 	"platform-service/internal/testhelper"
 )
 
 // Akses token service ke endpoint company & organisasi (spec §2.8): hanya untuk company
 // yang subscribe solution client, dan sesuai scope.
+// GATE-SUBSCRIPTION (nonaktif sementara): syarat subscribe tidak diterapkan, hanya scope.
 
 func TestServiceAccess_CompanyEndpoints(t *testing.T) {
 	f := newSubFixture(t)
@@ -30,17 +31,25 @@ func TestServiceAccess_CompanyEndpoints(t *testing.T) {
 	assert.Equal(t, 403, testSrv.GET("/api/v1/companies", reader).Code)
 }
 
-func TestServiceAccess_CompanyNotSubscribed(t *testing.T) {
+// GATE-SUBSCRIPTION (nonaktif sementara): token service boleh mengakses company mana pun.
+// func TestServiceAccess_CompanyNotSubscribed(t *testing.T) {
+// 	f := newSubFixture(t) // company belum subscribe
+// 	reader := testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, f.solutionID, "users:read", "org:read"), ""))
+// 	assert.Equal(t, 403, testSrv.GET("/api/v1/companies/"+f.companyID, reader).Code)
+// 	assert.Equal(t, 403, testSrv.GET(branchesPath(f.companyID), reader).Code)
+//
+// 	// Subscription dibatalkan → akses service hilang.
+// 	subID := mustSubscribe(t, f.companyID, f.basicPlan)
+// 	assert.Equal(t, 200, testSrv.GET("/api/v1/companies/"+f.companyID, reader).Code)
+// 	require.Equal(t, 200, testSrv.POST(subscriptionPath(subID, "cancel"), nil, adminHeader()).Code)
+// 	assert.Equal(t, 403, testSrv.GET("/api/v1/companies/"+f.companyID, reader).Code)
+// }
+
+func TestServiceAccess_CompanyWithoutSubscription_Success(t *testing.T) {
 	f := newSubFixture(t) // company belum subscribe
 	reader := testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, f.solutionID, "users:read", "org:read"), ""))
-	assert.Equal(t, 403, testSrv.GET("/api/v1/companies/"+f.companyID, reader).Code)
-	assert.Equal(t, 403, testSrv.GET(branchesPath(f.companyID), reader).Code)
-
-	// Subscription dibatalkan → akses service hilang.
-	subID := mustSubscribe(t, f.companyID, f.basicPlan)
 	assert.Equal(t, 200, testSrv.GET("/api/v1/companies/"+f.companyID, reader).Code)
-	require.Equal(t, 200, testSrv.POST(subscriptionPath(subID, "cancel"), nil, adminHeader()).Code)
-	assert.Equal(t, 403, testSrv.GET("/api/v1/companies/"+f.companyID, reader).Code)
+	assert.Equal(t, 200, testSrv.GET(branchesPath(f.companyID), reader).Code)
 }
 
 func TestServiceAccess_OrganizationEndpoints(t *testing.T) {
@@ -54,8 +63,9 @@ func TestServiceAccess_OrganizationEndpoints(t *testing.T) {
 	// Membuat company tetap khusus token user, bukan token service.
 	assert.Equal(t, 403, testSrv.POST("/api/v1/companies", map[string]any{"name": "X", "slug": "x"}, readerOnly).Code)
 
-	// Client solution lain tidak bisa melihat company ini (tidak subscribe → 403).
+	// GATE-SUBSCRIPTION (nonaktif sementara): client solution lain juga bisa melihat company ini.
 	other := newSubFixture(t)
 	foreign := testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, other.solutionID, "org:read"), ""))
-	assert.Equal(t, 403, testSrv.GET(branchesPath(f.companyID), foreign).Code)
+	// assert.Equal(t, 403, testSrv.GET(branchesPath(f.companyID), foreign).Code)
+	assert.Equal(t, 200, testSrv.GET(branchesPath(f.companyID), foreign).Code)
 }

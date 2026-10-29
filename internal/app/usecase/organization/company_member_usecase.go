@@ -10,7 +10,9 @@ import (
 	domainerr "platform-service/internal/domain/errors"
 	"platform-service/internal/domain/organization/constant"
 	"platform-service/internal/domain/organization/entity"
+	"platform-service/internal/domain/organization/event"
 	"platform-service/internal/domain/organization/service"
+	"platform-service/internal/domain/organization/valueobject"
 	userconstant "platform-service/internal/domain/user/constant"
 	userentity "platform-service/internal/domain/user/entity"
 )
@@ -85,6 +87,66 @@ func (uc *CompanyMemberUseCase) Add(ctx context.Context, actor *principal.Princi
 		return nil, mapCompanyDomainError(err)
 	}
 
+	return &dto.CompanyMemberResponse{
+		CompanyID: companyID, UserID: u.ID, Email: u.Email.Value(), Name: u.Name, Status: m.Status.String(), JoinedAt: m.JoinedAt,
+	}, nil
+}
+
+// Update mengubah status member. Status inactive = member dikeluarkan: role assignment
+// user di company ini ikut dihapus (spec §8.2).
+//
+// Required — auth: user (platform admin, atau member active dengan cid = companyId) atau service | scope: users:write
+func (uc *CompanyMemberUseCase) Update(ctx context.Context, actor *principal.Principal, companyID, userID string, req dto.UpdateCompanyMemberRequest) (*dto.CompanyMemberResponse, error) {
+	if err := uc.ensureCompany(ctx, actor, companyID); err != nil {
+		return nil, err
+	}
+	return uc.changeStatus(ctx, companyID, userID, req.Status)
+}
+
+// Remove mengeluarkan member: status inactive + hapus role assignment user di company ini.
+// Idempotent untuk member yang sudah inactive.
+//
+// Required — auth: user (platform admin, atau member active dengan cid = companyId) atau service | scope: users:write
+func (uc *CompanyMemberUseCase) Remove(ctx context.Context, actor *principal.Principal, companyID, userID string) error {
+	if err := uc.ensureCompany(ctx, actor, companyID); err != nil {
+		return err
+	}
+	_, err := uc.changeStatus(ctx, companyID, userID, valueobject.MemberStatusInactive.String())
+	return err
+}
+
+func (uc *CompanyMemberUseCase) changeStatus(ctx context.Context, companyID, userID, status string) (*dto.CompanyMemberResponse, error) {
+	now := uc.now()
+	var m *entity.CompanyMember
+	err := uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
+		var err error
+		if m, err = uc.deps.Members.Find(ctx, companyID, userID); err != nil {
+			return err
+		}
+		changed, err := m.ChangeStatus(status)
+		if err != nil || !changed {
+			return err
+		}
+		if err := uc.deps.Members.Save(ctx, m); err != nil {
+			return err
+		}
+		eventType := event.TypeCompanyMemberUpdated
+		if m.IsRemoved() {
+			if err := uc.deps.RoleAssignments.DeleteByMember(ctx, companyID, userID); err != nil {
+				return err
+			}
+			eventType = event.TypeCompanyMemberRemoved
+		}
+		return uc.deps.Outbox.Append(ctx, memberEvent(eventType, m, now))
+	})
+	if err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+
+	u, err := uc.deps.Users.FindByID(ctx, userID)
+	if err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
 	return &dto.CompanyMemberResponse{
 		CompanyID: companyID, UserID: u.ID, Email: u.Email.Value(), Name: u.Name, Status: m.Status.String(), JoinedAt: m.JoinedAt,
 	}, nil

@@ -98,11 +98,16 @@ func TestRoleAssignment_Forbidden(t *testing.T) {
 	strangerH, _, _ := mustCompanyOwner(t)
 	assert.Equal(t, 403, testSrv.POST(assignPath(f.companyID, f.staffID), map[string]any{"role_id": f.hrAdmin}, strangerH).Code)
 
-	// Company tanpa subscription untuk solution role.
+}
+
+// GATE-SUBSCRIPTION (nonaktif sementara): role tetap bisa di-assign di company yang belum subscribe solution role.
+func TestRoleAssignment_WithoutSubscription_Success(t *testing.T) {
+	f := newAuthzFixture(t)
 	unsubscribed := mustCreateCompany(t, adminHeader())
 	userID := mustCreateUser(t, testhelper.UniqueEmail("u"))
 	require.Equal(t, 201, testSrv.POST(membersPath(unsubscribed), map[string]any{"user_id": userID}, adminHeader()).Code)
-	assert.Equal(t, 403, testSrv.POST(assignPath(unsubscribed, userID), map[string]any{"role_id": f.hrAdmin}, adminHeader()).Code)
+	// assert.Equal(t, 403, testSrv.POST(assignPath(unsubscribed, userID), map[string]any{"role_id": f.hrAdmin}, adminHeader()).Code)
+	assert.Equal(t, 201, testSrv.POST(assignPath(unsubscribed, userID), map[string]any{"role_id": f.hrAdmin}, adminHeader()).Code)
 }
 
 func TestRoleAssignment_Invalid(t *testing.T) {
@@ -218,7 +223,9 @@ func TestAuthzCheck_DeniedWhenMemberInactiveOrSubscriptionCanceled(t *testing.T)
 	require.NoError(t, err)
 	_, err = testSrv.DB.ExecContext(context.Background(), `UPDATE subscriptions SET status = 'canceled' WHERE company_id = $1`, f.companyID)
 	require.NoError(t, err)
-	assert.False(t, f.serviceCheck(t, "employee.read", "", "").Allowed, "subscription dibatalkan")
+	// GATE-SUBSCRIPTION (nonaktif sementara): grant tidak hilang walau subscription dibatalkan.
+	// assert.False(t, f.serviceCheck(t, "employee.read", "", "").Allowed, "subscription dibatalkan")
+	assert.True(t, f.serviceCheck(t, "employee.read", "", "").Allowed, "subscription dibatalkan")
 }
 
 func TestAuthzCheck_UserToken_ChecksSelf(t *testing.T) {

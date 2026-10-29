@@ -3,13 +3,15 @@ package constant
 import domainerr "platform-service/internal/domain/errors"
 
 const (
-	CodeCompanyNotFound          domainerr.Code = "DOMAIN_COMPANY_NOT_FOUND"
-	CodeCompanySlugDuplicate     domainerr.Code = "DOMAIN_COMPANY_SLUG_DUPLICATE"
-	CodeCompanySlugInvalid       domainerr.Code = "DOMAIN_COMPANY_SLUG_INVALID"
-	CodeCompanyNameInvalid       domainerr.Code = "DOMAIN_COMPANY_NAME_INVALID"
-	CodeCompanyStatusInvalid     domainerr.Code = "DOMAIN_COMPANY_STATUS_INVALID"
-	CodeCompanyAccessDenied      domainerr.Code = "DOMAIN_COMPANY_ACCESS_DENIED"
-	CodeCompanyNotSelected       domainerr.Code = "DOMAIN_COMPANY_NOT_SELECTED"
+	CodeCompanyNotFound      domainerr.Code = "DOMAIN_COMPANY_NOT_FOUND"
+	CodeCompanySlugDuplicate domainerr.Code = "DOMAIN_COMPANY_SLUG_DUPLICATE"
+	CodeCompanySlugInvalid   domainerr.Code = "DOMAIN_COMPANY_SLUG_INVALID"
+	CodeCompanyNameInvalid   domainerr.Code = "DOMAIN_COMPANY_NAME_INVALID"
+	CodeCompanyStatusInvalid domainerr.Code = "DOMAIN_COMPANY_STATUS_INVALID"
+	CodeCompanyAccessDenied  domainerr.Code = "DOMAIN_COMPANY_ACCESS_DENIED"
+	CodeCompanyNotSelected   domainerr.Code = "DOMAIN_COMPANY_NOT_SELECTED"
+	// CodeCompanyStatusForbidden — status company hanya boleh diubah platform admin.
+	CodeCompanyStatusForbidden   domainerr.Code = "DOMAIN_COMPANY_STATUS_FORBIDDEN"
 	CodeCompanyPersistenceFailed domainerr.Code = "DOMAIN_COMPANY_PERSISTENCE_FAILED"
 	CodeCompanyQueryFailed       domainerr.Code = "DOMAIN_COMPANY_QUERY_FAILED"
 

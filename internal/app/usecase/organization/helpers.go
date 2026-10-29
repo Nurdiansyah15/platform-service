@@ -32,11 +32,11 @@ func mapCompanyDomainError(err error) error {
 		return apperror.Internal(string(apperror.CodeInternal), err)
 	}
 	switch de.Code {
-	case constant.CodeCompanyNotFound, constant.CodeBranchNotFound:
+	case constant.CodeCompanyNotFound, constant.CodeBranchNotFound, constant.CodeMemberNotFound:
 		return apperror.NotFound(string(de.Code))
 	case constant.CodeCompanyNotSelected:
 		return apperror.Forbidden(apperror.MsgCompanyNotSelected)
-	case constant.CodeCompanyAccessDenied:
+	case constant.CodeCompanyAccessDenied, constant.CodeCompanyStatusForbidden:
 		return apperror.Forbidden(string(de.Code))
 	case constant.CodeCompanySlugDuplicate, constant.CodeMemberAlreadyExists, constant.CodeBranchCodeDuplicate:
 		return apperror.Conflict(string(de.Code), err)

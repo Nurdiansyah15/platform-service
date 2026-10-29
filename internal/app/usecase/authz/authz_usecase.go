@@ -72,13 +72,14 @@ func (uc *AuthzUseCase) AssignRole(ctx context.Context, actor *principal.Princip
 	if (!r.IsGlobal() && !r.IsOwnedBy(companyID)) || (actor.IsService() && actor.SolutionID != r.SolutionID) {
 		return nil, mapAuthzDomainError(domainerr.New(constant.CodeAssignmentRoleUnavailable))
 	}
-	usable, err := uc.deps.Subscriptions.HasUsable(ctx, companyID, r.SolutionID)
-	if err != nil {
-		return nil, mapAuthzDomainError(err)
-	}
-	if !usable {
-		return nil, mapAuthzDomainError(domainerr.New(constant.CodeAssignmentNotSubscribed))
-	}
+	// GATE-SUBSCRIPTION (nonaktif sementara): company tidak wajib subscribe solution role.
+	// usable, err := uc.deps.Subscriptions.HasUsable(ctx, companyID, r.SolutionID)
+	// if err != nil {
+	// 	return nil, mapAuthzDomainError(err)
+	// }
+	// if !usable {
+	// 	return nil, mapAuthzDomainError(domainerr.New(constant.CodeAssignmentNotSubscribed))
+	// }
 
 	scopeType, err := valueobject.NewScopeType(req.ScopeType)
 	if err != nil {
@@ -198,10 +199,11 @@ func (uc *AuthzUseCase) effectiveGrants(ctx context.Context, companyID, userID, 
 	if err != nil || !active {
 		return nil, err
 	}
-	usable, err := uc.deps.Subscriptions.HasUsable(ctx, companyID, solutionID)
-	if err != nil || !usable {
-		return nil, err
-	}
+	// GATE-SUBSCRIPTION (nonaktif sementara): grant tidak dikosongkan bila company belum subscribe.
+	// usable, err := uc.deps.Subscriptions.HasUsable(ctx, companyID, solutionID)
+	// if err != nil || !usable {
+	// 	return nil, err
+	// }
 	return uc.deps.Grants.Grants(ctx, companyID, userID, solutionID)
 }
 
