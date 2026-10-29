@@ -53,7 +53,7 @@ help:
 	@echo "    make test-handler              Handler test (opsional: RUN=TestCompany)"
 	@echo "    make test-integration          Test persistence"
 	@echo "    make lint                      golangci-lint (via Docker)"
-	@echo "    make swagger                   Generate OpenAPI ke docs/swagger"
+	@echo "    make swagger                   Generate OpenAPI ke docs/swagger (+ web/public/openapi.json)"
 	@echo "    make docker-build              Build image app"
 	@echo ""
 
@@ -173,6 +173,7 @@ lint:
 
 swagger:
 	swag init -g cmd/app/main.go -o docs/swagger --outputTypes json,yaml --parseInternal
+	cp docs/swagger/swagger.json web/public/openapi.json
 
 docker-build:
 	docker build --target app -t platform-service/app .

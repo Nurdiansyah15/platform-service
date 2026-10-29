@@ -2,8 +2,12 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   ssr: false,
   devtools: { enabled: true },
-  modules: ['@nuxt/ui', '@pinia/nuxt'],
+  modules: ['@nuxt/ui', '@nuxt/content', '@pinia/nuxt'],
   css: ['~/assets/css/main.css'],
+  content: {
+    // node:sqlite bawaan Node; di runtime Bun otomatis memakai bun:sqlite (tanpa better-sqlite3).
+    experimental: { sqliteConnector: 'native' },
+  },
   runtimeConfig: {
     public: {
       apiBase: 'http://localhost:8080',

@@ -76,6 +76,9 @@ async function onSubmit(e: FormSubmitEvent<typeof state>) {
       <p class="text-center text-sm text-muted">
         Belum punya akun? Hubungi admin platform di perusahaanmu.
       </p>
+      <p class="text-center text-sm">
+        <ULink to="/docs" class="text-primary">Dokumentasi integrasi solution</ULink>
+      </p>
     </div>
   </UCard>
 </template>

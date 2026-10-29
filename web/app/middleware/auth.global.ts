@@ -22,6 +22,9 @@ export default defineNuxtRouteMiddleware(async (to) => {
     await auth.bootstrap()
   }
 
+  // Dokumentasi integrasi terbuka untuk siapa pun, login atau tidak.
+  if (to.path === '/docs' || to.path.startsWith('/docs/')) return
+
   if (PUBLIC_ROUTES.includes(to.path)) {
     if (auth.isAuthenticated) return navigateTo('/')
     return

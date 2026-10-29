@@ -57,6 +57,13 @@ const nav = computed<NavigationMenuItem[][]>(() => {
           tooltip
           :class="i > 0 ? 'mt-2' : ''"
         />
+        <UNavigationMenu
+          :collapsed="collapsed"
+          :items="[{ label: 'Dokumentasi', icon: 'i-lucide-book-open', to: '/docs' }]"
+          orientation="vertical"
+          tooltip
+          class="mt-auto"
+        />
       </template>
 
       <template #footer="{ collapsed }">

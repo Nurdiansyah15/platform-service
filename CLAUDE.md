@@ -4,6 +4,7 @@ Panduan ini dibaca otomatis oleh Claude Code setiap sesi. Isinya arsitektur, kon
 
 - Spec domain & API: `docs/central-saas-platform-spec.md`
 - Roadmap fase: `docs/PHASES.md`
+- Panduan integrasi solution (publik di console `/docs`): `web/content/docs/*.md`; API reference dari `web/public/openapi.json` (disalin `make swagger`). Mengubah perilaku endpoint yang dipakai solution (auth, company/member/branch, role, permission, authz) → perbarui halaman docs terkait di perubahan yang sama.
 
 ---
 
@@ -55,6 +56,8 @@ web/app/                   # UI Nuxt 4 (SPA), Nuxt UI v4 Dashboard
                            #   useCompanyContext, useSolutionContext
   pages/companies/[cid]/   #   workspace company: ringkasan, members, branches, roles, settings
   pages/admin/             #   khusus platform admin (middleware admin): companies, solutions, users
+  pages/docs/              #   dokumentasi integrasi publik (layout docs, @nuxt/content) + api-reference (Scalar)
+web/content/docs/          # markdown panduan integrasi solution (urut via prefix 01., 02., ...)
 ```
 
 ---
