@@ -72,8 +72,15 @@ func (r *PostgresSolutionRepository) FindByIDForUpdate(ctx context.Context, id s
 }
 
 func (r *PostgresSolutionRepository) ListLaunchable(ctx context.Context) ([]*entity.Solution, error) {
-	rows, err := execFromContext(ctx, r.db).QueryContext(ctx,
-		`SELECT `+solutionColumns+` FROM solutions WHERE status = 'active' AND launch_url IS NOT NULL ORDER BY name, id`)
+	return r.list(ctx, `SELECT `+solutionColumns+` FROM solutions WHERE status = 'active' AND launch_url IS NOT NULL ORDER BY name, id`)
+}
+
+func (r *PostgresSolutionRepository) ListActive(ctx context.Context) ([]*entity.Solution, error) {
+	return r.list(ctx, `SELECT `+solutionColumns+` FROM solutions WHERE status = 'active' ORDER BY name, id`)
+}
+
+func (r *PostgresSolutionRepository) list(ctx context.Context, q string, args ...any) ([]*entity.Solution, error) {
+	rows, err := execFromContext(ctx, r.db).QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, domainerr.Wrap(constant.CodeSolutionQueryFailed, err)
 	}

@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -155,6 +156,49 @@ func (s *Solution) AllowsRedirect(redirectURI string) bool {
 		}
 	}
 	return false
+}
+
+// Origins — origin (scheme://host[:port], huruf kecil, port default dibuang) dari LaunchURL dan
+// RedirectURIs, unik. Dipakai allowlist CORS: FE solution di origin ini boleh memanggil API.
+func (s *Solution) Origins() []string {
+	urls := s.RedirectURIs
+	if s.LaunchURL != nil {
+		urls = append([]string{*s.LaunchURL}, urls...)
+	}
+	out := make([]string, 0, len(urls))
+	seen := make(map[string]bool, len(urls))
+	for _, raw := range urls {
+		o, ok := OriginOf(raw)
+		if ok && !seen[o] {
+			seen[o] = true
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// OriginOf menormalkan URL / header Origin menjadi scheme://host[:port] huruf kecil tanpa port
+// default (80 untuk http, 443 untuk https). ok=false bila bukan URL http(s) absolut.
+func OriginOf(raw string) (string, bool) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return "", false
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", false
+	}
+	host := strings.ToLower(u.Hostname())
+	port := u.Port()
+	if (scheme == "http" && port == "80") || (scheme == "https" && port == "443") {
+		port = ""
+	}
+	if port != "" {
+		host = net.JoinHostPort(host, port)
+	} else if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	return scheme + "://" + host, true
 }
 
 // IsLaunchable — solution bisa dibuka dari launcher / menu apps.

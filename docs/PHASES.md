@@ -59,7 +59,7 @@ Keputusan desain di luar spec:
 
 ### 0.4 HTTP shell
 - [x] `router.Setup` + `Routes{V1, Authenticated, Deployment}`; domain mendaftar lewat `RegisterXxxRoutes` di `registerDomainRoutes`
-- [x] Middleware: request-id, request-logger, locale, recover, CORS
+- [x] Middleware: request-id, request-logger, locale, recover, CORS (`CORS_ALLOW_ORIGINS` ∪ origin URL aplikasi & redirect URI solution active, cache 30 dtk + invalidasi saat solution diubah)
 - [x] `GET /healthz` (system usecase → ping DB; 503 bila DB tidak sehat)
 - [x] Auth middleware: `Authenticate(port.TokenAuthenticator)` + `principal.Principal` (Kind `user`/`service`) + guard `RequireUser`, `RequireService(scope)`, `RequireUserOrService(scope)`, `RequirePlatformAdmin`, `RequireActiveCompany`
   - Fase 0–1 `bootstrap` memakai `rejectAllAuthenticator`; diganti verifier JWT di Fase 2

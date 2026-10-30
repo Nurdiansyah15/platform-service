@@ -17,6 +17,9 @@ import (
 type SolutionDeps struct {
 	Repo  solutionrepo.SolutionRepository
 	Query port.SolutionQueryReadModel
+	// Origins (opsional) dimuat ulang setiap solution dibuat / diubah agar allowlist CORS
+	// langsung mengikuti URL aplikasi & redirect URI terbaru.
+	Origins interface{ Invalidate() }
 }
 
 type SolutionUseCase struct {
@@ -25,6 +28,12 @@ type SolutionUseCase struct {
 
 func NewSolutionUseCase(deps SolutionDeps) *SolutionUseCase {
 	return &SolutionUseCase{deps: deps}
+}
+
+func (uc *SolutionUseCase) invalidateOrigins() {
+	if uc.deps.Origins != nil {
+		uc.deps.Origins.Invalidate()
+	}
 }
 
 // Create mendaftarkan solution baru ke katalog.
@@ -44,6 +53,7 @@ func (uc *SolutionUseCase) Create(ctx context.Context, req dto.CreateSolutionReq
 	if err := uc.deps.Repo.Save(ctx, s); err != nil {
 		return nil, mapSolutionDomainError(err)
 	}
+	uc.invalidateOrigins()
 	resp := toSolutionResponse(s)
 	return &resp, nil
 }
@@ -123,6 +133,7 @@ func (uc *SolutionUseCase) Update(ctx context.Context, actor *principal.Principa
 	if err := uc.deps.Repo.Save(ctx, s); err != nil {
 		return nil, mapSolutionDomainError(err)
 	}
+	uc.invalidateOrigins()
 	resp := toSolutionResponse(s)
 	return &resp, nil
 }

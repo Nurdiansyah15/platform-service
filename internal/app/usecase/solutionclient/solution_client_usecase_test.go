@@ -40,6 +40,9 @@ type fakeSolutionRepo struct{ s *solentity.Solution }
 func (r *fakeSolutionRepo) ListLaunchable(context.Context) ([]*solentity.Solution, error) {
 	return nil, nil
 }
+func (r *fakeSolutionRepo) ListActive(context.Context) ([]*solentity.Solution, error) {
+	return nil, nil
+}
 func (r *fakeSolutionRepo) Save(context.Context, *solentity.Solution) error { return nil }
 func (r *fakeSolutionRepo) FindByID(_ context.Context, id string) (*solentity.Solution, error) {
 	if r.s != nil && r.s.ID == id {

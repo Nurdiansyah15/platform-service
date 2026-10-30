@@ -119,7 +119,7 @@ func Load() (*Config, error) {
 			ConsoleSolutionCode: getEnv("CONSOLE_SOLUTION_CODE", "platform-console"),
 		},
 		CORS: CORSConfig{
-			AllowOrigins: splitCSV(getEnv("CORS_ALLOW_ORIGINS", "*")),
+			AllowOrigins: corsOrigins(),
 		},
 	}
 	cfg.Webhook.SecretKey = getEnv("WEBHOOK_SECRET_KEY", "")
@@ -201,6 +201,16 @@ func parseInt(key string, fallback int) (int, error) {
 		return 0, fmt.Errorf("config: %s tidak valid (%q): %w", key, raw, err)
 	}
 	return n, nil
+}
+
+// corsOrigins — tidak diset → "*"; diset kosong → tanpa origin statis (hanya origin solution
+// dari console, lihat middleware.CORS).
+func corsOrigins() []string {
+	v, ok := os.LookupEnv("CORS_ALLOW_ORIGINS")
+	if !ok {
+		return []string{"*"}
+	}
+	return splitCSV(v)
 }
 
 func splitCSV(raw string) []string {

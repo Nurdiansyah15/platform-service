@@ -35,6 +35,16 @@ func TestLoad_OnPrem(t *testing.T) {
 	assert.Equal(t, []string{"https://a.example", "https://b.example"}, cfg.CORS.AllowOrigins)
 }
 
+func TestLoad_CORSEmptyMeansSolutionOriginsOnly(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("CORS_ALLOW_ORIGINS", "")
+
+	cfg, err := config.Load()
+
+	require.NoError(t, err)
+	assert.Empty(t, cfg.CORS.AllowOrigins)
+}
+
 func TestLoad_InvalidDeploymentMode(t *testing.T) {
 	t.Chdir(t.TempDir())
 	t.Setenv("DEPLOYMENT_MODE", "hybrid")

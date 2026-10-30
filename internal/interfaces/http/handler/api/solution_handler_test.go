@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"encoding/json"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -379,4 +380,86 @@ func TestSolution_Update_AppLinks(t *testing.T) {
 	assert.Nil(t, got.LaunchURL)
 	assert.Empty(t, got.RedirectURIs)
 	assert.NotNil(t, got.RedirectURIs, "redirect_uris selalu array")
+}
+
+// ── CORS dari tautan aplikasi ────────────────────────────────────────────────
+
+// corsServer — engine dengan CORS_ALLOW_ORIGINS terbatas (bukan "*") di atas DB yang sama.
+func corsServer() *testhelper.TestServer {
+	return testSrv.MustDerive(testhelper.WithCORSOrigins("https://static.example.com"))
+}
+
+func preflight(srv *testhelper.TestServer, origin string) *httptest.ResponseRecorder {
+	return srv.OPTIONS("/api/v1/auth/login", map[string]string{
+		"Origin":                        origin,
+		"Access-Control-Request-Method": "POST",
+	})
+}
+
+// mustCreateSolutionWithLinks membuat solution (via srv) dengan launch_url & redirect URI di host unik.
+func mustCreateSolutionWithLinks(t *testing.T, srv *testhelper.TestServer, status string) (id, launchOrigin, redirectOrigin string) {
+	t.Helper()
+	launchOrigin = "https://" + testhelper.UniqueCode("app") + ".example.com"
+	redirectOrigin = "https://" + testhelper.UniqueCode("auth") + ".example.com:8443"
+	w := srv.POST("/api/v1/solutions", map[string]any{
+		"code": testhelper.UniqueCode("cors"), "name": "CORS", "status": status,
+		"launch_url":    launchOrigin + "/home",
+		"redirect_uris": []string{redirectOrigin + "/auth/callback"},
+	}, adminHeader())
+	require.Equal(t, 201, w.Code, w.Body.String())
+	var resp struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	return resp.Data.ID, launchOrigin, redirectOrigin
+}
+
+func TestSolution_CORS_StaticOrigin(t *testing.T) {
+	w := preflight(corsServer(), "https://static.example.com")
+	assert.Equal(t, 204, w.Code)
+	assert.Equal(t, "https://static.example.com", w.Header().Get("Access-Control-Allow-Origin"))
+}
+
+func TestSolution_CORS_OriginFromAppLinks(t *testing.T) {
+	srv := corsServer()
+	_, launchOrigin, redirectOrigin := mustCreateSolutionWithLinks(t, srv, "active")
+
+	for _, origin := range []string{launchOrigin, redirectOrigin} {
+		w := preflight(srv, origin)
+		assert.Equal(t, 204, w.Code, origin)
+		assert.Equal(t, origin, w.Header().Get("Access-Control-Allow-Origin"), origin)
+		assert.Equal(t, "true", w.Header().Get("Access-Control-Allow-Credentials"))
+	}
+}
+
+func TestSolution_CORS_UnknownOrigin(t *testing.T) {
+	w := preflight(corsServer(), "https://"+testhelper.UniqueCode("evil")+".example.com")
+	assert.Equal(t, 403, w.Code)
+	assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
+}
+
+func TestSolution_CORS_InactiveSolution(t *testing.T) {
+	srv := corsServer()
+	_, launchOrigin, _ := mustCreateSolutionWithLinks(t, srv, "inactive")
+
+	assert.Equal(t, 403, preflight(srv, launchOrigin).Code)
+}
+
+func TestSolution_CORS_FollowsUpdate(t *testing.T) {
+	srv := corsServer()
+	id, launchOrigin, _ := mustCreateSolutionWithLinks(t, srv, "active")
+	require.Equal(t, 204, preflight(srv, launchOrigin).Code)
+
+	newOrigin := "https://" + testhelper.UniqueCode("moved") + ".example.com"
+	w := srv.PATCH(solutionPath(id), map[string]any{"launch_url": newOrigin + "/"}, adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+
+	assert.Equal(t, 204, preflight(srv, newOrigin).Code, "origin baru langsung berlaku")
+	assert.Equal(t, 403, preflight(srv, launchOrigin).Code, "origin lama dicabut")
+
+	w = srv.PATCH(solutionPath(id), map[string]any{"status": "inactive"}, adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	assert.Equal(t, 403, preflight(srv, newOrigin).Code, "solution nonaktif dicabut")
 }

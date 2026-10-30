@@ -50,3 +50,50 @@ func TestNewSolution_Invalid(t *testing.T) {
 		})
 	}
 }
+
+func TestOriginOf(t *testing.T) {
+	tests := []struct {
+		raw    string
+		want   string
+		wantOK bool
+	}{
+		{"https://Kasir.Example.com/auth/callback?x=1", "https://kasir.example.com", true},
+		{"https://kasir.example.com:443/", "https://kasir.example.com", true},
+		{"http://localhost:80", "http://localhost", true},
+		{"http://localhost:3000", "http://localhost:3000", true},
+		{"https://kasir.example.com:8443/", "https://kasir.example.com:8443", true},
+		{"HTTPS://kasir.example.com", "https://kasir.example.com", true},
+		{"null", "", false},
+		{"", "", false},
+		{"/relative", "", false},
+		{"ftp://kasir.example.com", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.raw, func(t *testing.T) {
+			got, ok := entity.OriginOf(tt.raw)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestSolution_Origins(t *testing.T) {
+	launch := "https://kasir.example.com/"
+	redirects := []string{
+		"https://kasir.example.com/auth/callback",
+		"https://auth.example.com/cb",
+		"http://localhost:4000/cb",
+	}
+	s, err := entity.NewSolution(entity.NewSolutionParams{
+		Code: "kasir", Name: "Kasir",
+		Links: entity.AppLinks{LaunchURL: &launch, RedirectURIs: &redirects},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"https://kasir.example.com", "https://auth.example.com", "http://localhost:4000"}, s.Origins())
+	assert.Equal(t, redirects, s.RedirectURIs, "RedirectURIs tidak ikut berubah")
+
+	empty, err := entity.NewSolution(entity.NewSolutionParams{Code: "kosong", Name: "Kosong"})
+	require.NoError(t, err)
+	assert.Empty(t, empty.Origins())
+}

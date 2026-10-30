@@ -15,4 +15,6 @@ type SolutionRepository interface {
 	FindByIDForUpdate(ctx context.Context, id string) (*entity.Solution, error)
 	// ListLaunchable — solution active yang punya launch_url (launcher / menu apps), urut nama.
 	ListLaunchable(ctx context.Context) ([]*entity.Solution, error)
+	// ListActive — semua solution active (sumber allowlist origin CORS).
+	ListActive(ctx context.Context) ([]*entity.Solution, error)
 }

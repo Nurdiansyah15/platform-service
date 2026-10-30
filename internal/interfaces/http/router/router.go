@@ -38,7 +38,9 @@ type Deps struct {
 	Config        *config.Config
 	Logger        *slog.Logger
 	Authenticator port.TokenAuthenticator
-	Handlers      Handlers
+	// Origins — origin solution yang diizinkan CORS di luar CORS_ALLOW_ORIGINS (boleh nil).
+	Origins  port.OriginAllowlist
+	Handlers Handlers
 }
 
 // Routes adalah konteks yang diterima setiap RegisterXxxRoutes.
@@ -57,7 +59,7 @@ func Setup(d Deps) *gin.Engine {
 	r := gin.New()
 	r.Use(
 		middleware.RequestID(),
-		middleware.CORS(d.Config.CORS.AllowOrigins),
+		middleware.CORS(d.Config.CORS.AllowOrigins, d.Origins),
 		middleware.Locale(),
 		middleware.RequestLogger(d.Logger),
 		httperror.Middleware(d.Logger),

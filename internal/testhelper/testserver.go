@@ -48,6 +48,7 @@ type TestServer struct {
 type serverOptions struct {
 	deploymentMode config.DeploymentMode
 	authenticator  port.TokenAuthenticator
+	corsOrigins    []string
 }
 
 type Option func(*serverOptions)
@@ -61,6 +62,12 @@ func WithDeploymentMode(mode config.DeploymentMode) Option {
 // (dicoba sebelum verifier JWT).
 func WithAuthenticator(a port.TokenAuthenticator) Option {
 	return func(o *serverOptions) { o.authenticator = a }
+}
+
+// WithCORSOrigins mengganti CORS_ALLOW_ORIGINS (default "*"), mis. untuk menguji origin
+// solution yang diizinkan otomatis.
+func WithCORSOrigins(origins ...string) Option {
+	return func(o *serverOptions) { o.corsOrigins = origins }
 }
 
 // MustStartTestServer menyalakan DB test + engine. Panggil sekali dari TestMain
@@ -102,6 +109,9 @@ func newTestServer(db *sql.DB, fake *FakeAuthenticator, ks *keystore.MemoryKeySt
 	}
 
 	cfg := TestConfig(o.deploymentMode)
+	if o.corsOrigins != nil {
+		cfg.CORS.AllowOrigins = o.corsOrigins
+	}
 	app, err := bootstrap.New(context.Background(), bootstrap.Options{
 		Config:             cfg,
 		DB:                 db,
@@ -212,6 +222,11 @@ func (s *TestServer) PUT(path string, body any, headers ...map[string]string) *h
 
 func (s *TestServer) PATCH(path string, body any, headers ...map[string]string) *httptest.ResponseRecorder {
 	return s.do(http.MethodPatch, path, body, mergeHeaders(headers))
+}
+
+// OPTIONS mengirim request preflight CORS (sertakan header Origin & Access-Control-Request-Method).
+func (s *TestServer) OPTIONS(path string, headers ...map[string]string) *httptest.ResponseRecorder {
+	return s.do(http.MethodOptions, path, nil, mergeHeaders(headers))
 }
 
 func (s *TestServer) DELETE(path string, headers ...map[string]string) *httptest.ResponseRecorder {

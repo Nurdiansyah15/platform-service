@@ -160,7 +160,8 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		DeploymentMode: string(cfg.App.DeploymentMode),
 		Logger:         opts.Logger,
 	})
-	solutionUC := solution.NewSolutionUseCase(solution.SolutionDeps{Repo: solutionRepo, Query: solutionQuery})
+	originAllowlist := solution.NewOriginAllowlist(solutionRepo, solution.DefaultOriginCacheTTL, opts.Logger)
+	solutionUC := solution.NewSolutionUseCase(solution.SolutionDeps{Repo: solutionRepo, Query: solutionQuery, Origins: originAllowlist})
 	signingKeyUC := signingkey.NewSigningKeyUseCase(signingkey.SigningKeyDeps{
 		Repo:     signingKeyRepo,
 		KeyStore: keyStore,
@@ -333,6 +334,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Config:        cfg,
 		Logger:        opts.Logger,
 		Authenticator: authn,
+		Origins:       originAllowlist,
 		Handlers: router.Handlers{
 			System:   api.NewSystemHandler(systemUC),
 			Solution: api.NewSolutionHandler(solutionUC),

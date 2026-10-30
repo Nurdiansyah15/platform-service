@@ -158,7 +158,7 @@ async function toggleStatus() {
 
       <SectionCard
         title="Tautan aplikasi (SSO)"
-        description="Dipakai launcher console dan menu apps. Solution tanpa URL aplikasi tidak muncul di launcher."
+        description="Dipakai launcher console dan menu apps. Solution tanpa URL aplikasi tidak muncul di launcher. Origin URL aplikasi dan redirect URI otomatis diizinkan memanggil API (CORS) selama solution aktif."
       >
         <UForm :state="links" :validate="validateLinks" class="space-y-4" @submit="onSubmitLinks">
           <UFormField label="URL aplikasi" name="launch_url" help="Halaman awal solution, mis. https://kasir.contoh.com/">
