@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { ApiReference } from '@scalar/api-reference'
-import scalarCss from '@scalar/api-reference/style.css?url'
+import scalarCss from '@scalar/api-reference/style.css?raw'
 
 // Referensi lengkap dari OpenAPI (docs/swagger → public/openapi.json lewat `make swagger`).
 definePageMeta({ layout: false })
-// CSS Scalar dipasang sebagai <link> milik halaman ini saja (dilepas saat halaman ditinggalkan).
-// Import CSS biasa ikut termuat global dan reset / variabel warnanya merusak tema Nuxt UI
-// di halaman lain (terutama mode gelap).
+// CSS Scalar dipasang sebagai <style> milik halaman ini saja (dilepas saat halaman ditinggalkan).
+// Wajib `?raw`: import CSS biasa maupun `?url` dimasukkan Nuxt dev ke <link> global di semua
+// halaman, dan `@layer scalar-base { body { background-color: var(--scalar-background-1) } }`
+// mengalahkan latar body Nuxt UI → body transparan di console (mode gelap jadi putih).
 useHead({
   title: 'API Reference · Platform Docs',
-  link: [{ rel: 'stylesheet', href: scalarCss, key: 'scalar-css' }],
+  style: [{ key: 'scalar-css', textContent: scalarCss }],
 })
 
 const config = useRuntimeConfig()
