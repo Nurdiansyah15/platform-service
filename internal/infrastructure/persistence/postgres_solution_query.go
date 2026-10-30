@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"platform-service/internal/app/dto"
 	"platform-service/internal/app/port"
 	domainerr "platform-service/internal/domain/errors"
@@ -14,11 +16,12 @@ import (
 
 // PostgresSolutionQuery implements port.SolutionQueryReadModel.
 type PostgresSolutionQuery struct {
-	db *sql.DB
+	db      *sql.DB
+	typeMap *pgtype.Map
 }
 
 func NewPostgresSolutionQuery(db *sql.DB) *PostgresSolutionQuery {
-	return &PostgresSolutionQuery{db: db}
+	return &PostgresSolutionQuery{db: db, typeMap: pgtype.NewMap()}
 }
 
 var solutionSortable = map[string]string{
@@ -65,7 +68,8 @@ func (r *PostgresSolutionQuery) List(ctx context.Context, q port.SolutionListRea
 	items := make([]port.SolutionReadItem, 0, limit)
 	for rows.Next() {
 		var it port.SolutionReadItem
-		if err := rows.Scan(&it.ID, &it.Code, &it.Name, &it.Description, &it.Status, &it.PermissionCatalogVersion, &it.CreatedAt, &it.UpdatedAt); err != nil {
+		if err := rows.Scan(&it.ID, &it.Code, &it.Name, &it.Description, &it.Status, &it.PermissionCatalogVersion,
+			&it.LaunchURL, &it.IconURL, r.typeMap.SQLScanner(&it.RedirectURIs), &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, dto.Meta{}, domainerr.Wrap(constant.CodeSolutionQueryFailed, err)
 		}
 		items = append(items, it)

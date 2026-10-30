@@ -62,3 +62,46 @@ type SelectableCompanyResponse struct {
 	// IsActive — company ini adalah company aktif token saat ini.
 	IsActive bool `json:"is_active"`
 }
+
+// AuthorizeRequest — langkah 1 SSO console → solution (OAuth2 authorization code + PKCE).
+// Dipanggil halaman /authorize console dengan token sesi console.
+type AuthorizeRequest struct {
+	// Solution adalah solutions.code tujuan (menjadi aud token hasil tukar kode).
+	Solution    string `json:"solution" binding:"required,max=100"`
+	RedirectURI string `json:"redirect_uri" binding:"required,max=2000"`
+	// CodeChallenge = BASE64URL(SHA256(code_verifier)), dibuat solution.
+	CodeChallenge       string `json:"code_challenge" binding:"required,len=43"`
+	CodeChallengeMethod string `json:"code_challenge_method" binding:"required,oneof=S256"`
+	// State dikembalikan apa adanya ke redirect_uri (proteksi CSRF di sisi solution).
+	State string `json:"state" binding:"max=500"`
+	// CompanyID company aktif sesi baru. Kosong → company aktif console, atau satu-satunya
+	// company yang bisa dipilih; selain itu sesi dibuat tanpa company.
+	CompanyID *string `json:"company_id" binding:"omitempty,uuid"`
+}
+
+type AuthorizeResponse struct {
+	// RedirectTo = redirect_uri + ?code=...&state=...; console langsung mengarahkan browser ke sini.
+	RedirectTo string    `json:"redirect_to"`
+	Code       string    `json:"code"`
+	ExpiresAt  time.Time `json:"expires_at"`
+}
+
+// TokenExchangeRequest — langkah 2 SSO: solution menukar code menjadi sesi & token.
+type TokenExchangeRequest struct {
+	Code         string `json:"code" binding:"required,max=200"`
+	CodeVerifier string `json:"code_verifier" binding:"required,min=43,max=128"`
+	// RedirectURI harus sama persis dengan saat authorize.
+	RedirectURI string `json:"redirect_uri" binding:"required,max=2000"`
+}
+
+// AppResponse — satu shortcut di launcher console / menu apps solution.
+type AppResponse struct {
+	ID          string  `json:"id"`
+	Code        string  `json:"code"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	IconURL     *string `json:"icon_url"`
+	LaunchURL   string  `json:"launch_url"`
+	// IsCurrent — solution token yang sedang dipakai (aud).
+	IsCurrent bool `json:"is_current"`
+}

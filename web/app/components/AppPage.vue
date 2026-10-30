@@ -19,6 +19,7 @@ defineProps<{
         </template>
         <template #right>
           <slot name="actions" />
+          <AppsMenu />
         </template>
       </UDashboardNavbar>
       <UDashboardToolbar v-if="$slots.toolbar">

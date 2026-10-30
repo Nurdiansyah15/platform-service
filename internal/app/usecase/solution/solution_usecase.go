@@ -36,6 +36,7 @@ func (uc *SolutionUseCase) Create(ctx context.Context, req dto.CreateSolutionReq
 		Name:        req.Name,
 		Description: req.Description,
 		Status:      req.Status,
+		Links:       toAppLinks(req.LaunchURL, req.IconURL, req.RedirectURIs),
 	})
 	if err != nil {
 		return nil, mapSolutionDomainError(err)
@@ -75,6 +76,9 @@ func (uc *SolutionUseCase) List(ctx context.Context, actor *principal.Principal,
 			Description:              it.Description,
 			Status:                   it.Status,
 			PermissionCatalogVersion: it.PermissionCatalogVersion,
+			LaunchURL:                it.LaunchURL,
+			IconURL:                  it.IconURL,
+			RedirectURIs:             nonNilStrings(it.RedirectURIs),
 			CreatedAt:                it.CreatedAt,
 			UpdatedAt:                it.UpdatedAt,
 		})
@@ -97,7 +101,7 @@ func (uc *SolutionUseCase) GetByID(ctx context.Context, actor *principal.Princip
 	return &resp, nil
 }
 
-// Update mengubah nama / deskripsi / status solution. Solution sesi admin sendiri tidak boleh
+// Update mengubah nama / deskripsi / status / tautan aplikasi solution. Solution sesi admin sendiri tidak boleh
 // dinonaktifkan agar admin tidak terkunci dari console.
 //
 // Required — auth: user (platform admin) | scope: - | deployment: cloud (LICENSE_MANAGED di on_prem)
@@ -109,7 +113,11 @@ func (uc *SolutionUseCase) Update(ctx context.Context, actor *principal.Principa
 	if req.Status != nil && *req.Status != valueobject.SolutionStatusActive.String() && s.Code.Value() == actor.SolutionCode {
 		return nil, mapSolutionDomainError(domainerr.New(constant.CodeSolutionInUseBySession))
 	}
-	if err := s.Update(req.Name, req.Description, req.Status, time.Now()); err != nil {
+	now := time.Now()
+	if err := s.Update(req.Name, req.Description, req.Status, now); err != nil {
+		return nil, mapSolutionDomainError(err)
+	}
+	if err := s.SetLinks(toAppLinks(req.LaunchURL, req.IconURL, req.RedirectURIs), now); err != nil {
 		return nil, mapSolutionDomainError(err)
 	}
 	if err := uc.deps.Repo.Save(ctx, s); err != nil {

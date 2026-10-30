@@ -83,6 +83,24 @@ definitions:
             type: integer
         type: object
     type: object
+  dto.AppResponse:
+    properties:
+      code:
+        type: string
+      description:
+        type: string
+      icon_url:
+        type: string
+      id:
+        type: string
+      is_current:
+        description: IsCurrent — solution token yang sedang dipakai (aud).
+        type: boolean
+      launch_url:
+        type: string
+      name:
+        type: string
+    type: object
   dto.AssignedBenefitResponse:
     properties:
       aggregation_strategy:
@@ -121,6 +139,50 @@ definitions:
       session_id:
         type: string
       token_type:
+        type: string
+    type: object
+  dto.AuthorizeRequest:
+    properties:
+      code_challenge:
+        description: CodeChallenge = BASE64URL(SHA256(code_verifier)), dibuat solution.
+        type: string
+      code_challenge_method:
+        enum:
+        - S256
+        type: string
+      company_id:
+        description: |-
+          CompanyID company aktif sesi baru. Kosong → company aktif console, atau satu-satunya
+          company yang bisa dipilih; selain itu sesi dibuat tanpa company.
+        type: string
+      redirect_uri:
+        maxLength: 2000
+        type: string
+      solution:
+        description: Solution adalah solutions.code tujuan (menjadi aud token hasil
+          tukar kode).
+        maxLength: 100
+        type: string
+      state:
+        description: State dikembalikan apa adanya ke redirect_uri (proteksi CSRF
+          di sisi solution).
+        maxLength: 500
+        type: string
+    required:
+    - code_challenge
+    - code_challenge_method
+    - redirect_uri
+    - solution
+    type: object
+  dto.AuthorizeResponse:
+    properties:
+      code:
+        type: string
+      expires_at:
+        type: string
+      redirect_to:
+        description: RedirectTo = redirect_uri + ?code=...&state=...; console langsung
+          mengarahkan browser ke sini.
         type: string
     type: object
   dto.AuthzCheckBatchRequest:
@@ -497,9 +559,24 @@ definitions:
         type: string
       description:
         type: string
+      icon_url:
+        maxLength: 2000
+        type: string
+      launch_url:
+        description: LaunchURL — halaman awal solution untuk launcher / menu apps
+          (https; http hanya localhost).
+        maxLength: 2000
+        type: string
       name:
         maxLength: 255
         type: string
+      redirect_uris:
+        description: RedirectURIs — allowlist redirect_uri SSO, dicocokkan persis
+          (maks. 10).
+        items:
+          type: string
+        maxItems: 10
+        type: array
       status:
         enum:
         - active
@@ -1085,12 +1162,20 @@ definitions:
         type: string
       description:
         type: string
+      icon_url:
+        type: string
       id:
+        type: string
+      launch_url:
         type: string
       name:
         type: string
       permission_catalog_version:
         type: string
+      redirect_uris:
+        items:
+          type: string
+        type: array
       status:
         type: string
       updated_at:
@@ -1206,6 +1291,24 @@ definitions:
       version:
         type: string
     type: object
+  dto.TokenExchangeRequest:
+    properties:
+      code:
+        maxLength: 200
+        type: string
+      code_verifier:
+        maxLength: 128
+        minLength: 43
+        type: string
+      redirect_uri:
+        description: RedirectURI harus sama persis dengan saat authorize.
+        maxLength: 2000
+        type: string
+    required:
+    - code
+    - code_verifier
+    - redirect_uri
+    type: object
   dto.UpdateCompanyMemberRequest:
     properties:
       status:
@@ -1283,9 +1386,24 @@ definitions:
       description:
         maxLength: 1000
         type: string
+      icon_url:
+        maxLength: 2000
+        type: string
+      launch_url:
+        description: LaunchURL — halaman awal solution untuk launcher / menu apps
+          (https; http hanya localhost).
+        maxLength: 2000
+        type: string
       name:
         maxLength: 255
         type: string
+      redirect_uris:
+        description: RedirectURIs — allowlist redirect_uri SSO, dicocokkan persis
+          (maks. 10).
+        items:
+          type: string
+        maxItems: 10
+        type: array
       status:
         enum:
         - active
@@ -1589,6 +1707,81 @@ paths:
       summary: Platform summary
       tags:
       - Dashboard
+  /api/v1/auth/apps:
+    get:
+      description: |-
+        Shortcut solution untuk launcher console dan menu apps di navbar solution. Token user dari solution mana pun.
+        Tanpa company aktif → daftar kosong (kecuali platform admin).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.AppResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Apps available to the active company
+      tags:
+      - Auth
+  /api/v1/auth/authorize:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Langkah 1 SSO console → solution (authorization code + PKCE). Hanya untuk token sesi console.
+        Kode berlaku 60 detik dan sekali pakai; redirect_uri wajib terdaftar persis di solution tujuan.
+      parameters:
+      - description: Solution tujuan, redirect_uri, PKCE
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.AuthorizeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.AuthorizeResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: 'SSO: issue authorization code'
+      tags:
+      - Auth
   /api/v1/auth/companies:
     get:
       description: Company tempat user member active, company active, dan subscribe
@@ -1781,6 +1974,43 @@ paths:
       security:
       - BearerAuth: []
       summary: Switch active company
+      tags:
+      - Auth
+  /api/v1/auth/token-exchange:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Langkah 2 SSO: solution menukar code + code_verifier menjadi sesi baru (respons sama dengan login).
+        Semua kegagalan (kode tidak ada / dipakai / kedaluwarsa, PKCE atau redirect_uri salah) → 400 DOMAIN_AUTH_INVALID_GRANT.
+      parameters:
+      - description: Code, code_verifier, redirect_uri
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.TokenExchangeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.AuthTokenResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      summary: 'SSO: exchange authorization code'
       tags:
       - Auth
   /api/v1/authz/check:

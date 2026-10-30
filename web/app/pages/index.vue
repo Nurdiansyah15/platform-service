@@ -41,6 +41,8 @@ const shortcuts = [
       <StatCard label="Client aktif" icon="i-lucide-plug" :value="summary?.active_clients" hint="Kredensial service backend" />
     </div>
 
+    <AppLauncher />
+
     <div>
       <h2 class="mb-3 text-sm font-semibold text-highlighted">Pintasan</h2>
       <div class="grid gap-4 sm:grid-cols-3">

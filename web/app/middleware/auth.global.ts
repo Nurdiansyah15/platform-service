@@ -42,8 +42,9 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const legacy = legacyRedirect(to.path, to.query, auth.isPlatformAdmin, auth.activeCompanyId)
   if (legacy && legacy !== to.path) return navigateTo(legacy)
 
-  // User biasa tanpa company aktif hanya bisa ke onboarding & profil.
-  if (!auth.hasCompany && !auth.isPlatformAdmin && !['/onboarding', '/profile'].includes(to.path)) {
+  // User biasa tanpa company aktif hanya bisa ke onboarding, profil, dan authorize SSO
+  // (halaman authorize menampilkan pemilih company sendiri).
+  if (!auth.hasCompany && !auth.isPlatformAdmin && !['/onboarding', '/profile', '/authorize'].includes(to.path)) {
     return navigateTo('/onboarding')
   }
 })

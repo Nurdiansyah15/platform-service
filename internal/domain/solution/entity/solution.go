@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -19,8 +20,21 @@ type Solution struct {
 	Description              *string
 	Status                   valueobject.SolutionStatus
 	PermissionCatalogVersion *string
-	CreatedAt                time.Time
-	UpdatedAt                time.Time
+	// LaunchURL — halaman awal solution yang dibuka dari launcher / menu apps console.
+	LaunchURL *string
+	IconURL   *string
+	// RedirectURIs — allowlist redirect_uri alur authorize SSO (dicocokkan persis).
+	RedirectURIs []string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// AppLinks — tautan aplikasi solution. Field nil tidak diubah; string kosong / slice kosong
+// mengosongkan nilainya.
+type AppLinks struct {
+	LaunchURL    *string
+	IconURL      *string
+	RedirectURIs *[]string
 }
 
 type NewSolutionParams struct {
@@ -28,6 +42,7 @@ type NewSolutionParams struct {
 	Name        string
 	Description *string
 	Status      string // kosong → active
+	Links       AppLinks
 }
 
 // NewSolution membuat solution baru yang tervalidasi.
@@ -50,15 +65,20 @@ func NewSolution(p NewSolutionParams) (*Solution, error) {
 	}
 
 	now := time.Now().UTC()
-	return &Solution{
-		ID:          uuid.NewString(),
-		Code:        code,
-		Name:        name,
-		Description: normalizeOptional(p.Description),
-		Status:      status,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}, nil
+	s := &Solution{
+		ID:           uuid.NewString(),
+		Code:         code,
+		Name:         name,
+		Description:  normalizeOptional(p.Description),
+		Status:       status,
+		RedirectURIs: []string{},
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := s.SetLinks(p.Links, now); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 // Update mengganti nama / deskripsi / status; nil = tidak diubah. Kode tidak bisa diubah
@@ -85,6 +105,63 @@ func (s *Solution) Update(name, description, status *string, now time.Time) erro
 	return nil
 }
 
+// SetLinks memvalidasi lalu mengganti tautan aplikasi solution (lihat AppLinks).
+func (s *Solution) SetLinks(l AppLinks, now time.Time) error {
+	launch, err := normalizeURL(l.LaunchURL)
+	if err != nil {
+		return err
+	}
+	icon, err := normalizeURL(l.IconURL)
+	if err != nil {
+		return err
+	}
+	var redirects []string
+	if l.RedirectURIs != nil {
+		if len(*l.RedirectURIs) > constant.RedirectURIsMax {
+			return domainerr.New(constant.CodeSolutionURLInvalid)
+		}
+		redirects = make([]string, 0, len(*l.RedirectURIs))
+		seen := make(map[string]bool, len(*l.RedirectURIs))
+		for _, raw := range *l.RedirectURIs {
+			u := strings.TrimSpace(raw)
+			if err := validateAppURL(u); err != nil {
+				return err
+			}
+			if !seen[u] {
+				seen[u] = true
+				redirects = append(redirects, u)
+			}
+		}
+	}
+
+	if l.LaunchURL != nil {
+		s.LaunchURL = launch
+	}
+	if l.IconURL != nil {
+		s.IconURL = icon
+	}
+	if l.RedirectURIs != nil {
+		s.RedirectURIs = redirects
+	}
+	s.UpdatedAt = now.UTC()
+	return nil
+}
+
+// AllowsRedirect — redirectURI terdaftar persis di allowlist solution.
+func (s *Solution) AllowsRedirect(redirectURI string) bool {
+	for _, u := range s.RedirectURIs {
+		if u == redirectURI {
+			return true
+		}
+	}
+	return false
+}
+
+// IsLaunchable — solution bisa dibuka dari launcher / menu apps.
+func (s *Solution) IsLaunchable() bool {
+	return s.IsActive() && s.LaunchURL != nil
+}
+
 func (s *Solution) IsActive() bool {
 	return s.Status == valueobject.SolutionStatusActive
 }
@@ -109,4 +186,41 @@ func normalizeOptional(v *string) *string {
 		return nil
 	}
 	return &t
+}
+
+// normalizeURL — nil tetap nil (tidak diubah); string kosong → pointer ke nil (dikosongkan).
+func normalizeURL(v *string) (*string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	t := strings.TrimSpace(*v)
+	if t == "" {
+		return nil, nil
+	}
+	if err := validateAppURL(t); err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+// validateAppURL — URL absolut https tanpa fragment; http hanya untuk localhost / 127.0.0.1
+// (pengembangan lokal).
+func validateAppURL(raw string) error {
+	invalid := domainerr.New(constant.CodeSolutionURLInvalid)
+	if raw == "" || len(raw) > constant.URLMaxLength {
+		return invalid
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || u.Fragment != "" || u.User != nil {
+		return invalid
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		if h := u.Hostname(); h == "localhost" || h == "127.0.0.1" {
+			return nil
+		}
+	}
+	return invalid
 }

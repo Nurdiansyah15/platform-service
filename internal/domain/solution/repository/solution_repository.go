@@ -13,4 +13,6 @@ type SolutionRepository interface {
 	// FindByIDForUpdate mengunci baris solution sampai transaksi selesai
 	// (panggil di dalam Transactor.WithTx), mis. untuk serialisasi catalog sync.
 	FindByIDForUpdate(ctx context.Context, id string) (*entity.Solution, error)
+	// ListLaunchable — solution active yang punya launch_url (launcher / menu apps), urut nama.
+	ListLaunchable(ctx context.Context) ([]*entity.Solution, error)
 }

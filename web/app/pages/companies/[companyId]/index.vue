@@ -45,6 +45,8 @@ const actions = computed(() => [
       <StatCard label="Penugasan role" icon="i-lucide-badge-check" :value="summary?.role_assignments" hint="Total role yang di-assign ke anggota" />
     </div>
 
+    <AppLauncher />
+
     <div>
       <h2 class="mb-3 text-sm font-semibold text-highlighted">Mulai dari sini</h2>
       <div class="grid gap-4 sm:grid-cols-3">

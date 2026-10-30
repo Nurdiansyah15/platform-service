@@ -43,10 +43,12 @@ func mapAuthDomainError(err error) error {
 	switch de.Code {
 	case constant.CodeInvalidCredentials, constant.CodeRefreshTokenInvalid:
 		return apperror.Unauthorized(string(de.Code))
-	case constant.CodeUserNotActive, constant.CodeCompanyNotSelectable:
+	case constant.CodeUserNotActive, constant.CodeCompanyNotSelectable, constant.CodeAuthorizeConsoleOnly:
 		return apperror.Forbidden(string(de.Code))
-	case constant.CodeSolutionUnavailable:
+	case constant.CodeSolutionUnavailable, constant.CodeInvalidRedirectURI, constant.CodeAuthCodeChallengeInvalid:
 		return apperror.Unprocessable(string(de.Code), nil)
+	case constant.CodeInvalidGrant:
+		return apperror.BadRequest(string(de.Code))
 	case constant.CodeSessionNotFound, constant.CodeSessionRevoked, constant.CodeSessionExpired, constant.CodeSessionInvalid:
 		return apperror.Unauthorized(apperror.MsgTokenInvalid)
 	case userconstant.CodeUserNotFound, solutionconstant.CodeSolutionNotFound:
@@ -54,6 +56,16 @@ func mapAuthDomainError(err error) error {
 	default:
 		return apperror.Internal(string(de.Code), err)
 	}
+}
+
+// asAppError — error dari dalam Transactor.WithTx bisa sudah berupa AppError (dipetakan
+// di dalam fn) atau error mentah transaksi.
+func asAppError(err error) error {
+	var ae *apperror.AppError
+	if errors.As(err, &ae) {
+		return err
+	}
+	return mapAuthDomainError(err)
 }
 
 func isNotFound(err error) bool {

@@ -14,7 +14,7 @@ import (
 const (
 	testPassword = "Secret123!"
 	// testConsoleSolution — solution aktif yang dipakai login platform admin di test.
-	testConsoleSolution = "platform-console-test"
+	testConsoleSolution = testhelper.TestConsoleSolutionCode
 )
 
 var (

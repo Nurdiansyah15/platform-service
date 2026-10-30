@@ -90,6 +90,33 @@ export interface SelectableCompany {
   is_active: boolean
 }
 
+// ── SSO & apps ──────────────────────────────────────────────────────────────
+/** Shortcut solution (GET /auth/apps). */
+export interface AppResponse {
+  id: string
+  code: string
+  name: string
+  description: string | null
+  icon_url: string | null
+  launch_url: string
+  is_current: boolean
+}
+
+export interface AuthorizeRequest {
+  solution: string
+  redirect_uri: string
+  code_challenge: string
+  code_challenge_method: 'S256'
+  state?: string
+  company_id?: string
+}
+
+export interface AuthorizeResponse {
+  redirect_to: string
+  code: string
+  expires_at: string
+}
+
 // ── Solution ────────────────────────────────────────────────────────────────
 export interface SolutionResponse {
   id: string
@@ -98,6 +125,11 @@ export interface SolutionResponse {
   description: string | null
   status: 'active' | 'inactive'
   permission_catalog_version: string | null
+  /** Halaman awal solution di launcher / menu apps. */
+  launch_url: string | null
+  icon_url: string | null
+  /** Allowlist redirect_uri SSO (dicocokkan persis). */
+  redirect_uris: string[]
   created_at: string
   updated_at: string
 }
@@ -107,12 +139,19 @@ export interface CreateSolutionRequest {
   name: string
   description?: string | null
   status?: 'active' | 'inactive'
+  launch_url?: string
+  icon_url?: string
+  redirect_uris?: string[]
 }
 
+/** "" / [] mengosongkan tautan aplikasi. */
 export interface UpdateSolutionRequest {
   name?: string
   description?: string
   status?: 'active' | 'inactive'
+  launch_url?: string
+  icon_url?: string
+  redirect_uris?: string[]
 }
 
 export interface AdminSummary {

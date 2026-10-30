@@ -21,9 +21,11 @@ import (
 )
 
 type AuthDeps struct {
+	Tx              port.Transactor
 	Users           userrepo.UserRepository
 	Solutions       solutionrepo.SolutionRepository
 	Sessions        sessionrepo.AuthSessionRepository
+	Codes           sessionrepo.AuthorizationCodeRepository
 	Companies       orgrepo.CompanyRepository
 	Members         orgrepo.CompanyMemberRepository
 	Subscriptions   subrepo.SubscriptionRepository
@@ -31,6 +33,9 @@ type AuthDeps struct {
 	Hasher          port.PasswordHasher
 	Tokens          port.TokenIssuer
 	RefreshTokenTTL time.Duration
+	// ConsoleSolutionCode — solution console platform; hanya sesinya yang boleh
+	// menerbitkan authorization code SSO ke solution lain.
+	ConsoleSolutionCode string
 }
 
 type AuthUseCase struct {
@@ -74,28 +79,40 @@ func (uc *AuthUseCase) Login(ctx context.Context, req dto.LoginRequest, client d
 		return nil, mapAuthDomainError(domainerr.New(constant.CodeUserNotActive))
 	}
 
+	// Spec §2.7: bila user hanya punya satu company yang bisa dipilih untuk solution
+	// ini, company tersebut langsung menjadi company aktif sesi.
+	companyID, err := uc.singleSelectableCompany(ctx, u.ID, sol.ID)
+	if err != nil {
+		return nil, mapAuthDomainError(err)
+	}
+	return uc.startSession(ctx, sessionStart{
+		UserID: u.ID, Solution: sol, CompanyID: companyID, Client: client,
+	})
+}
+
+// sessionStart — parameter pembuatan sesi baru (login password atau tukar kode SSO).
+type sessionStart struct {
+	UserID          string
+	Solution        *solutionentity.Solution
+	CompanyID       *string
+	ParentSessionID *string
+	Client          dto.ClientInfo
+}
+
+// startSession membuat auth_sessions baru lalu menerbitkan pasangan token-nya.
+func (uc *AuthUseCase) startSession(ctx context.Context, p sessionStart) (*dto.AuthTokenResponse, error) {
 	refreshToken, refreshHash, err := newRefreshToken()
 	if err != nil {
 		return nil, mapAuthDomainError(err)
 	}
-	// Spec §2.7: bila user hanya punya satu company yang bisa dipilih untuk solution
-	// ini, company tersebut langsung menjadi company aktif sesi.
-	selectable, err := uc.deps.Selectable.ListSelectableCompanies(ctx, u.ID, sol.ID)
-	if err != nil {
-		return nil, mapAuthDomainError(err)
-	}
-	var companyID *string
-	if len(selectable) == 1 {
-		companyID = &selectable[0].ID
-	}
-
 	session, err := entity.NewAuthSession(entity.NewAuthSessionParams{
-		UserID:           u.ID,
-		SolutionID:       sol.ID,
-		CompanyID:        companyID,
+		UserID:           p.UserID,
+		SolutionID:       p.Solution.ID,
+		CompanyID:        p.CompanyID,
+		ParentSessionID:  p.ParentSessionID,
 		RefreshTokenHash: refreshHash,
-		UserAgent:        client.UserAgent,
-		IPAddress:        client.IPAddress,
+		UserAgent:        p.Client.UserAgent,
+		IPAddress:        p.Client.IPAddress,
 		TTL:              uc.deps.RefreshTokenTTL,
 	}, uc.now())
 	if err != nil {
@@ -104,8 +121,20 @@ func (uc *AuthUseCase) Login(ctx context.Context, req dto.LoginRequest, client d
 	if err := uc.deps.Sessions.Create(ctx, session); err != nil {
 		return nil, mapAuthDomainError(err)
 	}
+	return uc.issueTokens(ctx, session, p.Solution.Code.Value(), refreshToken)
+}
 
-	return uc.issueTokens(ctx, session, sol.Code.Value(), refreshToken)
+// singleSelectableCompany — company satu-satunya yang bisa dipilih user untuk solution,
+// atau nil bila tidak ada / lebih dari satu.
+func (uc *AuthUseCase) singleSelectableCompany(ctx context.Context, userID, solutionID string) (*string, error) {
+	selectable, err := uc.deps.Selectable.ListSelectableCompanies(ctx, userID, solutionID)
+	if err != nil {
+		return nil, err
+	}
+	if len(selectable) == 1 {
+		return &selectable[0].ID, nil
+	}
+	return nil, nil
 }
 
 // Refresh menukar refresh token dengan pasangan token baru (refresh token di-rotate).
@@ -160,7 +189,8 @@ func (uc *AuthUseCase) Refresh(ctx context.Context, req dto.RefreshTokenRequest)
 	return uc.issueTokens(ctx, session, sol.Code.Value(), refreshToken)
 }
 
-// Logout me-revoke sesi milik token yang sedang dipakai.
+// Logout me-revoke sesi milik token yang sedang dipakai, beserta sesi solution yang
+// dibuat lewat SSO dari sesi ini (logout console = keluar dari semua solution turunannya).
 //
 // Required — auth: user | scope: -
 func (uc *AuthUseCase) Logout(ctx context.Context, actor *principal.Principal) error {
@@ -168,8 +198,15 @@ func (uc *AuthUseCase) Logout(ctx context.Context, actor *principal.Principal) e
 	if err != nil {
 		return mapAuthDomainError(err)
 	}
-	session.Revoke(uc.now())
-	if err := uc.deps.Sessions.SaveRevocation(ctx, session); err != nil {
+	now := uc.now()
+	session.Revoke(now)
+	err = uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
+		if err := uc.deps.Sessions.SaveRevocation(ctx, session); err != nil {
+			return err
+		}
+		return uc.deps.Sessions.RevokeChildren(ctx, session.ID, now)
+	})
+	if err != nil {
 		return mapAuthDomainError(err)
 	}
 	return nil

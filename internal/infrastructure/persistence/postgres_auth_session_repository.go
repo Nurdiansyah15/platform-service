@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"platform-service/internal/domain/authsession/constant"
 	"platform-service/internal/domain/authsession/entity"
@@ -19,22 +20,22 @@ func NewPostgresAuthSessionRepository(db *sql.DB) *PostgresAuthSessionRepository
 	return &PostgresAuthSessionRepository{db: db}
 }
 
-const authSessionColumns = `id, user_id, solution_id, company_id, refresh_token_hash, user_agent,
+const authSessionColumns = `id, user_id, solution_id, company_id, parent_session_id, refresh_token_hash, user_agent,
 	host(ip_address), expires_at, last_used_at, revoked_at, created_at`
 
 func (r *PostgresAuthSessionRepository) Create(ctx context.Context, s *entity.AuthSession) error {
 	// NULLIF: c.ClientIP() bisa "" (mis. httptest) dan ''::inet akan error.
 	const q = `
-		INSERT INTO auth_sessions (id, user_id, solution_id, company_id, refresh_token_hash, user_agent,
-			ip_address, expires_at, last_used_at, revoked_at, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::inet, $8, $9, $10, $11)`
+		INSERT INTO auth_sessions (id, user_id, solution_id, company_id, parent_session_id, refresh_token_hash,
+			user_agent, ip_address, expires_at, last_used_at, revoked_at, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, '')::inet, $9, $10, $11, $12)`
 
 	var ip string
 	if s.IPAddress != nil {
 		ip = *s.IPAddress
 	}
 	_, err := execFromContext(ctx, r.db).ExecContext(ctx, q,
-		s.ID, s.UserID, s.SolutionID, s.CompanyID, s.RefreshTokenHash, s.UserAgent,
+		s.ID, s.UserID, s.SolutionID, s.CompanyID, s.ParentSessionID, s.RefreshTokenHash, s.UserAgent,
 		ip, s.ExpiresAt, s.LastUsedAt, s.RevokedAt, s.CreatedAt)
 	if err != nil {
 		return domainerr.Wrap(constant.CodeSessionPersistenceFailed, err)
@@ -78,10 +79,18 @@ func (r *PostgresAuthSessionRepository) SaveRevocation(ctx context.Context, s *e
 	return nil
 }
 
+func (r *PostgresAuthSessionRepository) RevokeChildren(ctx context.Context, parentID string, now time.Time) error {
+	const q = `UPDATE auth_sessions SET revoked_at = $2 WHERE parent_session_id = $1 AND revoked_at IS NULL`
+	if _, err := execFromContext(ctx, r.db).ExecContext(ctx, q, parentID, now.UTC()); err != nil {
+		return domainerr.Wrap(constant.CodeSessionPersistenceFailed, err)
+	}
+	return nil
+}
+
 func (r *PostgresAuthSessionRepository) findOne(ctx context.Context, q string, args ...any) (*entity.AuthSession, error) {
 	var s entity.AuthSession
 	err := execFromContext(ctx, r.db).QueryRowContext(ctx, q, args...).Scan(
-		&s.ID, &s.UserID, &s.SolutionID, &s.CompanyID, &s.RefreshTokenHash, &s.UserAgent,
+		&s.ID, &s.UserID, &s.SolutionID, &s.CompanyID, &s.ParentSessionID, &s.RefreshTokenHash, &s.UserAgent,
 		&s.IPAddress, &s.ExpiresAt, &s.LastUsedAt, &s.RevokedAt, &s.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

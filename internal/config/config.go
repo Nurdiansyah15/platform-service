@@ -85,6 +85,8 @@ type AuthConfig struct {
 	RefreshTokenTTL time.Duration
 	// KeyStoreDir — direktori private key JWT untuk FileKeyStore.
 	KeyStoreDir string
+	// ConsoleSolutionCode — code solution console platform (identity provider SSO).
+	ConsoleSolutionCode string
 }
 
 type CORSConfig struct {
@@ -113,7 +115,8 @@ func Load() (*Config, error) {
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
 		Auth: AuthConfig{
-			KeyStoreDir: getEnv("KEYSTORE_DIR", "data/keys"),
+			KeyStoreDir:         getEnv("KEYSTORE_DIR", "data/keys"),
+			ConsoleSolutionCode: getEnv("CONSOLE_SOLUTION_CODE", "platform-console"),
 		},
 		CORS: CORSConfig{
 			AllowOrigins: splitCSV(getEnv("CORS_ALLOW_ORIGINS", "*")),

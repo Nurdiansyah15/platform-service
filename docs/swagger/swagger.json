@@ -226,6 +226,127 @@
                 }
             }
         },
+        "/api/v1/auth/apps": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Shortcut solution untuk launcher console dan menu apps di navbar solution. Token user dari solution mana pun.\nTanpa company aktif → daftar kosong (kecuali platform admin).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Apps available to the active company",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/dto.AppResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/authorize": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Langkah 1 SSO console → solution (authorization code + PKCE). Hanya untuk token sesi console.\nKode berlaku 60 detik dan sekali pakai; redirect_uri wajib terdaftar persis di solution tujuan.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "SSO: issue authorization code",
+                "parameters": [
+                    {
+                        "description": "Solution tujuan, redirect_uri, PKCE",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.AuthorizeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.AuthorizeResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/auth/companies": {
             "get": {
                 "security": [
@@ -538,6 +659,64 @@
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/token-exchange": {
+            "post": {
+                "description": "Langkah 2 SSO: solution menukar code + code_verifier menjadi sesi baru (respons sama dengan login).\nSemua kegagalan (kode tidak ada / dipakai / kedaluwarsa, PKCE atau redirect_uri salah) → 400 DOMAIN_AUTH_INVALID_GRANT.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "SSO: exchange authorization code",
+                "parameters": [
+                    {
+                        "description": "Code, code_verifier, redirect_uri",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.TokenExchangeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.AuthTokenResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/respond.ErrorBody"
                         }
@@ -7000,6 +7179,33 @@
                 }
             }
         },
+        "dto.AppResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "icon_url": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_current": {
+                    "description": "IsCurrent — solution token yang sedang dipakai (aud).",
+                    "type": "boolean"
+                },
+                "launch_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.AssignedBenefitResponse": {
             "type": "object",
             "properties": {
@@ -7055,6 +7261,60 @@
                     "type": "string"
                 },
                 "token_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.AuthorizeRequest": {
+            "type": "object",
+            "required": [
+                "code_challenge",
+                "code_challenge_method",
+                "redirect_uri",
+                "solution"
+            ],
+            "properties": {
+                "code_challenge": {
+                    "description": "CodeChallenge = BASE64URL(SHA256(code_verifier)), dibuat solution.",
+                    "type": "string"
+                },
+                "code_challenge_method": {
+                    "type": "string",
+                    "enum": [
+                        "S256"
+                    ]
+                },
+                "company_id": {
+                    "description": "CompanyID company aktif sesi baru. Kosong → company aktif console, atau satu-satunya\ncompany yang bisa dipilih; selain itu sesi dibuat tanpa company.",
+                    "type": "string"
+                },
+                "redirect_uri": {
+                    "type": "string",
+                    "maxLength": 2000
+                },
+                "solution": {
+                    "description": "Solution adalah solutions.code tujuan (menjadi aud token hasil tukar kode).",
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "state": {
+                    "description": "State dikembalikan apa adanya ke redirect_uri (proteksi CSRF di sisi solution).",
+                    "type": "string",
+                    "maxLength": 500
+                }
+            }
+        },
+        "dto.AuthorizeResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "redirect_to": {
+                    "description": "RedirectTo = redirect_uri + ?code=...\u0026state=...; console langsung mengarahkan browser ke sini.",
                     "type": "string"
                 }
             }
@@ -7601,9 +7861,26 @@
                 "description": {
                     "type": "string"
                 },
+                "icon_url": {
+                    "type": "string",
+                    "maxLength": 2000
+                },
+                "launch_url": {
+                    "description": "LaunchURL — halaman awal solution untuk launcher / menu apps (https; http hanya localhost).",
+                    "type": "string",
+                    "maxLength": 2000
+                },
                 "name": {
                     "type": "string",
                     "maxLength": 255
+                },
+                "redirect_uris": {
+                    "description": "RedirectURIs — allowlist redirect_uri SSO, dicocokkan persis (maks. 10).",
+                    "type": "array",
+                    "maxItems": 10,
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "status": {
                     "type": "string",
@@ -8465,7 +8742,13 @@
                 "description": {
                     "type": "string"
                 },
+                "icon_url": {
+                    "type": "string"
+                },
                 "id": {
+                    "type": "string"
+                },
+                "launch_url": {
                     "type": "string"
                 },
                 "name": {
@@ -8473,6 +8756,12 @@
                 },
                 "permission_catalog_version": {
                     "type": "string"
+                },
+                "redirect_uris": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "status": {
                     "type": "string"
@@ -8644,6 +8933,30 @@
                 }
             }
         },
+        "dto.TokenExchangeRequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "code_verifier",
+                "redirect_uri"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "code_verifier": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 43
+                },
+                "redirect_uri": {
+                    "description": "RedirectURI harus sama persis dengan saat authorize.",
+                    "type": "string",
+                    "maxLength": 2000
+                }
+            }
+        },
         "dto.UpdateCompanyMemberRequest": {
             "type": "object",
             "required": [
@@ -8754,9 +9067,26 @@
                     "type": "string",
                     "maxLength": 1000
                 },
+                "icon_url": {
+                    "type": "string",
+                    "maxLength": 2000
+                },
+                "launch_url": {
+                    "description": "LaunchURL — halaman awal solution untuk launcher / menu apps (https; http hanya localhost).",
+                    "type": "string",
+                    "maxLength": 2000
+                },
                 "name": {
                     "type": "string",
                     "maxLength": 255
+                },
+                "redirect_uris": {
+                    "description": "RedirectURIs — allowlist redirect_uri SSO, dicocokkan persis (maks. 10).",
+                    "type": "array",
+                    "maxItems": 10,
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "status": {
                     "type": "string",

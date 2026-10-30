@@ -321,3 +321,62 @@ func TestDashboard_AdminSummary(t *testing.T) {
 	assert.Positive(t, got.Users.Admins)
 	assert.Positive(t, got.Solutions.Active)
 }
+
+// ── App links (SSO) ──────────────────────────────────────────────────────────
+
+type solutionLinksData struct {
+	LaunchURL    *string  `json:"launch_url"`
+	IconURL      *string  `json:"icon_url"`
+	RedirectURIs []string `json:"redirect_uris"`
+}
+
+func TestSolution_Create_InvalidAppURL(t *testing.T) {
+	for _, body := range []map[string]any{
+		{"launch_url": "http://kasir.example.com/"}, // http hanya untuk localhost
+		{"launch_url": "/relative"},
+		{"redirect_uris": []string{"https://kasir.example.com/cb#frag"}},
+		{"redirect_uris": []string{"javascript:alert(1)"}},
+	} {
+		body["code"] = testhelper.UniqueCode("links")
+		body["name"] = "Links"
+		w := testSrv.POST("/api/v1/solutions", body, adminHeader())
+		assert.Equal(t, 422, w.Code, "body=%v resp=%s", body, w.Body.String())
+	}
+}
+
+func TestSolution_Create_WithAppLinks(t *testing.T) {
+	w := testSrv.POST("/api/v1/solutions", map[string]any{
+		"code": testhelper.UniqueCode("links"), "name": "Links",
+		"launch_url":    "http://localhost:4000/",
+		"icon_url":      "https://cdn.example.com/kasir.svg",
+		"redirect_uris": []string{"http://localhost:4000/auth/callback", "http://localhost:4000/auth/callback"},
+	}, adminHeader())
+	require.Equal(t, 201, w.Code, w.Body.String())
+	var got solutionLinksData
+	testhelper.DecodeBody(t, w, &got)
+	require.NotNil(t, got.LaunchURL)
+	assert.Equal(t, "http://localhost:4000/", *got.LaunchURL)
+	require.NotNil(t, got.IconURL)
+	assert.Equal(t, []string{"http://localhost:4000/auth/callback"}, got.RedirectURIs, "duplikat dibuang")
+}
+
+func TestSolution_Update_AppLinks(t *testing.T) {
+	s := mustCreateSSOSolution(t)
+
+	// Field lain tidak menyentuh tautan.
+	w := testSrv.PATCH(solutionPath(s.ID), map[string]any{"name": "Renamed"}, adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got solutionLinksData
+	testhelper.DecodeBody(t, w, &got)
+	require.NotNil(t, got.LaunchURL)
+	assert.Equal(t, []string{s.RedirectURI}, got.RedirectURIs)
+
+	// "" / [] mengosongkan.
+	w = testSrv.PATCH(solutionPath(s.ID), map[string]any{"launch_url": "", "redirect_uris": []string{}}, adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	got = solutionLinksData{}
+	testhelper.DecodeBody(t, w, &got)
+	assert.Nil(t, got.LaunchURL)
+	assert.Empty(t, got.RedirectURIs)
+	assert.NotNil(t, got.RedirectURIs, "redirect_uris selalu array")
+}

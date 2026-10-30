@@ -12,10 +12,13 @@ import (
 
 // AuthSession adalah satu sesi login user pada satu solution (spec §2.7).
 type AuthSession struct {
-	ID               string
-	UserID           string
-	SolutionID       string
-	CompanyID        *string // company aktif; nil sebelum user memilih company
+	ID         string
+	UserID     string
+	SolutionID string
+	CompanyID  *string // company aktif; nil sebelum user memilih company
+	// ParentSessionID — sesi console asal bila sesi dibuat lewat SSO; logout sesi induk
+	// ikut mencabut sesi ini.
+	ParentSessionID  *string
 	RefreshTokenHash string
 	UserAgent        *string
 	IPAddress        *string
@@ -29,6 +32,7 @@ type NewAuthSessionParams struct {
 	UserID           string
 	SolutionID       string
 	CompanyID        *string
+	ParentSessionID  *string
 	RefreshTokenHash string
 	UserAgent        string
 	IPAddress        string
@@ -45,6 +49,7 @@ func NewAuthSession(p NewAuthSessionParams, now time.Time) (*AuthSession, error)
 		UserID:           p.UserID,
 		SolutionID:       p.SolutionID,
 		CompanyID:        p.CompanyID,
+		ParentSessionID:  p.ParentSessionID,
 		RefreshTokenHash: p.RefreshTokenHash,
 		UserAgent:        optional(p.UserAgent),
 		IPAddress:        optional(p.IPAddress),

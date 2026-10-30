@@ -20,6 +20,9 @@ type SolutionReadItem struct {
 	Description              *string
 	Status                   string
 	PermissionCatalogVersion *string
+	LaunchURL                *string
+	IconURL                  *string
+	RedirectURIs             []string
 	CreatedAt                time.Time
 	UpdatedAt                time.Time
 }

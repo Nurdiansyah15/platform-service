@@ -165,16 +165,19 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Repo: userRepo, Hasher: hasher, Tx: transactor, Outbox: outbox, Query: persistence.NewPostgresUserQuery(opts.DB),
 	})
 	authUC, err := auth.NewAuthUseCase(auth.AuthDeps{
-		Users:           userRepo,
-		Solutions:       solutionRepo,
-		Sessions:        sessionRepo,
-		Companies:       companyRepo,
-		Members:         memberRepo,
-		Subscriptions:   subscriptionRepo,
-		Selectable:      subscriptionQuery,
-		Hasher:          hasher,
-		Tokens:          tokenIssuer,
-		RefreshTokenTTL: cfg.Auth.RefreshTokenTTL,
+		Tx:                  transactor,
+		Users:               userRepo,
+		Solutions:           solutionRepo,
+		Sessions:            sessionRepo,
+		Codes:               persistence.NewPostgresAuthorizationCodeRepository(opts.DB),
+		ConsoleSolutionCode: cfg.Auth.ConsoleSolutionCode,
+		Companies:           companyRepo,
+		Members:             memberRepo,
+		Subscriptions:       subscriptionRepo,
+		Selectable:          subscriptionQuery,
+		Hasher:              hasher,
+		Tokens:              tokenIssuer,
+		RefreshTokenTTL:     cfg.Auth.RefreshTokenTTL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: auth usecase: %w", err)

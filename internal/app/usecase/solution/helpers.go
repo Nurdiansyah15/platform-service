@@ -22,7 +22,7 @@ func mapSolutionDomainError(err error) error {
 	case constant.CodeSolutionCodeDuplicate:
 		return apperror.Conflict(string(de.Code), err)
 	case constant.CodeSolutionCodeInvalid, constant.CodeSolutionNameInvalid, constant.CodeSolutionStatusInvalid,
-		constant.CodeSolutionInUseBySession:
+		constant.CodeSolutionInUseBySession, constant.CodeSolutionURLInvalid:
 		return apperror.Unprocessable(string(de.Code), nil, err)
 	default:
 		return apperror.Internal(string(de.Code), err)
@@ -45,7 +45,21 @@ func toSolutionResponse(s *entity.Solution) dto.SolutionResponse {
 		Description:              s.Description,
 		Status:                   s.Status.String(),
 		PermissionCatalogVersion: s.PermissionCatalogVersion,
+		LaunchURL:                s.LaunchURL,
+		IconURL:                  s.IconURL,
+		RedirectURIs:             nonNilStrings(s.RedirectURIs),
 		CreatedAt:                s.CreatedAt,
 		UpdatedAt:                s.UpdatedAt,
 	}
+}
+
+func nonNilStrings(v []string) []string {
+	if v == nil {
+		return []string{}
+	}
+	return v
+}
+
+func toAppLinks(launchURL, iconURL *string, redirectURIs *[]string) entity.AppLinks {
+	return entity.AppLinks{LaunchURL: launchURL, IconURL: iconURL, RedirectURIs: redirectURIs}
 }

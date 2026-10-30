@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"platform-service/internal/domain/authsession/entity"
 )
@@ -15,4 +16,6 @@ type AuthSessionRepository interface {
 	// (compare-and-swap). Kalah balapan → CodeSessionRotationConflict.
 	SaveRotation(ctx context.Context, s *entity.AuthSession, previousHash string) error
 	SaveRevocation(ctx context.Context, s *entity.AuthSession) error
+	// RevokeChildren mencabut semua sesi aktif yang dibuat lewat SSO dari sesi parentID.
+	RevokeChildren(ctx context.Context, parentID string, now time.Time) error
 }

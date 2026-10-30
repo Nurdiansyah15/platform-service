@@ -132,8 +132,9 @@ func TestConfig(mode config.DeploymentMode) *config.Config {
 			IssuerURL:      "http://platform.test",
 		},
 		Auth: config.AuthConfig{
-			AccessTokenTTL:  15 * time.Minute,
-			RefreshTokenTTL: 720 * time.Hour,
+			AccessTokenTTL:      15 * time.Minute,
+			RefreshTokenTTL:     720 * time.Hour,
+			ConsoleSolutionCode: TestConsoleSolutionCode,
 		},
 		CORS: config.CORSConfig{AllowOrigins: []string{"*"}},
 		Webhook: config.WebhookConfig{
@@ -145,6 +146,9 @@ func TestConfig(mode config.DeploymentMode) *config.Config {
 		},
 	}
 }
+
+// TestConsoleSolutionCode — solution console di test (identity provider SSO).
+const TestConsoleSolutionCode = "platform-console-test"
 
 // TestWebhookSecretKey — kunci AES-256 (base64) untuk mengenkripsi secret webhook di test.
 const TestWebhookSecretKey = "dGVzdC1vbmx5LXdlYmhvb2stc2VjcmV0LWtleS0zMmI="

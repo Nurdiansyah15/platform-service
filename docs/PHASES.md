@@ -384,6 +384,7 @@ Pola sama: usecase + handler + handler test wajib.
 - [ ] `GET /auth/sessions`, `DELETE /auth/sessions/{sessionId}`, `POST /auth/logout-all`
 - [x] `GET /users/me`, `PATCH /users/me` (ganti password wajib `current_password`)
 - [x] `GET /users`, `GET /users/{userId}` (+ keanggotaan company), `PATCH /users/{userId}`, `PATCH /users/{userId}/status`
+- [x] SSO console → solution (authorization code + PKCE): `POST /auth/authorize` (hanya sesi console), `POST /auth/token-exchange` (sesi baru ber-`parent_session_id`; logout console mencabut sesi turunan), `GET /auth/apps` (launcher / menu apps); solution: `launch_url`, `icon_url`, `redirect_uris`
 
 ### L2 — Company & Organization
 - [x] `PATCH /companies/{companyId}` (status khusus platform admin)

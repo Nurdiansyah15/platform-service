@@ -152,3 +152,81 @@ func (h *AuthHandler) SwitchCompany(c *gin.Context) {
 	}
 	respond.OK(c, "company switched", resp)
 }
+
+// Authorize godoc
+//
+//	@Summary		SSO: issue authorization code
+//	@Description	Langkah 1 SSO console → solution (authorization code + PKCE). Hanya untuk token sesi console.
+//	@Description	Kode berlaku 60 detik dan sekali pakai; redirect_uri wajib terdaftar persis di solution tujuan.
+//	@Tags			Auth
+//	@Security		BearerAuth
+//	@Accept			json
+//	@Produce		json
+//	@Param			body			body		dto.AuthorizeRequest	true	"Solution tujuan, redirect_uri, PKCE"
+//	@Success		200				{object}	respond.SuccessBody{data=dto.AuthorizeResponse}
+//	@Failure		401,403,422		{object}	respond.ErrorBody
+//	@Router			/api/v1/auth/authorize [post]
+func (h *AuthHandler) Authorize(c *gin.Context) {
+	var req dto.AuthorizeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	resp, err := h.useCase.Authorize(c.Request.Context(), actor, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "authorization code issued", resp)
+}
+
+// TokenExchange godoc
+//
+//	@Summary		SSO: exchange authorization code
+//	@Description	Langkah 2 SSO: solution menukar code + code_verifier menjadi sesi baru (respons sama dengan login).
+//	@Description	Semua kegagalan (kode tidak ada / dipakai / kedaluwarsa, PKCE atau redirect_uri salah) → 400 DOMAIN_AUTH_INVALID_GRANT.
+//	@Tags			Auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			body		body		dto.TokenExchangeRequest	true	"Code, code_verifier, redirect_uri"
+//	@Success		200			{object}	respond.SuccessBody{data=dto.AuthTokenResponse}
+//	@Failure		400,422		{object}	respond.ErrorBody
+//	@Router			/api/v1/auth/token-exchange [post]
+func (h *AuthHandler) TokenExchange(c *gin.Context) {
+	var req dto.TokenExchangeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	resp, err := h.useCase.ExchangeCode(c.Request.Context(), req, dto.ClientInfo{
+		UserAgent: c.Request.UserAgent(),
+		IPAddress: c.ClientIP(),
+	})
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "logged in", resp)
+}
+
+// Apps godoc
+//
+//	@Summary		Apps available to the active company
+//	@Description	Shortcut solution untuk launcher console dan menu apps di navbar solution. Token user dari solution mana pun.
+//	@Description	Tanpa company aktif → daftar kosong (kecuali platform admin).
+//	@Tags			Auth
+//	@Security		BearerAuth
+//	@Produce		json
+//	@Success		200		{object}	respond.SuccessBody{data=[]dto.AppResponse}
+//	@Failure		401,403	{object}	respond.ErrorBody
+//	@Router			/api/v1/auth/apps [get]
+func (h *AuthHandler) Apps(c *gin.Context) {
+	actor, _ := middleware.PrincipalFrom(c)
+	items, err := h.useCase.Apps(c.Request.Context(), actor)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "apps", items)
+}
