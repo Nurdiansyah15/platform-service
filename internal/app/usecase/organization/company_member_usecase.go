@@ -7,6 +7,8 @@ import (
 	"platform-service/internal/app/dto"
 	"platform-service/internal/app/port"
 	"platform-service/internal/app/principal"
+	authzconstant "platform-service/internal/domain/authz/constant"
+	authzservice "platform-service/internal/domain/authz/service"
 	domainerr "platform-service/internal/domain/errors"
 	"platform-service/internal/domain/organization/constant"
 	"platform-service/internal/domain/organization/entity"
@@ -54,7 +56,7 @@ func (uc *CompanyMemberUseCase) List(ctx context.Context, actor *principal.Princ
 //
 // Required — auth: user (platform admin, atau member active dengan cid = companyId) | scope: -
 func (uc *CompanyMemberUseCase) Add(ctx context.Context, actor *principal.Principal, companyID string, req dto.AddCompanyMemberRequest) (*dto.CompanyMemberResponse, error) {
-	if err := uc.ensureCompany(ctx, actor, companyID); err != nil {
+	if err := uc.ensureMemberAdmin(ctx, actor, companyID); err != nil {
 		return nil, err
 	}
 	u, err := uc.resolveUser(ctx, req)
@@ -99,9 +101,9 @@ const memberCandidateLimit = 10
 // Candidates mencari user terdaftar (active) yang bisa ditambahkan sebagai member: cocok
 // email / nama dan belum member active / invited. Hasil dibatasi dan hanya berisi data minimal.
 //
-// Required — auth: user (platform admin, atau member active dengan cid = companyId) atau service | scope: users:write
+// Required — auth: user (platform admin, atau member dengan permission member.manage) atau service | scope: users:write
 func (uc *CompanyMemberUseCase) Candidates(ctx context.Context, actor *principal.Principal, companyID string, req dto.MemberCandidateQuery) ([]dto.MemberCandidateResponse, error) {
-	if err := uc.ensureCompany(ctx, actor, companyID); err != nil {
+	if err := uc.ensureMemberAdmin(ctx, actor, companyID); err != nil {
 		return nil, err
 	}
 	items, err := uc.deps.CompanyQuery.SearchMemberCandidates(ctx, companyID, req.Search, memberCandidateLimit)
@@ -131,12 +133,53 @@ func (uc *CompanyMemberUseCase) Get(ctx context.Context, actor *principal.Princi
 	}, nil
 }
 
+// CreateUser membuat akun user baru (ber-password) lalu menjadikannya member company dalam
+// satu transaksi. Email sudah terdaftar → 409; tambahkan sebagai member lewat Add.
+//
+// Required — auth: user (platform admin, atau member dengan permission member.manage) atau service | scope: users:write
+func (uc *CompanyMemberUseCase) CreateUser(ctx context.Context, actor *principal.Principal, companyID string, req dto.CreateCompanyUserRequest) (*dto.CompanyMemberResponse, error) {
+	if err := uc.ensureMemberAdmin(ctx, actor, companyID); err != nil {
+		return nil, err
+	}
+	if err := userentity.ValidatePassword(req.Password); err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+	hash, err := uc.deps.Hasher.Hash(req.Password)
+	if err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+	now := uc.now()
+	u, err := userentity.NewUser(userentity.NewUserParams{Email: req.Email, Name: req.Name, PasswordHash: &hash}, now)
+	if err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+	m, err := entity.NewCompanyMember(companyID, u.ID, req.Status, now)
+	if err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+	err = uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
+		if err := uc.deps.Users.Save(ctx, u); err != nil {
+			return err
+		}
+		if err := uc.deps.Members.Save(ctx, m); err != nil {
+			return err
+		}
+		return uc.deps.Outbox.Append(ctx, memberAddedEvent(m))
+	})
+	if err != nil {
+		return nil, mapCompanyDomainError(err)
+	}
+	return &dto.CompanyMemberResponse{
+		CompanyID: companyID, UserID: u.ID, Email: u.Email.Value(), Name: u.Name, Status: m.Status.String(), JoinedAt: m.JoinedAt,
+	}, nil
+}
+
 // Update mengubah status member. Status inactive = member dikeluarkan: role assignment
 // user di company ini ikut dihapus (spec §8.2).
 //
-// Required — auth: user (platform admin, atau member active dengan cid = companyId) atau service | scope: users:write
+// Required — auth: user (platform admin, atau member dengan permission member.manage) atau service | scope: users:write
 func (uc *CompanyMemberUseCase) Update(ctx context.Context, actor *principal.Principal, companyID, userID string, req dto.UpdateCompanyMemberRequest) (*dto.CompanyMemberResponse, error) {
-	if err := uc.ensureCompany(ctx, actor, companyID); err != nil {
+	if err := uc.ensureMemberAdmin(ctx, actor, companyID); err != nil {
 		return nil, err
 	}
 	return uc.changeStatus(ctx, companyID, userID, req.Status)
@@ -145,9 +188,9 @@ func (uc *CompanyMemberUseCase) Update(ctx context.Context, actor *principal.Pri
 // Remove mengeluarkan member: status inactive + hapus role assignment user di company ini.
 // Idempotent untuk member yang sudah inactive.
 //
-// Required — auth: user (platform admin, atau member active dengan cid = companyId) atau service | scope: users:write
+// Required — auth: user (platform admin, atau member dengan permission member.manage) atau service | scope: users:write
 func (uc *CompanyMemberUseCase) Remove(ctx context.Context, actor *principal.Principal, companyID, userID string) error {
-	if err := uc.ensureCompany(ctx, actor, companyID); err != nil {
+	if err := uc.ensureMemberAdmin(ctx, actor, companyID); err != nil {
 		return err
 	}
 	_, err := uc.changeStatus(ctx, companyID, userID, valueobject.MemberStatusInactive.String())
@@ -189,6 +232,14 @@ func (uc *CompanyMemberUseCase) changeStatus(ctx context.Context, companyID, use
 	return &dto.CompanyMemberResponse{
 		CompanyID: companyID, UserID: u.ID, Email: u.Email.Value(), Name: u.Name, Status: m.Status.String(), JoinedAt: m.JoinedAt,
 	}, nil
+}
+
+// ensureMemberAdmin — ensureCompany + permission platform member.manage.
+func (uc *CompanyMemberUseCase) ensureMemberAdmin(ctx context.Context, actor *principal.Principal, companyID string) error {
+	if err := uc.ensureCompany(ctx, actor, companyID); err != nil {
+		return err
+	}
+	return ensurePermission(ctx, uc.deps.Admin, actor, companyID, authzconstant.PermMemberManage, authzservice.CompanyScope(companyID))
 }
 
 // ensureCompany memeriksa hak akses lalu memastikan company ada.

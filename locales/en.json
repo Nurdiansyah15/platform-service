@@ -170,6 +170,7 @@
   "DOMAIN_AUTHZ_ASSIGNMENT_NOT_MEMBER": "The user is not an active member of this company.",
   "DOMAIN_AUTHZ_ASSIGNMENT_ROLE_UNAVAILABLE": "The role is not available for this company (not found, deleted, or belongs to another company / solution).",
   "DOMAIN_AUTHZ_ASSIGNMENT_NOT_SUBSCRIBED": "The company does not have an active subscription to the role's solution.",
+  "DOMAIN_AUTHZ_ADMIN_PERMISSION_DENIED": "You do not have permission to manage this company (requires a company admin role or a matching platform permission).",
   "DOMAIN_AUTHZ_SCOPE_TYPE_INVALID": "scope_type must be company or branch.",
   "DOMAIN_AUTHZ_SCOPE_INVALID": "scope_id does not belong to this company (or is required for branch).",
   "DOMAIN_AUTHZ_CHECK_TARGET_REQUIRED": "company_id and user_id are required for service tokens.",

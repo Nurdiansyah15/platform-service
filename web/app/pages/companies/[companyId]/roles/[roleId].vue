@@ -7,6 +7,7 @@ const api = useApi()
 const toast = useToast()
 const { toastError } = useApiError()
 const { confirm } = useConfirm()
+const perms = useCompanyPermissions()
 
 const roleId = computed(() => String(route.params.roleId))
 const base = computed(() => `/companies/${ctx.companyId.value}`)
@@ -19,6 +20,8 @@ const tab = ref<'permissions' | 'holders'>('permissions')
 const showEdit = ref(false)
 
 const isCustom = computed(() => role.value?.scope === 'company')
+const canManage = computed(() => isCustom.value && perms.can('role.manage')
+  && (!perms.isConsoleSolution(role.value?.solution_id) || perms.isCompanyAdmin.value))
 const tabs = computed(() => [
   { label: 'Permission', value: 'permissions', icon: 'i-lucide-key-round', badge: role.value?.permission_count },
   { label: 'Pemegang', value: 'holders', icon: 'i-lucide-users', badge: role.value?.member_count },
@@ -65,7 +68,7 @@ async function remove() {
     :trail="role ? [{ label: role.name }] : []"
   >
     <template #actions>
-      <template v-if="isCustom">
+      <template v-if="canManage">
         <UButton icon="i-lucide-pencil" color="neutral" variant="outline" @click="showEdit = true">Ubah</UButton>
         <UButton icon="i-lucide-trash-2" color="error" variant="ghost" aria-label="Hapus role" @click="remove" />
       </template>
@@ -89,7 +92,7 @@ async function remove() {
       <RolePermissionsEditor
         v-if="tab === 'permissions'"
         :role="role"
-        :save-path="isCustom ? `/api/v1/companies/${ctx.companyId.value}/roles/${role.id}/permissions` : undefined"
+        :save-path="canManage ? `/api/v1/companies/${ctx.companyId.value}/roles/${role.id}/permissions` : undefined"
         @saved="(n: number) => role && (role.permission_count = n)"
       />
 

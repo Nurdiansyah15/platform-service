@@ -36,6 +36,8 @@ type AuthzDeps struct {
 	Subscriptions subrepo.SubscriptionRepository
 	Solutions     solutionrepo.SolutionRepository
 	Query         port.RoleAssignmentQueryReadModel
+	// Admin menegakkan permission platform role.assign untuk token user.
+	Admin *authzservice.CompanyAdminPolicy
 }
 
 type AuthzUseCase struct {
@@ -52,7 +54,7 @@ func NewAuthzUseCase(deps AuthzDeps) *AuthzUseCase {
 // user member active, company subscribe solution role, custom role milik company,
 // scope_id valid untuk company.
 //
-// Required — auth: user (platform admin / member dengan tid) atau service milik solution role | scope: roles:write
+// Required — auth: user (platform admin / member dengan permission role.assign di scope tsb) atau service milik solution role | scope: roles:write
 func (uc *AuthzUseCase) AssignRole(ctx context.Context, actor *principal.Principal, companyID, userID string, req dto.CreateRoleAssignmentRequest) (*dto.RoleAssignmentResponse, error) {
 	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), companyID); err != nil {
 		return nil, mapAuthzDomainError(err)
@@ -90,6 +92,9 @@ func (uc *AuthzUseCase) AssignRole(ctx context.Context, actor *principal.Princip
 	scope, err := uc.deps.Scopes.Resolve(ctx, companyID, scopeType, req.ScopeID)
 	if err != nil {
 		return nil, mapAuthzDomainError(err)
+	}
+	if err := uc.ensureCanAssign(ctx, actor, companyID, r.SolutionID, scope); err != nil {
+		return nil, err
 	}
 
 	a := entity.NewRoleAssignment(companyID, userID, r.ID, scope.Scope, uc.now())
@@ -138,7 +143,7 @@ func (uc *AuthzUseCase) ListAssignments(ctx context.Context, actor *principal.Pr
 // RevokeAssignment mencabut role assignment. Assignment milik company yang tidak bisa diakses
 // (atau role solution lain untuk token service) dilaporkan 404.
 //
-// Required — auth: user (platform admin / member dengan cid) atau service | scope: roles:write
+// Required — auth: user (platform admin / member dengan permission role.assign di scope tsb) atau service | scope: roles:write
 func (uc *AuthzUseCase) RevokeAssignment(ctx context.Context, actor *principal.Principal, assignmentID string) error {
 	notFound := mapAuthzDomainError(domainerr.New(constant.CodeAssignmentNotFound))
 	a, err := uc.deps.Assignments.FindByID(ctx, assignmentID)
@@ -153,6 +158,13 @@ func (uc *AuthzUseCase) RevokeAssignment(ctx context.Context, actor *principal.P
 	}
 	if actor.IsService() && actor.SolutionID != a.Role.SolutionID {
 		return notFound
+	}
+	check := entity.CheckScope{Scope: a.Scope}
+	if a.Scope.Type == valueobject.ScopeBranch {
+		check.BranchCompanyID = a.CompanyID
+	}
+	if err := uc.ensureCanAssign(ctx, actor, a.CompanyID, a.Role.SolutionID, check); err != nil {
+		return err
 	}
 
 	now := uc.now()
@@ -309,6 +321,19 @@ func (uc *AuthzUseCase) effectiveGrants(ctx context.Context, companyID, userID, 
 	// 	return nil, err
 	// }
 	return uc.deps.Grants.Grants(ctx, companyID, userID, solutionID)
+}
+
+// ensureCanAssign — token user wajib punya role.assign pada scope assignment; role solution
+// console (permission platform) hanya untuk pemegang seluruh permission platform di scope itu.
+func (uc *AuthzUseCase) ensureCanAssign(ctx context.Context, actor *principal.Principal, companyID, roleSolutionID string, scope entity.CheckScope) error {
+	a := accessorOf(actor)
+	if err := uc.deps.Admin.EnsurePermission(ctx, a, companyID, constant.PermRoleAssign, scope); err != nil {
+		return mapAuthzDomainError(err)
+	}
+	if err := uc.deps.Admin.EnsurePlatformRoleControl(ctx, a, companyID, roleSolutionID, scope); err != nil {
+		return mapAuthzDomainError(err)
+	}
+	return nil
 }
 
 func (uc *AuthzUseCase) isActiveMember(ctx context.Context, companyID, userID string) (bool, error) {

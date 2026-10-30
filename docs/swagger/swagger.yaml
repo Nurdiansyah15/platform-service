@@ -464,6 +464,29 @@ definitions:
     - name
     - slug
     type: object
+  dto.CreateCompanyUserRequest:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      name:
+        maxLength: 255
+        type: string
+      password:
+        maxLength: 72
+        minLength: 8
+        type: string
+      status:
+        description: 'Status member: active (default) atau invited.'
+        enum:
+        - active
+        - invited
+        type: string
+    required:
+    - email
+    - name
+    - password
+    type: object
   dto.CreateOrgUnitRequest:
     properties:
       code:
@@ -3632,6 +3655,62 @@ paths:
       security:
       - BearerAuth: []
       summary: Company summary
+      tags:
+      - Companies
+  /api/v1/companies/{companyId}/users:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Membuat akun user baru (ber-password) sekaligus menjadikannya member company. Email sudah terdaftar → 409 (pakai POST /members).
+        Token user wajib punya permission platform member.manage.
+      parameters:
+      - description: Company ID
+        in: path
+        name: companyId
+        required: true
+        type: string
+      - description: User baru
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateCompanyUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.CompanyMemberResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Create user account as company member
       tags:
       - Companies
   /api/v1/companies/{companyId}/users/{userId}/effective-permissions:

@@ -38,6 +38,15 @@ type AddCompanyMemberRequest struct {
 	Status string  `json:"status" binding:"omitempty,oneof=active invited"`
 }
 
+// CreateCompanyUserRequest — buat akun user baru sekaligus menjadikannya member company.
+type CreateCompanyUserRequest struct {
+	Name     string `json:"name" binding:"required,max=255"`
+	Email    string `json:"email" binding:"required,max=255"`
+	Password string `json:"password" binding:"required,min=8,max=72"`
+	// Status member: active (default) atau invited.
+	Status string `json:"status" binding:"omitempty,oneof=active invited"`
+}
+
 type ListCompanyMemberQuery struct {
 	Status *string `form:"status" binding:"omitempty,oneof=invited active inactive"`
 	Search *string `form:"search"`

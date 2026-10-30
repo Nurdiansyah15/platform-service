@@ -7,6 +7,7 @@ import (
 	"platform-service/internal/app/dto"
 	"platform-service/internal/app/port"
 	"platform-service/internal/app/principal"
+	authzconstant "platform-service/internal/domain/authz/constant"
 	domainerr "platform-service/internal/domain/errors"
 	orgconstant "platform-service/internal/domain/organization/constant"
 	orgservice "platform-service/internal/domain/organization/service"
@@ -26,7 +27,8 @@ func mapRoleDomainError(err error) error {
 		return apperror.NotFound(string(de.Code))
 	case orgconstant.CodeCompanyNotSelected:
 		return apperror.Forbidden(apperror.MsgCompanyNotSelected)
-	case orgconstant.CodeCompanyAccessDenied, constant.CodeRoleSystemImmutable, constant.CodeRoleCompanyNotSubscribed:
+	case orgconstant.CodeCompanyAccessDenied, constant.CodeRoleSystemImmutable, constant.CodeRoleCompanyNotSubscribed,
+		authzconstant.CodeAdminPermissionDenied:
 		return apperror.Forbidden(string(de.Code))
 	case constant.CodeRoleCodeDuplicate:
 		return apperror.Conflict(string(de.Code), err)

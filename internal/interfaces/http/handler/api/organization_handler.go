@@ -206,6 +206,40 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 	respond.Created(c, "company member added", resp)
 }
 
+// CreateUser godoc
+//
+//	@Summary		Create user account as company member
+//	@Description	Membuat akun user baru (ber-password) sekaligus menjadikannya member company. Email sudah terdaftar → 409 (pakai POST /members).
+//	@Description	Token user wajib punya permission platform member.manage.
+//	@Tags			Companies
+//	@Security		BearerAuth
+//	@Accept			json
+//	@Produce		json
+//	@Param			companyId			path		string							true	"Company ID"
+//	@Param			body				body		dto.CreateCompanyUserRequest	true	"User baru"
+//	@Success		201					{object}	respond.SuccessBody{data=dto.CompanyMemberResponse}
+//	@Failure		401,403,404,409,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/companies/{companyId}/users [post]
+func (h *OrganizationHandler) CreateUser(c *gin.Context) {
+	var param dto.CompanyIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.CreateCompanyUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	resp, err := h.members.CreateUser(c.Request.Context(), actor, param.CompanyID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.Created(c, "company user created", resp)
+}
+
 // GetMember godoc
 //
 //	@Summary	Get company member

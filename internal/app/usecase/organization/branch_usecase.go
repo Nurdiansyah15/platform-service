@@ -7,6 +7,8 @@ import (
 	"platform-service/internal/app/dto"
 	"platform-service/internal/app/port"
 	"platform-service/internal/app/principal"
+	authzconstant "platform-service/internal/domain/authz/constant"
+	authzservice "platform-service/internal/domain/authz/service"
 	domainerr "platform-service/internal/domain/errors"
 	"platform-service/internal/domain/organization/constant"
 	"platform-service/internal/domain/organization/entity"
@@ -31,6 +33,9 @@ func NewBranchUseCase(deps OrganizationDeps) *BranchUseCase {
 func (uc *BranchUseCase) Create(ctx context.Context, actor *principal.Principal, companyID string, req dto.CreateOrgUnitRequest) (*dto.BranchResponse, error) {
 	company, err := accessibleCompany(ctx, uc.access, uc.deps.Companies, actor, companyID)
 	if err != nil {
+		return nil, err
+	}
+	if err := ensurePermission(ctx, uc.deps.Admin, actor, companyID, authzconstant.PermBranchManage, authzservice.CompanyScope(companyID)); err != nil {
 		return nil, err
 	}
 	b, err := entity.NewBranch(company.ID, entity.OrgUnitParams{Name: req.Name, Code: req.Code, Status: req.Status}, uc.now())
@@ -84,9 +89,9 @@ func (uc *BranchUseCase) List(ctx context.Context, actor *principal.Principal, c
 // Update mengubah nama / kode / status branch. Branch milik company yang tidak bisa diakses
 // dilaporkan 404.
 //
-// Required — auth: user (platform admin, atau member active dengan cid) atau service | scope: org:write
+// Required — auth: user (platform admin, atau member dengan permission branch.manage di branch / company-nya) atau service | scope: org:write
 func (uc *BranchUseCase) Update(ctx context.Context, actor *principal.Principal, branchID string, req dto.UpdateOrgUnitRequest) (*dto.BranchResponse, error) {
-	b, err := uc.accessibleBranch(ctx, actor, branchID)
+	b, err := uc.manageableBranch(ctx, actor, branchID)
 	if err != nil {
 		return nil, err
 	}
@@ -108,9 +113,9 @@ func (uc *BranchUseCase) Update(ctx context.Context, actor *principal.Principal,
 
 // Delete menghapus branch (soft delete). Role assignment ber-scope branch ini ikut dihapus.
 //
-// Required — auth: user (platform admin, atau member active dengan cid) atau service | scope: org:write
+// Required — auth: user (platform admin, atau member dengan permission branch.manage di branch / company-nya) atau service | scope: org:write
 func (uc *BranchUseCase) Delete(ctx context.Context, actor *principal.Principal, branchID string) error {
-	b, err := uc.accessibleBranch(ctx, actor, branchID)
+	b, err := uc.manageableBranch(ctx, actor, branchID)
 	if err != nil {
 		return err
 	}
@@ -132,6 +137,19 @@ func (uc *BranchUseCase) Delete(ctx context.Context, actor *principal.Principal,
 
 // branchScopeType — scope_type role assignment untuk branch (authz valueobject.ScopeBranch).
 const branchScopeType = "branch"
+
+// manageableBranch — accessibleBranch + permission platform branch.manage pada branch itu
+// (assignment level company induknya ikut berlaku).
+func (uc *BranchUseCase) manageableBranch(ctx context.Context, actor *principal.Principal, branchID string) (*entity.Branch, error) {
+	b, err := uc.accessibleBranch(ctx, actor, branchID)
+	if err != nil {
+		return nil, err
+	}
+	if err := ensurePermission(ctx, uc.deps.Admin, actor, b.CompanyID, authzconstant.PermBranchManage, authzservice.BranchScope(b.CompanyID, b.ID)); err != nil {
+		return nil, err
+	}
+	return b, nil
+}
 
 // accessibleBranch memuat branch lalu memeriksa akses ke company pemiliknya; ditolak → 404.
 func (uc *BranchUseCase) accessibleBranch(ctx context.Context, actor *principal.Principal, branchID string) (*entity.Branch, error) {

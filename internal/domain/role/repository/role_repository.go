@@ -11,6 +11,8 @@ type RoleRepository interface {
 	Save(ctx context.Context, r *entity.Role) error
 	// FindByID mengabaikan role yang sudah di-soft delete.
 	FindByID(ctx context.Context, id string) (*entity.Role, error)
+	// FindGlobalByCode — role global (company_id NULL) solution dengan code tersebut.
+	FindGlobalByCode(ctx context.Context, solutionID, code string) (*entity.Role, error)
 }
 
 type RolePermissionRepository interface {

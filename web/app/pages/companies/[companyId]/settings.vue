@@ -3,6 +3,7 @@ import type { FormError, FormSubmitEvent } from '@nuxt/ui'
 import type { CompanyResponse, CompanyStatus } from '~/types/api'
 
 const ctx = useCompanyContext()
+const perms = useCompanyPermissions()
 const auth = useAuthStore()
 const api = useApi()
 const toast = useToast()
@@ -82,7 +83,14 @@ async function changeStatus(next: CompanyStatus) {
 <template>
   <CompanyPage title="Pengaturan" :section="{ label: 'Pengaturan', to: `/companies/${ctx.companyId.value}/settings` }" narrow>
     <SectionCard title="Profil company" description="Nama dan slug company.">
-      <UForm ref="formRef" :state="state" :validate="validate" class="space-y-4" @submit="onSubmit">
+      <UAlert
+        v-if="!perms.can('company.manage')"
+        color="neutral"
+        variant="subtle"
+        icon="i-lucide-lock"
+        title="Hanya admin company yang bisa mengubah profil company."
+      />
+      <UForm ref="formRef" :state="state" :validate="validate" :disabled="!perms.can('company.manage')" class="space-y-4" @submit="onSubmit">
         <UFormField label="Nama" name="name" required>
           <UInput v-model="state.name" class="w-full" />
         </UFormField>

@@ -22,7 +22,7 @@ func mapAuthzDomainError(err error) error {
 		return apperror.NotFound(string(de.Code))
 	case orgconstant.CodeCompanyNotSelected:
 		return apperror.Forbidden(apperror.MsgCompanyNotSelected)
-	case orgconstant.CodeCompanyAccessDenied, constant.CodeAssignmentNotSubscribed:
+	case orgconstant.CodeCompanyAccessDenied, constant.CodeAssignmentNotSubscribed, constant.CodeAdminPermissionDenied:
 		return apperror.Forbidden(string(de.Code))
 	case constant.CodeAssignmentDuplicate:
 		return apperror.Conflict(string(de.Code), err)

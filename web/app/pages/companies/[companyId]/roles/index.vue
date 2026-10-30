@@ -2,6 +2,7 @@
 import type { RoleResponse } from '~/types/api'
 
 const ctx = useCompanyContext()
+const perms = useCompanyPermissions()
 const api = useApi()
 const toast = useToast()
 const { toastError } = useApiError()
@@ -14,6 +15,8 @@ const loading = ref(false)
 const showCreate = ref(false)
 
 const base = computed(() => `/companies/${ctx.companyId.value}/roles`)
+// Role custom solution console (berisi permission platform) hanya untuk Admin company.
+const canCreate = computed(() => perms.can('role.manage') && (!perms.isConsoleSolution(solutionId.value) || perms.isCompanyAdmin.value))
 const kindItems = [
   { label: 'Semua', value: 'all' },
   { label: 'Global', value: 'global' },
@@ -54,7 +57,7 @@ function onCreated(role: RoleResponse) {
 <template>
   <CompanyPage title="Role" :section="{ label: 'Role', to: base }">
     <template #actions>
-      <UButton icon="i-lucide-plus" :disabled="!solutionId" @click="showCreate = true">Buat custom role</UButton>
+      <UButton v-if="canCreate" icon="i-lucide-plus" :disabled="!solutionId" @click="showCreate = true">Buat custom role</UButton>
     </template>
 
     <p class="text-sm text-muted">
@@ -76,7 +79,7 @@ function onCreated(role: RoleResponse) {
       icon="i-lucide-shield"
       :title="roles.length ? 'Tidak ada role yang cocok' : 'Belum ada role'"
       :description="roles.length ? 'Coba ubah pencarian atau filter.' : 'Solution ini belum punya role. Buat custom role pertama.'"
-      :actions="roles.length ? [] : [{ label: 'Buat custom role', icon: 'i-lucide-plus', onClick: () => (showCreate = true) }]"
+      :actions="roles.length || !canCreate ? [] : [{ label: 'Buat custom role', icon: 'i-lucide-plus', onClick: () => (showCreate = true) }]"
     />
     <div v-else class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       <UPageCard

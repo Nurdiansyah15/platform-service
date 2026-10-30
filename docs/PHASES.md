@@ -319,7 +319,7 @@ Keputusan desain di luar spec:
 - Belum: GET/PATCH/DELETE role, `roles/sync` system role (L6)
 
 ### Fase 15 — Role Assignment & Authz Check ✅
-- Keputusan user: endpoint administratif company (member, company/branch, role custom, role assignment) tetap terbuka untuk **semua member aktif**; platform tidak menegakkan RBAC untuk administrasi company — solution/console membatasi lewat `authz/check`
+- ~~Keputusan user: endpoint administratif company tetap terbuka untuk **semua member aktif**~~ — diganti (2026-10-30) dengan permission platform (lihat L2)
 - Tabel: `user_role_assignments` (FK `(company_id, user_id)` → `company_members`, unique `(user_id, role_id, scope_type, scope_id)`, CHECK scope_type, index spec)
 - Domain `authz`:
   - `ScopeValidator`: company = company itu sendiri (scope_id boleh kosong), company = milik company, branch = dari company milik company (company/branch wajib scope_id; yang dihapus tidak berlaku)
@@ -387,6 +387,8 @@ Pola sama: usecase + handler + handler test wajib.
 - [x] SSO console → solution (authorization code + PKCE): `POST /auth/authorize` (hanya sesi console), `POST /auth/token-exchange` (sesi baru ber-`parent_session_id`; logout console mencabut sesi turunan), `GET /auth/apps` (launcher / menu apps); solution: `launch_url`, `icon_url`, `redirect_uris`
 
 ### L2 — Company & Organization
+- [x] Permission platform (katalog solution console + role sistem `company_admin`, backfill di seeder): `company.manage`, `member.manage`, `branch.manage`, `role.manage`, `role.assign` ditegakkan untuk token user di endpoint tulis; anti eskalasi role console
+- [x] `POST /companies/{companyId}/users` — buat akun user (ber-password) sekaligus member
 - [x] `PATCH /companies/{companyId}` (status khusus platform admin)
 - [x] `PATCH /companies/{companyId}/members/{userId}`, `DELETE /companies/{companyId}/members/{userId}` (status `inactive` + hapus role assignment)
 - [x] `PATCH/DELETE /branches/{branchId}` (soft delete + hapus assignment ber-scope branch)

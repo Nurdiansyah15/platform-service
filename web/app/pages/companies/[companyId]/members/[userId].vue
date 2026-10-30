@@ -9,6 +9,8 @@ import type {
 } from '~/types/api'
 
 const ctx = useCompanyContext()
+const perms = useCompanyPermissions()
+const auth = useAuthStore()
 const route = useRoute()
 const api = useApi()
 const toast = useToast()
@@ -107,11 +109,35 @@ const roleItems = computed(() => roles.value.map(r => ({
   value: r.id,
   description: `${r.code} · ${r.scope === 'company' ? 'custom' : 'global'} · ${r.permission_count} permission`,
 })))
-const branchItems = computed(() => branches.value.map(b => ({ label: b.name, value: b.id, description: b.code })))
+// Batas pemberian role sesuai permission platform role.assign pemanggil: level company bila
+// dipegang di company, selain itu hanya cabang tempat ia memegangnya. Role solution console
+// (permission platform) hanya untuk Admin company.
+const isConsole = computed(() => perms.isConsoleSolution(solutionId.value))
+const canAssignHere = computed(() => perms.canAny('role.assign') && (!isConsole.value || perms.isCompanyAdmin.value))
+const canAssignCompany = computed(() => perms.can('role.assign'))
+const assignableBranches = computed(() => branches.value.filter(b => perms.canInBranch('role.assign', b.id)))
+const branchItems = computed(() => assignableBranches.value.map(b => ({ label: b.name, value: b.id, description: b.code })))
+
+function canRevoke(a: RoleAssignmentDetail) {
+  if (perms.isConsoleSolution(a.solution_id) && !perms.isCompanyAdmin.value) return false
+  return a.scope_type === 'company' ? perms.can('role.assign') : perms.canInBranch('role.assign', a.scope_id)
+}
 
 watch(showAssign, (v) => {
-  if (v) Object.assign(form, { role_id: undefined, scope_type: 'company', scope_id: undefined })
+  if (v) {
+    Object.assign(form, {
+      role_id: undefined,
+      scope_type: canAssignCompany.value ? 'company' : 'branch',
+      scope_id: !canAssignCompany.value && assignableBranches.value.length === 1 ? assignableBranches.value[0]!.id : undefined,
+    })
+  }
 })
+
+// Role diri sendiri berubah → muat ulang permission platform agar tampilan ikut menyesuaikan.
+function afterAccessChange() {
+  loadAccess()
+  if (userId.value === auth.user?.id) perms.load(true)
+}
 
 async function assign() {
   assigning.value = true
@@ -123,7 +149,7 @@ async function assign() {
     })
     toast.add({ title: 'Role ditambahkan', color: 'success' })
     showAssign.value = false
-    loadAccess()
+    afterAccessChange()
   } catch (err) {
     toastError(err, 'Gagal menambahkan role')
   } finally {
@@ -142,7 +168,7 @@ async function revoke(a: RoleAssignmentDetail) {
   try {
     await api.del(`/api/v1/role-assignments/${a.id}`)
     toast.add({ title: 'Role dicabut', color: 'success' })
-    loadAccess()
+    afterAccessChange()
   } catch (err) {
     toastError(err)
   }
@@ -189,7 +215,7 @@ function scopeLabel(type: string, id: string) {
             </template>
           </div>
         </div>
-        <div v-if="member" class="flex gap-2">
+        <div v-if="member && perms.can('member.manage')" class="flex gap-2">
           <UButton v-if="member.status !== 'active'" icon="i-lucide-check" variant="soft" @click="setStatus('active')">Aktifkan</UButton>
           <UButton v-if="member.status !== 'inactive'" icon="i-lucide-user-minus" color="error" variant="ghost" @click="setStatus('inactive')">
             Keluarkan
@@ -208,6 +234,7 @@ function scopeLabel(type: string, id: string) {
         <SectionCard title="Role" description="Role menentukan permission anggota di solution ini.">
           <template #actions>
             <UButton
+              v-if="canAssignHere"
               icon="i-lucide-plus"
               size="sm"
               :disabled="!solutionId || member?.status !== 'active'"
@@ -241,7 +268,7 @@ function scopeLabel(type: string, id: string) {
                   {{ a.scope_type === 'company' ? 'Seluruh company' : a.scope_name }}
                 </p>
               </div>
-              <UTooltip text="Cabut role">
+              <UTooltip v-if="canRevoke(a)" text="Cabut role">
                 <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" aria-label="Cabut role" @click="revoke(a)" />
               </UTooltip>
             </li>
@@ -290,8 +317,8 @@ function scopeLabel(type: string, id: string) {
             <URadioGroup
               v-model="form.scope_type"
               :items="[
-                { label: 'Seluruh company', value: 'company', description: 'Termasuk semua cabang.' },
-                { label: 'Cabang tertentu', value: 'branch', description: 'Hanya di satu cabang.', disabled: !branches.length },
+                { label: 'Seluruh company', value: 'company', description: canAssignCompany ? 'Termasuk semua cabang.' : 'Butuh izin memberi role di level company.', disabled: !canAssignCompany },
+                { label: 'Cabang tertentu', value: 'branch', description: 'Hanya di satu cabang.', disabled: !assignableBranches.length },
               ]"
             />
           </UFormField>

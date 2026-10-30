@@ -7,7 +7,9 @@ import (
 	"platform-service/internal/app/dto"
 	"platform-service/internal/app/port"
 	"platform-service/internal/app/principal"
+	authzconstant "platform-service/internal/domain/authz/constant"
 	authzrepo "platform-service/internal/domain/authz/repository"
+	authzservice "platform-service/internal/domain/authz/service"
 	domainerr "platform-service/internal/domain/errors"
 	orgconstant "platform-service/internal/domain/organization/constant"
 	orgrepo "platform-service/internal/domain/organization/repository"
@@ -36,6 +38,8 @@ type RoleDeps struct {
 	Query           port.RoleQueryReadModel
 	// Assignments — assignment role ikut dihapus saat role dihapus.
 	Assignments authzrepo.RoleAssignmentRepository
+	// Admin menegakkan permission platform role.manage untuk token user.
+	Admin *authzservice.CompanyAdminPolicy
 }
 
 type RoleUseCase struct {
@@ -152,9 +156,12 @@ func (uc *RoleUseCase) ListForCompany(ctx context.Context, actor *principal.Prin
 // CreateForCompany membuat custom role milik company. Company wajib subscribe solution
 // (trialing / active) — GATE-SUBSCRIPTION (nonaktif sementara).
 //
-// Required — auth: user (platform admin / member dengan tid) atau service milik solution | scope: roles:write
+// Required — auth: user (platform admin / member dengan permission role.manage) atau service milik solution | scope: roles:write
 func (uc *RoleUseCase) CreateForCompany(ctx context.Context, actor *principal.Principal, companyID, solutionID string, req dto.CreateRoleRequest) (*dto.RoleResponse, error) {
 	if err := uc.ensureCompanySolutionAccess(ctx, actor, companyID, solutionID); err != nil {
+		return nil, err
+	}
+	if err := uc.ensureRoleManage(ctx, actor, companyID, solutionID); err != nil {
 		return nil, err
 	}
 	// GATE-SUBSCRIPTION (nonaktif sementara): company tidak wajib subscribe solution.
@@ -197,9 +204,9 @@ func (uc *RoleUseCase) ListHolders(ctx context.Context, actor *principal.Princip
 
 // UpdateForCompany mengubah nama / deskripsi custom role milik company.
 //
-// Required — auth: user (platform admin / member dengan cid) atau service milik solution | scope: roles:write
+// Required — auth: user (platform admin / member dengan permission role.manage) atau service milik solution | scope: roles:write
 func (uc *RoleUseCase) UpdateForCompany(ctx context.Context, actor *principal.Principal, companyID, roleID string, req dto.UpdateRoleRequest) (*dto.RoleResponse, error) {
-	r, err := uc.ownedRole(ctx, actor, companyID, roleID)
+	r, err := uc.manageableRole(ctx, actor, companyID, roleID)
 	if err != nil {
 		return nil, err
 	}
@@ -208,9 +215,9 @@ func (uc *RoleUseCase) UpdateForCompany(ctx context.Context, actor *principal.Pr
 
 // DeleteForCompany menghapus custom role milik company (soft delete) beserta assignment-nya.
 //
-// Required — auth: user (platform admin / member dengan cid) atau service milik solution | scope: roles:write
+// Required — auth: user (platform admin / member dengan permission role.manage) atau service milik solution | scope: roles:write
 func (uc *RoleUseCase) DeleteForCompany(ctx context.Context, actor *principal.Principal, companyID, roleID string) error {
-	r, err := uc.ownedRole(ctx, actor, companyID, roleID)
+	r, err := uc.manageableRole(ctx, actor, companyID, roleID)
 	if err != nil {
 		return err
 	}
@@ -220,7 +227,7 @@ func (uc *RoleUseCase) DeleteForCompany(ctx context.Context, actor *principal.Pr
 // ReplaceCompanyRolePermissions mengganti permission custom role milik company. Role global
 // atau milik company lain → 404.
 //
-// Required — auth: user (platform admin / member dengan tid) atau service milik solution | scope: roles:write
+// Required — auth: user (platform admin / member dengan permission role.manage) atau service milik solution | scope: roles:write
 func (uc *RoleUseCase) ReplaceCompanyRolePermissions(ctx context.Context, actor *principal.Principal, companyID, roleID string, req dto.ReplaceRolePermissionsRequest) ([]dto.RolePermissionResponse, error) {
 	if err := uc.access.EnsureCanAccess(ctx, accessorOf(actor), companyID); err != nil {
 		return nil, mapRoleDomainError(err)
@@ -231,6 +238,9 @@ func (uc *RoleUseCase) ReplaceCompanyRolePermissions(ctx context.Context, actor 
 	}
 	if !r.IsOwnedBy(companyID) || (actor.IsService() && actor.SolutionID != r.SolutionID) {
 		return nil, mapRoleDomainError(domainerr.New(constant.CodeRoleNotFound))
+	}
+	if err := uc.ensureRoleManage(ctx, actor, companyID, r.SolutionID); err != nil {
+		return nil, err
 	}
 	return uc.replacePermissions(ctx, r, req.PermissionCodes)
 }
@@ -268,6 +278,31 @@ func (uc *RoleUseCase) companyVisibleRole(ctx context.Context, actor *principal.
 		return nil, mapRoleDomainError(domainerr.New(constant.CodeRoleNotFound))
 	}
 	return r, nil
+}
+
+// manageableRole — ownedRole + permission platform role.manage.
+func (uc *RoleUseCase) manageableRole(ctx context.Context, actor *principal.Principal, companyID, roleID string) (*entity.Role, error) {
+	r, err := uc.ownedRole(ctx, actor, companyID, roleID)
+	if err != nil {
+		return nil, err
+	}
+	if err := uc.ensureRoleManage(ctx, actor, companyID, r.SolutionID); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// ensureRoleManage — token user wajib punya role.manage; custom role solution console
+// (berisi permission platform) hanya untuk pemegang seluruh permission platform.
+func (uc *RoleUseCase) ensureRoleManage(ctx context.Context, actor *principal.Principal, companyID, solutionID string) error {
+	a, scope := accessorOf(actor), authzservice.CompanyScope(companyID)
+	if err := uc.deps.Admin.EnsurePermission(ctx, a, companyID, authzconstant.PermRoleManage, scope); err != nil {
+		return mapRoleDomainError(err)
+	}
+	if err := uc.deps.Admin.EnsurePlatformRoleControl(ctx, a, companyID, solutionID, scope); err != nil {
+		return mapRoleDomainError(err)
+	}
+	return nil
 }
 
 // ownedRole — custom role milik company (role global / company lain → 404).

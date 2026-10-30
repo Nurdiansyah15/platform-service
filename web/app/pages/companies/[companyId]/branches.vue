@@ -10,6 +10,7 @@ const toast = useToast()
 const { toastError, fieldErrors } = useApiError()
 const { confirm } = useConfirm()
 const formRef = useTemplateRef('formRef')
+const perms = useCompanyPermissions()
 
 const status = ref<string | undefined>(undefined)
 const list = useListQuery<BranchResponse>(
@@ -96,7 +97,7 @@ const columns: TableColumn<BranchResponse>[] = [
   { accessorKey: 'created_at', header: 'Dibuat', cell: ({ row }) => h('span', { class: 'text-muted' }, formatDate(row.original.created_at)) },
   {
     id: 'actions',
-    cell: ({ row }) => h('div', { class: 'text-right' }, h(UDropdownMenu, {
+    cell: ({ row }) => perms.canInBranch('branch.manage', row.original.id) && h('div', { class: 'text-right' }, h(UDropdownMenu, {
       content: { align: 'end' },
       items: [
         [{ label: 'Ubah', icon: 'i-lucide-pencil', onSelect: () => openEdit(row.original) }],
@@ -110,7 +111,7 @@ const columns: TableColumn<BranchResponse>[] = [
 <template>
   <CompanyPage title="Cabang" :section="{ label: 'Cabang', to: base }">
     <template #actions>
-      <UButton icon="i-lucide-plus" @click="openCreate">Tambah cabang</UButton>
+      <UButton v-if="perms.can('branch.manage')" icon="i-lucide-plus" @click="openCreate">Tambah cabang</UButton>
     </template>
 
     <p class="text-sm text-muted">Cabang dipakai untuk membatasi role anggota ke lokasi atau unit tertentu.</p>
@@ -129,7 +130,7 @@ const columns: TableColumn<BranchResponse>[] = [
           icon="i-lucide-git-branch"
           :title="list.search.value || status ? 'Tidak ada cabang yang cocok' : 'Belum ada cabang'"
           :description="list.search.value || status ? 'Coba ubah pencarian atau filter.' : 'Tambahkan cabang pertama company ini.'"
-          :actions="list.search.value || status ? [] : [{ label: 'Tambah cabang', icon: 'i-lucide-plus', onClick: openCreate }]"
+          :actions="list.search.value || status || !perms.can('branch.manage') ? [] : [{ label: 'Tambah cabang', icon: 'i-lucide-plus', onClick: openCreate }]"
           variant="naked"
         />
       </template>

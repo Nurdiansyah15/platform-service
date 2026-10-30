@@ -36,6 +36,7 @@ import (
 	"platform-service/internal/config"
 	authzservice "platform-service/internal/domain/authz/service"
 	entservice "platform-service/internal/domain/entitlement/service"
+	solutionservice "platform-service/internal/domain/solution/service"
 	"platform-service/internal/infrastructure/crypto"
 	i18n "platform-service/internal/infrastructure/i18n"
 	"platform-service/internal/infrastructure/jwttoken"
@@ -138,6 +139,10 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	assignmentRepo := persistence.NewPostgresRoleAssignmentRepository(opts.DB)
 	grantReader := persistence.NewPostgresGrantReader(opts.DB)
 	transactor := persistence.NewPostgresTransactor(opts.DB)
+
+	// Permission platform (administrasi company) = katalog solution console.
+	consoleLocator := solutionservice.NewConsoleLocator(solutionRepo, cfg.Auth.ConsoleSolutionCode)
+	adminPolicy := authzservice.NewCompanyAdminPolicy(grantReader, consoleLocator)
 	outbox := persistence.NewPostgresEventOutbox()
 
 	webhookCipher, err := crypto.NewAESCipher(cfg.Webhook.SecretKey)
@@ -205,6 +210,10 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		// AccessPolicy: token service hanya untuk company yang subscribe solution-nya
 		// (GATE-SUBSCRIPTION nonaktif sementara).
 		Subscriptions: subscriptionRepo,
+		Admin:         adminPolicy,
+		Roles:         roleRepo,
+		Console:       consoleLocator,
+		Hasher:        hasher,
 	}
 	companyUC := organization.NewCompanyUseCase(orgDeps)
 	memberUC := organization.NewCompanyMemberUseCase(orgDeps)
@@ -255,6 +264,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Subscriptions:   subscriptionRepo,
 		Query:           roleQuery,
 		Assignments:     assignmentRepo,
+		Admin:           adminPolicy,
 	})
 	authzUC := authz.NewAuthzUseCase(authz.AuthzDeps{
 		Tx:            transactor,
@@ -267,6 +277,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Subscriptions: subscriptionRepo,
 		Solutions:     solutionRepo,
 		Query:         persistence.NewPostgresRoleAssignmentQuery(opts.DB),
+		Admin:         adminPolicy,
 	})
 	entitlementResolver := entservice.NewResolver(subscriptionRepo, snapshotReader)
 	entitlementUC := entitlement.NewEntitlementUseCase(entitlement.EntitlementDeps{

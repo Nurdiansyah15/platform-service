@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
-import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
-import type { CompanyMemberResponse, MemberCandidate, MemberStatus } from '~/types/api'
+import type { DropdownMenuItem, FormError, TableColumn } from '@nuxt/ui'
+import type { CompanyMemberResponse, MemberCandidate, MemberStatus, RoleResponse } from '~/types/api'
 
 const ctx = useCompanyContext()
 const route = useRoute()
@@ -9,6 +9,8 @@ const api = useApi()
 const toast = useToast()
 const { toastError } = useApiError()
 const { confirm } = useConfirm()
+const auth = useAuthStore()
+const perms = useCompanyPermissions()
 
 const status = ref<string | undefined>(undefined)
 const list = useListQuery<CompanyMemberResponse>(
@@ -17,25 +19,60 @@ const list = useListQuery<CompanyMemberResponse>(
 )
 const base = computed(() => `/companies/${ctx.companyId.value}/members`)
 
-// ── Tambah anggota ──
+// ── Tambah anggota: user terdaftar, atau akun baru ──
 const showAdd = ref(route.query.add === '1')
+const addMode = ref<'existing' | 'new'>('existing')
 const candidate = ref<MemberCandidate | undefined>()
 const addStatus = ref<'active' | 'invited'>('active')
+const newUser = reactive({ name: '', email: '', password: '' })
+const makeAdmin = ref(false)
 const adding = ref(false)
+
+// Role company_admin hanya bisa diberikan oleh pemegang seluruh permission platform.
+const canGrantAdmin = computed(() => perms.isCompanyAdmin.value)
 
 watch(showAdd, (v) => {
   if (v) {
+    addMode.value = 'existing'
     candidate.value = undefined
     addStatus.value = 'active'
+    Object.assign(newUser, { name: '', email: '', password: '' })
+    makeAdmin.value = false
   }
 })
 
+function validateNewUser(): FormError[] {
+  const errors: FormError[] = []
+  if (!newUser.name.trim()) errors.push({ name: 'name', message: 'Nama wajib diisi' })
+  if (!/^\S+@\S+\.\S+$/.test(newUser.email.trim())) errors.push({ name: 'email', message: 'Format email tidak valid' })
+  if (newUser.password.length < 8) errors.push({ name: 'password', message: 'Password minimal 8 karakter' })
+  return errors
+}
+const canSubmitAdd = computed(() => addMode.value === 'existing' ? !!candidate.value : !validateNewUser().length)
+
+async function companyAdminRoleId(): Promise<string | undefined> {
+  const res = await api.get<RoleResponse[]>(`/api/v1/solutions/${auth.solution?.id}/roles`, { query: { search: 'company_admin', limit: 10 } })
+  return res.data.find(r => r.code === 'company_admin')?.id
+}
+
 async function addMember() {
-  if (!candidate.value) return
   adding.value = true
+  const cid = ctx.companyId.value
   try {
-    await api.post(`/api/v1/companies/${ctx.companyId.value}/members`, { user_id: candidate.value.id, status: addStatus.value })
-    toast.add({ title: `${candidate.value.name} ditambahkan`, color: 'success' })
+    let added: CompanyMemberResponse
+    if (addMode.value === 'existing') {
+      if (!candidate.value) return
+      added = (await api.post<CompanyMemberResponse>(`/api/v1/companies/${cid}/members`, { user_id: candidate.value.id, status: addStatus.value })).data
+    } else {
+      added = (await api.post<CompanyMemberResponse>(`/api/v1/companies/${cid}/users`, {
+        name: newUser.name.trim(), email: newUser.email.trim(), password: newUser.password, status: addStatus.value,
+      })).data
+    }
+    if (makeAdmin.value) {
+      const roleId = await companyAdminRoleId()
+      if (roleId) await api.post(`/api/v1/companies/${cid}/users/${added.user_id}/role-assignments`, { role_id: roleId, scope_type: 'company' })
+    }
+    toast.add({ title: `${added.name} ditambahkan`, description: makeAdmin.value ? 'Sebagai admin company.' : undefined, color: 'success' })
     showAdd.value = false
     list.reload()
   } catch (err) {
@@ -75,6 +112,7 @@ async function remove(m: CompanyMemberResponse) {
 
 function rowActions(m: CompanyMemberResponse): DropdownMenuItem[][] {
   const items: DropdownMenuItem[][] = [[{ label: 'Lihat role & akses', icon: 'i-lucide-shield', to: `${base.value}/${m.user_id}` }]]
+  if (!perms.can('member.manage')) return items
   const second: DropdownMenuItem[] = []
   if (m.status !== 'active') second.push({ label: 'Aktifkan', icon: 'i-lucide-check', onSelect: () => setStatus(m, 'active') })
   if (m.status !== 'inactive') second.push({ label: 'Keluarkan', icon: 'i-lucide-user-minus', color: 'error', onSelect: () => remove(m) })
@@ -121,7 +159,7 @@ function onSelect(_e: Event, row: { original: CompanyMemberResponse }) {
 <template>
   <CompanyPage title="Anggota" :section="{ label: 'Anggota', to: base }">
     <template #actions>
-      <UButton icon="i-lucide-user-plus" @click="showAdd = true">Tambah anggota</UButton>
+      <UButton v-if="perms.can('member.manage')" icon="i-lucide-user-plus" @click="showAdd = true">Tambah anggota</UButton>
     </template>
 
     <div class="flex flex-wrap items-center gap-2">
@@ -152,12 +190,29 @@ function onSelect(_e: Event, row: { original: CompanyMemberResponse }) {
 
     <ListPagination v-model:page="list.page.value" :meta="list.meta.value" />
 
-    <UModal v-model:open="showAdd" title="Tambah anggota" description="Cari user yang sudah terdaftar di platform.">
+    <UModal v-model:open="showAdd" title="Tambah anggota" description="Pilih user terdaftar, atau buatkan akun baru.">
       <template #body>
         <div class="space-y-4">
-          <UFormField label="User" required>
+          <UTabs
+            v-model="addMode"
+            :items="[{ label: 'User terdaftar', value: 'existing', icon: 'i-lucide-search' }, { label: 'Akun baru', value: 'new', icon: 'i-lucide-user-plus' }]"
+            :content="false"
+            class="w-full"
+          />
+          <UFormField v-if="addMode === 'existing'" label="User" required>
             <UserPicker v-model="candidate" :company-id="ctx.companyId.value" />
           </UFormField>
+          <UForm v-else :state="newUser" :validate="validateNewUser" :validate-on="['blur']" class="space-y-4">
+            <UFormField label="Nama" name="name" required>
+              <UInput v-model="newUser.name" placeholder="Budi Santoso" class="w-full" />
+            </UFormField>
+            <UFormField label="Email" name="email" required>
+              <UInput v-model="newUser.email" type="email" placeholder="budi@perusahaan.com" class="w-full" />
+            </UFormField>
+            <UFormField label="Password awal" name="password" required help="Sampaikan ke user; ia bisa menggantinya di halaman profil.">
+              <UInput v-model="newUser.password" type="password" autocomplete="new-password" placeholder="Min. 8 karakter" class="w-full" />
+            </UFormField>
+          </UForm>
           <UFormField label="Status" help="Diundang = belum aktif; bisa diaktifkan nanti.">
             <URadioGroup
               v-model="addStatus"
@@ -165,13 +220,18 @@ function onSelect(_e: Event, row: { original: CompanyMemberResponse }) {
               :items="[{ label: 'Aktif', value: 'active' }, { label: 'Diundang', value: 'invited' }]"
             />
           </UFormField>
-          <p class="text-xs text-muted">User belum terdaftar? Minta admin platform membuatkan akunnya.</p>
+          <UCheckbox
+            v-if="canGrantAdmin"
+            v-model="makeAdmin"
+            label="Jadikan admin company"
+            description="Boleh mengelola info company, anggota, cabang, role, dan penugasan role."
+          />
         </div>
       </template>
       <template #footer>
         <div class="flex w-full justify-end gap-2">
           <UButton color="neutral" variant="ghost" @click="showAdd = false">Batal</UButton>
-          <UButton :disabled="!candidate" :loading="adding" @click="addMember">Tambahkan</UButton>
+          <UButton :disabled="!canSubmitAdd" :loading="adding" @click="addMember">Tambahkan</UButton>
         </div>
       </template>
     </UModal>

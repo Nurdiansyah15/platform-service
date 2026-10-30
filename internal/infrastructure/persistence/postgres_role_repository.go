@@ -46,13 +46,21 @@ func (r *PostgresRoleRepository) Save(ctx context.Context, role *entity.Role) er
 }
 
 func (r *PostgresRoleRepository) FindByID(ctx context.Context, id string) (*entity.Role, error) {
+	return r.findOne(ctx, `WHERE id = $1 AND deleted_at IS NULL`, id)
+}
+
+func (r *PostgresRoleRepository) FindGlobalByCode(ctx context.Context, solutionID, code string) (*entity.Role, error) {
+	return r.findOne(ctx, `WHERE solution_id = $1 AND company_id IS NULL AND code = $2 AND deleted_at IS NULL`, solutionID, code)
+}
+
+func (r *PostgresRoleRepository) findOne(ctx context.Context, where string, args ...any) (*entity.Role, error) {
 	var (
 		role entity.Role
 		code string
 	)
 	err := execFromContext(ctx, r.db).QueryRowContext(ctx, `
 		SELECT id, solution_id, company_id, code, name, description, is_system, created_at, updated_at, deleted_at
-		FROM roles WHERE id = $1 AND deleted_at IS NULL`, id,
+		FROM roles `+where, args...,
 	).Scan(&role.ID, &role.SolutionID, &role.CompanyID, &code, &role.Name, &role.Description, &role.IsSystem,
 		&role.CreatedAt, &role.UpdatedAt, &role.DeletedAt)
 	if err != nil {

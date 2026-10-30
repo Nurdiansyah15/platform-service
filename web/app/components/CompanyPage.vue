@@ -13,6 +13,7 @@ const props = defineProps<{
 
 const ctx = useCompanyContext()
 const auth = useAuthStore()
+const perms = useCompanyPermissions()
 const toast = useToast()
 const { toastError } = useApiError()
 const switching = ref(false)
@@ -58,6 +59,12 @@ watch(ctx.canAccess, v => v && ctx.load())
     </template>
     <template v-if="ctx.canAccess.value" #toolbar>
       <UNavigationMenu :items="navItems" highlight class="-mx-1 flex-1" />
+      <UTooltip
+        v-if="perms.readOnly.value"
+        text="Kamu tidak punya izin mengelola company ini. Minta Admin company memberimu role."
+      >
+        <UBadge color="neutral" variant="subtle" icon="i-lucide-eye" class="shrink-0">Hanya lihat</UBadge>
+      </UTooltip>
     </template>
 
     <UEmpty

@@ -1,18 +1,30 @@
 <script setup lang="ts">
 import { ApiReference } from '@scalar/api-reference'
-import '@scalar/api-reference/style.css'
+import scalarCss from '@scalar/api-reference/style.css?url'
 
 // Referensi lengkap dari OpenAPI (docs/swagger → public/openapi.json lewat `make swagger`).
 definePageMeta({ layout: false })
-useHead({ title: 'API Reference · Platform Docs' })
+// CSS Scalar dipasang sebagai <link> milik halaman ini saja (dilepas saat halaman ditinggalkan).
+// Import CSS biasa ikut termuat global dan reset / variabel warnanya merusak tema Nuxt UI
+// di halaman lain (terutama mode gelap).
+useHead({
+  title: 'API Reference · Platform Docs',
+  link: [{ rel: 'stylesheet', href: scalarCss, key: 'scalar-css' }],
+})
 
 const config = useRuntimeConfig()
 const colorMode = useColorMode()
 
+// Mode warna mengikuti Nuxt sepenuhnya. Tanpa forceDarkModeState, Scalar membaca
+// localStorage.colorMode miliknya sendiri dan bisa berbeda dengan Nuxt (header terang, isi gelap).
+// forceDarkModeState hanya dibaca saat mount, jadi komponen di-remount (key) saat mode berubah.
+const scalarMode = computed<'dark' | 'light'>(() => (colorMode.value === 'dark' ? 'dark' : 'light'))
+
 const configuration = computed(() => ({
   url: '/openapi.json',
   servers: [{ url: config.public.apiBase as string, description: 'Platform API' }],
-  darkMode: colorMode.value === 'dark',
+  forceDarkModeState: scalarMode.value,
+  hideDarkModeToggle: true,
   metaData: { title: 'Platform API Reference' },
   // Tanpa fitur layanan cloud Scalar (AI agent, MCP, toolbar deploy/SDK, telemetry).
   agent: { disabled: true },
@@ -21,6 +33,12 @@ const configuration = computed(() => ({
   showToolbar: 'never' as const,
   telemetry: false,
 }))
+
+// Scalar memasang class dark-mode / light-mode (beserta background) di <body>. Bersihkan saat
+// halaman ditinggalkan agar tidak bocor ke halaman lain lewat navigasi SPA.
+onBeforeUnmount(() => {
+  document.body.classList.remove('dark-mode', 'light-mode')
+})
 </script>
 
 <template>
@@ -32,7 +50,7 @@ const configuration = computed(() => ({
       <span class="text-sm font-semibold text-highlighted">API Reference</span>
     </header>
     <ClientOnly>
-      <ApiReference :configuration="configuration" />
+      <ApiReference :key="scalarMode" :configuration="configuration" />
     </ClientOnly>
   </div>
 </template>

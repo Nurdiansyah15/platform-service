@@ -170,6 +170,7 @@
   "DOMAIN_AUTHZ_ASSIGNMENT_NOT_MEMBER": "User bukan member aktif company ini.",
   "DOMAIN_AUTHZ_ASSIGNMENT_ROLE_UNAVAILABLE": "Role tidak tersedia untuk company ini (tidak ada, dihapus, atau milik company / solution lain).",
   "DOMAIN_AUTHZ_ASSIGNMENT_NOT_SUBSCRIBED": "Company tidak memiliki subscription aktif untuk solution role ini.",
+  "DOMAIN_AUTHZ_ADMIN_PERMISSION_DENIED": "Anda tidak punya izin mengelola company ini (butuh role admin company atau permission platform yang sesuai).",
   "DOMAIN_AUTHZ_SCOPE_TYPE_INVALID": "scope_type harus company atau branch.",
   "DOMAIN_AUTHZ_SCOPE_INVALID": "scope_id bukan milik company ini (atau wajib untuk branch).",
   "DOMAIN_AUTHZ_CHECK_TARGET_REQUIRED": "company_id dan user_id wajib untuk token service.",

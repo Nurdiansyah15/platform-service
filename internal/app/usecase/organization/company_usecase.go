@@ -7,13 +7,19 @@ import (
 	"platform-service/internal/app/dto"
 	"platform-service/internal/app/port"
 	"platform-service/internal/app/principal"
+	authzconstant "platform-service/internal/domain/authz/constant"
+	authzentity "platform-service/internal/domain/authz/entity"
+	authzevent "platform-service/internal/domain/authz/event"
 	authzrepo "platform-service/internal/domain/authz/repository"
+	authzservice "platform-service/internal/domain/authz/service"
+	authzvo "platform-service/internal/domain/authz/valueobject"
 	domainerr "platform-service/internal/domain/errors"
 	"platform-service/internal/domain/organization/constant"
 	"platform-service/internal/domain/organization/entity"
 	"platform-service/internal/domain/organization/event"
 	orgrepo "platform-service/internal/domain/organization/repository"
 	"platform-service/internal/domain/organization/service"
+	rolerepo "platform-service/internal/domain/role/repository"
 	userrepo "platform-service/internal/domain/user/repository"
 )
 
@@ -31,6 +37,14 @@ type OrganizationDeps struct {
 	RoleAssignments authzrepo.RoleAssignmentRepository
 	// Subscriptions dipakai AccessPolicy untuk akses token service.
 	Subscriptions service.SubscriptionChecker
+	// Admin menegakkan permission platform (company.manage, member.manage, branch.manage)
+	// untuk token user pada operasi tulis.
+	Admin *authzservice.CompanyAdminPolicy
+	// Roles & Console dipakai memberi role company_admin ke pembuat company.
+	Roles   rolerepo.RoleRepository
+	Console authzservice.ConsoleSolution
+	// Hasher dipakai saat membuat akun user dari company (CreateUser).
+	Hasher port.PasswordHasher
 }
 
 type CompanyUseCase struct {
@@ -43,8 +57,9 @@ func NewCompanyUseCase(deps OrganizationDeps) *CompanyUseCase {
 	return &CompanyUseCase{deps: deps, access: service.NewAccessPolicy(deps.Members, deps.Subscriptions), now: time.Now}
 }
 
-// Create membuat company baru. Pembuat non-admin otomatis menjadi member active;
-// platform admin tidak (admin membuat company untuk pelanggan lalu menambah member).
+// Create membuat company baru. Pembuat non-admin otomatis menjadi member active dengan role
+// company_admin (permission platform penuh); platform admin tidak (admin membuat company
+// untuk pelanggan lalu menambah member dan memberi company_admin ke member pertama).
 //
 // Required — auth: user | scope: -
 func (uc *CompanyUseCase) Create(ctx context.Context, actor *principal.Principal, req dto.CreateCompanyRequest) (*dto.CompanyResponse, error) {
@@ -68,7 +83,10 @@ func (uc *CompanyUseCase) Create(ctx context.Context, actor *principal.Principal
 		if err := uc.deps.Members.Save(ctx, m); err != nil {
 			return err
 		}
-		return uc.deps.Outbox.Append(ctx, memberAddedEvent(m))
+		if err := uc.deps.Outbox.Append(ctx, memberAddedEvent(m)); err != nil {
+			return err
+		}
+		return uc.grantCompanyAdmin(ctx, c.ID, actor.UserID, now)
 	})
 	if err != nil {
 		return nil, mapCompanyDomainError(err)
@@ -132,7 +150,7 @@ func (uc *CompanyUseCase) Summary(ctx context.Context, actor *principal.Principa
 
 // Update mengubah nama / slug company; status hanya boleh diubah platform admin.
 //
-// Required — auth: user (platform admin, atau member active dengan cid = companyId) atau service | scope: org:write
+// Required — auth: user (platform admin, atau member dengan permission company.manage) atau service | scope: org:write
 func (uc *CompanyUseCase) Update(ctx context.Context, actor *principal.Principal, companyID string, req dto.UpdateCompanyRequest) (*dto.CompanyResponse, error) {
 	isPlatformAdmin := actor.IsUser() && actor.IsPlatformAdmin
 	if req.Status != nil && !isPlatformAdmin {
@@ -140,6 +158,9 @@ func (uc *CompanyUseCase) Update(ctx context.Context, actor *principal.Principal
 	}
 	c, err := accessibleCompany(ctx, uc.access, uc.deps.Companies, actor, companyID)
 	if err != nil {
+		return nil, err
+	}
+	if err := ensurePermission(ctx, uc.deps.Admin, actor, companyID, authzconstant.PermCompanyManage, authzservice.CompanyScope(companyID)); err != nil {
 		return nil, err
 	}
 
@@ -165,6 +186,33 @@ func (uc *CompanyUseCase) Update(ctx context.Context, actor *principal.Principal
 
 	resp := toCompanyResponse(c)
 	return &resp, nil
+}
+
+// grantCompanyAdmin memberi role sistem company_admin (solution console) scope company.
+// Panggil di dalam transaksi.
+func (uc *CompanyUseCase) grantCompanyAdmin(ctx context.Context, companyID, userID string, now time.Time) error {
+	consoleID, err := uc.deps.Console.ConsoleSolutionID(ctx)
+	if err != nil {
+		return err
+	}
+	r, err := uc.deps.Roles.FindGlobalByCode(ctx, consoleID, authzconstant.CompanyAdminRoleCode)
+	if err != nil {
+		return err
+	}
+	scope := authzvo.Scope{Type: authzvo.ScopeCompany, ID: companyID}
+	a := authzentity.NewRoleAssignment(companyID, userID, r.ID, scope, now)
+	if err := uc.deps.RoleAssignments.Create(ctx, a); err != nil {
+		return err
+	}
+	return uc.deps.Outbox.Append(ctx, port.OutboxEvent{
+		EventType:  authzevent.TypeRoleAssignmentCreated,
+		CompanyID:  &companyID,
+		SolutionID: &consoleID,
+		Payload: authzevent.RoleAssignmentPayload{
+			ID: a.ID, CompanyID: companyID, UserID: userID, RoleID: r.ID, RoleCode: r.Code.Value(),
+			SolutionID: consoleID, ScopeType: scope.Type.String(), ScopeID: scope.ID, CreatedAt: a.CreatedAt,
+		},
+	})
 }
 
 func companyEvent(eventType string, c *entity.Company) port.OutboxEvent {

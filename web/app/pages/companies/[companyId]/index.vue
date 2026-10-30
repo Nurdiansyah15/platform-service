@@ -2,6 +2,7 @@
 import type { CompanySummary } from '~/types/api'
 
 const ctx = useCompanyContext()
+const perms = useCompanyPermissions()
 const api = useApi()
 const summary = ref<CompanySummary | null>(null)
 
@@ -18,10 +19,10 @@ watch([ctx.companyId, ctx.canAccess], async ([id, ok]) => {
 }, { immediate: true })
 
 const actions = computed(() => [
-  { title: 'Tambah anggota', description: 'Cari user terdaftar dan tambahkan ke company.', icon: 'i-lucide-user-plus', to: `${base.value}/members?add=1` },
-  { title: 'Atur role', description: 'Buat custom role dan pilih permission-nya.', icon: 'i-lucide-shield-plus', to: `${base.value}/roles` },
-  { title: 'Tambah cabang', description: 'Unit organisasi untuk membatasi scope role.', icon: 'i-lucide-git-branch-plus', to: `${base.value}/branches?add=1` },
-])
+  { title: 'Tambah anggota', description: 'Tambahkan user terdaftar atau buatkan akun baru.', icon: 'i-lucide-user-plus', to: `${base.value}/members?add=1`, show: perms.can('member.manage') },
+  { title: 'Atur role', description: 'Buat custom role dan pilih permission-nya.', icon: 'i-lucide-shield-plus', to: `${base.value}/roles`, show: perms.can('role.manage') },
+  { title: 'Tambah cabang', description: 'Unit organisasi untuk membatasi scope role.', icon: 'i-lucide-git-branch-plus', to: `${base.value}/branches?add=1`, show: perms.can('branch.manage') },
+].filter(a => a.show).map(({ show: _show, ...a }) => a))
 </script>
 
 <template>
@@ -47,7 +48,7 @@ const actions = computed(() => [
 
     <AppLauncher />
 
-    <div>
+    <div v-if="actions.length">
       <h2 class="mb-3 text-sm font-semibold text-highlighted">Mulai dari sini</h2>
       <div class="grid gap-4 sm:grid-cols-3">
         <UPageCard v-for="a in actions" :key="a.to" v-bind="a" variant="outline" spotlight />

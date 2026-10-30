@@ -157,7 +157,8 @@ func TestRoleAssignment_Success_AndDuplicate(t *testing.T) {
 	assert.Equal(t, "company", got.ScopeType)
 	assert.Equal(t, f.companyID, got.ScopeID, "scope company default = company itu sendiri")
 	assert.Equal(t, "hr_admin", got.RoleCode)
-	assert.Equal(t, 1, countEvents(t, "role_assignment.created", f.companyID))
+	// +1 dari company_admin yang otomatis diberikan ke pembuat company.
+	assert.Equal(t, 2, countEvents(t, "role_assignment.created", f.companyID))
 
 	assert.Equal(t, 409, testSrv.POST(assignPath(f.companyID, f.staffID), map[string]any{"role_id": f.hrAdmin}, f.ownerH).Code)
 

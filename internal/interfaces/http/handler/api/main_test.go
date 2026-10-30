@@ -41,9 +41,10 @@ func TestMain(m *testing.M) {
 // lalu login lewat API untuk mendapatkan access token.
 func mustSetupPlatformAdmin() string {
 	ctx := context.Background()
-	if _, err := testSrv.DB.ExecContext(ctx,
-		`INSERT INTO solutions (code, name) VALUES ($1, 'Platform Console (test)')`, testConsoleSolution); err != nil {
-		panic(fmt.Sprintf("mustSetupPlatformAdmin: seed solution: %v", err))
+	// Solution console + katalog permission platform + role company_admin (sama dengan produksi).
+	console := seeders.ConsoleSolutionSeeder{Code: testConsoleSolution, SolutionName: "Platform Console (test)"}
+	if err := console.Run(ctx, testSrv.DB); err != nil {
+		panic(fmt.Sprintf("mustSetupPlatformAdmin: seed console solution: %v", err))
 	}
 
 	email := testhelper.UniqueEmail("platform-admin")
