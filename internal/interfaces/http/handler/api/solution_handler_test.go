@@ -382,6 +382,37 @@ func TestSolution_Update_AppLinks(t *testing.T) {
 	assert.NotNil(t, got.RedirectURIs, "redirect_uris selalu array")
 }
 
+func TestSolution_Update_PrivateHTTPRejectedByDefault(t *testing.T) {
+	s := mustCreateSSOSolution(t)
+	w := testSrv.PATCH(solutionPath(s.ID), map[string]any{
+		"launch_url":    "http://192.168.1.29:3000/auth/sso",
+		"redirect_uris": []string{"http://192.168.1.29:3000/auth/callback"},
+	}, adminHeader())
+	assert.Equal(t, 422, w.Code, w.Body.String())
+}
+
+func TestSolution_Update_PrivateHTTPAllowedWhenFlagOn(t *testing.T) {
+	srv := testSrv.MustDerive(testhelper.WithAllowPrivateHTTPAppURLs())
+	s := mustCreateSSOSolution(t)
+
+	w := srv.PATCH(solutionPath(s.ID), map[string]any{
+		"launch_url":    "http://192.168.1.29:3000/auth/sso",
+		"redirect_uris": []string{"http://192.168.1.29:3000/auth/callback", "http://10.0.0.5:3000/auth/callback"},
+	}, adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got solutionLinksData
+	testhelper.DecodeBody(t, w, &got)
+	require.NotNil(t, got.LaunchURL)
+	assert.Equal(t, "http://192.168.1.29:3000/auth/sso", *got.LaunchURL)
+	assert.Equal(t, []string{"http://192.168.1.29:3000/auth/callback", "http://10.0.0.5:3000/auth/callback"}, got.RedirectURIs)
+
+	// Host publik via http tetap ditolak walau flag aktif.
+	w = srv.PATCH(solutionPath(s.ID), map[string]any{"launch_url": "http://8.8.8.8/"}, adminHeader())
+	assert.Equal(t, 422, w.Code, w.Body.String())
+	w = srv.PATCH(solutionPath(s.ID), map[string]any{"launch_url": "http://kasir.example.com/"}, adminHeader())
+	assert.Equal(t, 422, w.Code, w.Body.String())
+}
+
 // ── CORS dari tautan aplikasi ────────────────────────────────────────────────
 
 // corsServer — engine dengan CORS_ALLOW_ORIGINS terbatas (bukan "*") di atas DB yang sama.

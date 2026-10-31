@@ -161,7 +161,10 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Logger:         opts.Logger,
 	})
 	originAllowlist := solution.NewOriginAllowlist(solutionRepo, solution.DefaultOriginCacheTTL, opts.Logger)
-	solutionUC := solution.NewSolutionUseCase(solution.SolutionDeps{Repo: solutionRepo, Query: solutionQuery, Origins: originAllowlist})
+	solutionUC := solution.NewSolutionUseCase(solution.SolutionDeps{
+		Repo: solutionRepo, Query: solutionQuery, Origins: originAllowlist,
+		AllowPrivateHTTPAppURLs: cfg.App.AllowPrivateHTTPAppURLs,
+	})
 	signingKeyUC := signingkey.NewSigningKeyUseCase(signingkey.SigningKeyDeps{
 		Repo:     signingKeyRepo,
 		KeyStore: keyStore,

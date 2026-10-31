@@ -3,6 +3,7 @@ package entity_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -96,4 +97,35 @@ func TestSolution_Origins(t *testing.T) {
 	empty, err := entity.NewSolution(entity.NewSolutionParams{Code: "kosong", Name: "Kosong"})
 	require.NoError(t, err)
 	assert.Empty(t, empty.Origins())
+}
+
+func TestSolution_SetLinks_PrivateHTTP(t *testing.T) {
+	tests := []struct {
+		name    string
+		url     string
+		allow   bool
+		wantErr bool
+	}{
+		{"localhost selalu boleh", "http://localhost:3000/cb", false, false},
+		{"IP privat ditolak default", "http://192.168.1.29:3000/cb", false, true},
+		{"IP privat 192.168 boleh dengan flag", "http://192.168.1.29:3000/cb", true, false},
+		{"IP privat 10/8 boleh dengan flag", "http://10.1.2.3/cb", true, false},
+		{"IP privat 172.16/12 boleh dengan flag", "http://172.20.0.4:8080/cb", true, false},
+		{"IP publik tetap ditolak", "http://8.8.8.8/cb", true, true},
+		{"hostname http tetap ditolak", "http://hr.example.com/cb", true, true},
+		{"https selalu boleh", "https://hr.example.com/cb", false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := entity.NewSolution(entity.NewSolutionParams{Code: "hr", Name: "HR"})
+			require.NoError(t, err)
+			u := tt.url
+			err = s.SetLinks(entity.AppLinks{LaunchURL: &u, RedirectURIs: &[]string{u}, AllowPrivateHTTP: tt.allow}, time.Now())
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
 }

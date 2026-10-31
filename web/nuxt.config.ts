@@ -12,6 +12,8 @@ export default defineNuxtConfig({
     public: {
       apiBase: 'http://localhost:8080',
       defaultSolution: 'platform-console',
+      // NUXT_PUBLIC_ALLOW_PRIVATE_HTTP_APP_URLS — samakan dengan ALLOW_PRIVATE_HTTP_APP_URLS API.
+      allowPrivateHttpAppUrls: false,
     },
   },
   app: {

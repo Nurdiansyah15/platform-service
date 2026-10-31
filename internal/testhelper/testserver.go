@@ -49,6 +49,7 @@ type serverOptions struct {
 	deploymentMode config.DeploymentMode
 	authenticator  port.TokenAuthenticator
 	corsOrigins    []string
+	privateHTTP    bool
 }
 
 type Option func(*serverOptions)
@@ -68,6 +69,11 @@ func WithAuthenticator(a port.TokenAuthenticator) Option {
 // solution yang diizinkan otomatis.
 func WithCORSOrigins(origins ...string) Option {
 	return func(o *serverOptions) { o.corsOrigins = origins }
+}
+
+// WithAllowPrivateHTTPAppURLs mengizinkan URL aplikasi solution http ke IP privat (LAN).
+func WithAllowPrivateHTTPAppURLs() Option {
+	return func(o *serverOptions) { o.privateHTTP = true }
 }
 
 // MustStartTestServer menyalakan DB test + engine. Panggil sekali dari TestMain
@@ -112,6 +118,7 @@ func newTestServer(db *sql.DB, fake *FakeAuthenticator, ks *keystore.MemoryKeySt
 	if o.corsOrigins != nil {
 		cfg.CORS.AllowOrigins = o.corsOrigins
 	}
+	cfg.App.AllowPrivateHTTPAppURLs = o.privateHTTP
 	app, err := bootstrap.New(context.Background(), bootstrap.Options{
 		Config:             cfg,
 		DB:                 db,

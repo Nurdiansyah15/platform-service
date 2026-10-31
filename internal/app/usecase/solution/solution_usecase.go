@@ -20,6 +20,9 @@ type SolutionDeps struct {
 	// Origins (opsional) dimuat ulang setiap solution dibuat / diubah agar allowlist CORS
 	// langsung mengikuti URL aplikasi & redirect URI terbaru.
 	Origins interface{ Invalidate() }
+	// AllowPrivateHTTPAppURLs — izinkan launch_url / redirect_uris http ke IP privat (LAN).
+	// Hanya untuk pengembangan lokal; production wajib false.
+	AllowPrivateHTTPAppURLs bool
 }
 
 type SolutionUseCase struct {
@@ -45,7 +48,7 @@ func (uc *SolutionUseCase) Create(ctx context.Context, req dto.CreateSolutionReq
 		Name:        req.Name,
 		Description: req.Description,
 		Status:      req.Status,
-		Links:       toAppLinks(req.LaunchURL, req.IconURL, req.RedirectURIs),
+		Links:       uc.toAppLinks(req.LaunchURL, req.IconURL, req.RedirectURIs),
 	})
 	if err != nil {
 		return nil, mapSolutionDomainError(err)
@@ -127,7 +130,7 @@ func (uc *SolutionUseCase) Update(ctx context.Context, actor *principal.Principa
 	if err := s.Update(req.Name, req.Description, req.Status, now); err != nil {
 		return nil, mapSolutionDomainError(err)
 	}
-	if err := s.SetLinks(toAppLinks(req.LaunchURL, req.IconURL, req.RedirectURIs), now); err != nil {
+	if err := s.SetLinks(uc.toAppLinks(req.LaunchURL, req.IconURL, req.RedirectURIs), now); err != nil {
 		return nil, mapSolutionDomainError(err)
 	}
 	if err := uc.deps.Repo.Save(ctx, s); err != nil {

@@ -13,6 +13,7 @@ x-app-env: &app-env
   DB_NAME: "${DB_NAME:-platform}"
   DB_SSLMODE: "${DB_SSLMODE:-disable}"
   ISSUER_URL: "${ISSUER_URL:-http://localhost:8080}"
+  ALLOW_PRIVATE_HTTP_APP_URLS: "${ALLOW_PRIVATE_HTTP_APP_URLS:-false}"
   LOCALES_DIR: locales
   # Keys JWT disimpan di volume agar konsisten dengan postgres yang persisten.
   KEYSTORE_DIR: /keystore
@@ -31,6 +32,7 @@ x-web-env: &web-env
   BUN_INSTALL_CACHE_DIR: /tmp/bun-cache
   NUXT_PUBLIC_API_BASE: "${NUXT_PUBLIC_API_BASE:-http://localhost:8080}"
   NUXT_PUBLIC_DEFAULT_SOLUTION: "${NUXT_PUBLIC_DEFAULT_SOLUTION:-platform-console}"
+  NUXT_PUBLIC_ALLOW_PRIVATE_HTTP_APP_URLS: "${NUXT_PUBLIC_ALLOW_PRIVATE_HTTP_APP_URLS:-false}"
   NUXT_WATCH_POLLING: "${NUXT_WATCH_POLLING:-false}"
 
 # Basis service Go dev: image sama, source di-bind-mount (tanpa volume kode).

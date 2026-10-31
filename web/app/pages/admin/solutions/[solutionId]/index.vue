@@ -48,10 +48,21 @@ const linksDirty = computed(() => {
     || splitLines(links.redirect_uris).join('\n') !== (s.redirect_uris ?? []).join('\n')
 })
 
+// Harus sama dengan validasi API (ALLOW_PRIVATE_HTTP_APP_URLS): http ke IP privat hanya untuk dev via LAN.
+const allowPrivateHttp = !!useRuntimeConfig().public.allowPrivateHttpAppUrls
+
+function isPrivateIPv4(host: string) {
+  const p = host.split('.').map(Number)
+  if (p.length !== 4 || p.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return false
+  return p[0] === 10 || p[0] === 127 || (p[0] === 172 && p[1]! >= 16 && p[1]! <= 31) || (p[0] === 192 && p[1] === 168)
+}
+
 function isAppURL(v: string) {
   try {
     const u = new URL(v)
-    return u.protocol === 'https:' || (u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname))
+    if (u.protocol === 'https:') return true
+    if (u.protocol !== 'http:') return false
+    return ['localhost', '127.0.0.1'].includes(u.hostname) || (allowPrivateHttp && isPrivateIPv4(u.hostname))
   } catch {
     return false
   }
@@ -59,7 +70,9 @@ function isAppURL(v: string) {
 
 function validateLinks(s: typeof links): FormError[] {
   const errors: FormError[] = []
-  const msg = 'URL harus https (http hanya untuk localhost)'
+  const msg = allowPrivateHttp
+    ? 'URL harus https (http hanya untuk localhost / IP privat)'
+    : 'URL harus https (http hanya untuk localhost)'
   if (s.launch_url.trim() && !isAppURL(s.launch_url.trim())) errors.push({ name: 'launch_url', message: msg })
   if (s.icon_url.trim() && !isAppURL(s.icon_url.trim())) errors.push({ name: 'icon_url', message: msg })
   const uris = splitLines(s.redirect_uris)

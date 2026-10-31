@@ -36,6 +36,9 @@ type AppLinks struct {
 	LaunchURL    *string
 	IconURL      *string
 	RedirectURIs *[]string
+	// AllowPrivateHTTP — kebijakan (bukan data): izinkan http ke IP privat / loopback (LAN),
+	// hanya untuk pengembangan lokal. Diisi usecase dari config.
+	AllowPrivateHTTP bool
 }
 
 type NewSolutionParams struct {
@@ -108,11 +111,11 @@ func (s *Solution) Update(name, description, status *string, now time.Time) erro
 
 // SetLinks memvalidasi lalu mengganti tautan aplikasi solution (lihat AppLinks).
 func (s *Solution) SetLinks(l AppLinks, now time.Time) error {
-	launch, err := normalizeURL(l.LaunchURL)
+	launch, err := normalizeURL(l.LaunchURL, l.AllowPrivateHTTP)
 	if err != nil {
 		return err
 	}
-	icon, err := normalizeURL(l.IconURL)
+	icon, err := normalizeURL(l.IconURL, l.AllowPrivateHTTP)
 	if err != nil {
 		return err
 	}
@@ -125,7 +128,7 @@ func (s *Solution) SetLinks(l AppLinks, now time.Time) error {
 		seen := make(map[string]bool, len(*l.RedirectURIs))
 		for _, raw := range *l.RedirectURIs {
 			u := strings.TrimSpace(raw)
-			if err := validateAppURL(u); err != nil {
+			if err := validateAppURL(u, l.AllowPrivateHTTP); err != nil {
 				return err
 			}
 			if !seen[u] {
@@ -233,7 +236,7 @@ func normalizeOptional(v *string) *string {
 }
 
 // normalizeURL — nil tetap nil (tidak diubah); string kosong → pointer ke nil (dikosongkan).
-func normalizeURL(v *string) (*string, error) {
+func normalizeURL(v *string, allowPrivateHTTP bool) (*string, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -241,15 +244,15 @@ func normalizeURL(v *string) (*string, error) {
 	if t == "" {
 		return nil, nil
 	}
-	if err := validateAppURL(t); err != nil {
+	if err := validateAppURL(t, allowPrivateHTTP); err != nil {
 		return nil, err
 	}
 	return &t, nil
 }
 
 // validateAppURL — URL absolut https tanpa fragment; http hanya untuk localhost / 127.0.0.1
-// (pengembangan lokal).
-func validateAppURL(raw string) error {
+// (pengembangan lokal), atau IP privat / loopback bila allowPrivateHTTP (pengembangan via LAN).
+func validateAppURL(raw string, allowPrivateHTTP bool) error {
 	invalid := domainerr.New(constant.CodeSolutionURLInvalid)
 	if raw == "" || len(raw) > constant.URLMaxLength {
 		return invalid
@@ -262,7 +265,11 @@ func validateAppURL(raw string) error {
 	case "https":
 		return nil
 	case "http":
-		if h := u.Hostname(); h == "localhost" || h == "127.0.0.1" {
+		h := u.Hostname()
+		if h == "localhost" || h == "127.0.0.1" {
+			return nil
+		}
+		if ip := net.ParseIP(h); allowPrivateHTTP && ip != nil && (ip.IsPrivate() || ip.IsLoopback()) {
 			return nil
 		}
 	}

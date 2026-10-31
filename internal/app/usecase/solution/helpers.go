@@ -60,6 +60,9 @@ func nonNilStrings(v []string) []string {
 	return v
 }
 
-func toAppLinks(launchURL, iconURL *string, redirectURIs *[]string) entity.AppLinks {
-	return entity.AppLinks{LaunchURL: launchURL, IconURL: iconURL, RedirectURIs: redirectURIs}
+func (uc *SolutionUseCase) toAppLinks(launchURL, iconURL *string, redirectURIs *[]string) entity.AppLinks {
+	return entity.AppLinks{
+		LaunchURL: launchURL, IconURL: iconURL, RedirectURIs: redirectURIs,
+		AllowPrivateHTTP: uc.deps.AllowPrivateHTTPAppURLs,
+	}
 }

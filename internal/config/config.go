@@ -54,6 +54,9 @@ type AppConfig struct {
 	DeploymentMode  DeploymentMode
 	IssuerURL       string
 	ShutdownTimeout time.Duration
+	// AllowPrivateHTTPAppURLs — izinkan launch_url / redirect_uris solution memakai http ke IP
+	// privat (mis. 192.168.x.x) untuk pengembangan via LAN. Production wajib false (https).
+	AllowPrivateHTTPAppURLs bool
 }
 
 type DatabaseConfig struct {
@@ -99,12 +102,13 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		App: AppConfig{
-			Env:            getEnv("APP_ENV", "development"),
-			Port:           getEnv("APP_PORT", "8080"),
-			LogFormat:      getEnv("LOG_FORMAT", ""),
-			LocalesDir:     getEnv("LOCALES_DIR", "locales"),
-			DeploymentMode: DeploymentMode(getEnv("DEPLOYMENT_MODE", string(DeploymentCloud))),
-			IssuerURL:      getEnv("ISSUER_URL", "http://localhost:8080"),
+			Env:                     getEnv("APP_ENV", "development"),
+			Port:                    getEnv("APP_PORT", "8080"),
+			LogFormat:               getEnv("LOG_FORMAT", ""),
+			LocalesDir:              getEnv("LOCALES_DIR", "locales"),
+			DeploymentMode:          DeploymentMode(getEnv("DEPLOYMENT_MODE", string(DeploymentCloud))),
+			IssuerURL:               getEnv("ISSUER_URL", "http://localhost:8080"),
+			AllowPrivateHTTPAppURLs: getEnv("ALLOW_PRIVATE_HTTP_APP_URLS", "false") == "true",
 		},
 		Database: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
