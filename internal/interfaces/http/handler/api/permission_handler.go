@@ -21,7 +21,7 @@ func NewPermissionHandler(useCase *permission.PermissionUseCase) *PermissionHand
 // Sync godoc
 //
 //	@Summary		Sync permission catalog
-//	@Description	Dipanggil solution saat deploy. Idempotent per version: permission baru dibuat, yang ada diperbarui / diaktifkan ulang, yang hilang menjadi deprecated (tidak dihapus).
+//	@Description	Dipanggil solution saat deploy. Idempotent per version: permission baru dibuat, yang ada diperbarui / diaktifkan ulang, yang hilang menjadi deprecated (tidak dihapus). `scope_types` (scope custom) dan `groups` (pengelompokan tampilan) opsional dan diperlakukan sama.
 //	@Tags			Permissions
 //	@Security		BearerAuth
 //	@Accept			json
@@ -60,6 +60,7 @@ func (h *PermissionHandler) Sync(c *gin.Context) {
 //	@Param		solutionId	path		string	true	"Solution ID"
 //	@Param		status		query		string	false	"active | deprecated"
 //	@Param		search		query		string	false	"Cari di code / name"
+//	@Param		group		query		string	false	"Code group; '-' = tanpa grup"
 //	@Param		page		query		int		false	"Halaman"
 //	@Param		limit		query		int		false	"Jumlah per halaman (default 50, maks 200)"
 //	@Param		sort_by		query		string	false	"code | name | created_at"
@@ -85,4 +86,156 @@ func (h *PermissionHandler) List(c *gin.Context) {
 		return
 	}
 	respond.SuccessWithMeta(c, 200, "permissions", items, meta)
+}
+
+// ListGroups godoc
+//
+//	@Summary	List permission groups of a solution
+//	@Tags		Permissions
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Param		solutionId	path		string	true	"Solution ID"
+//	@Param		status		query		string	false	"active | deprecated"
+//	@Success	200			{object}	respond.SuccessBody{data=[]dto.PermissionGroupResponse}
+//	@Failure	401,404,422	{object}	respond.ErrorBody
+//	@Router		/api/v1/solutions/{solutionId}/permission-groups [get]
+func (h *PermissionHandler) ListGroups(c *gin.Context) {
+	var param dto.SolutionIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.ListCatalogQuery
+	if err := c.ShouldBindQuery(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	items, err := h.useCase.ListGroups(c.Request.Context(), actor, param.SolutionID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "permission groups", items)
+}
+
+// ListScopeTypes godoc
+//
+//	@Summary		List scope types of a solution
+//	@Description	Scope yang bisa dipakai role assignment solution: company & branch (built-in) lalu scope type custom dari katalog.
+//	@Tags			Permissions
+//	@Security		BearerAuth
+//	@Produce		json
+//	@Param			solutionId	path		string	true	"Solution ID"
+//	@Param			status		query		string	false	"active | deprecated"
+//	@Success		200			{object}	respond.SuccessBody{data=[]dto.ScopeTypeResponse}
+//	@Failure		401,404,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/solutions/{solutionId}/scope-types [get]
+func (h *PermissionHandler) ListScopeTypes(c *gin.Context) {
+	var param dto.SolutionIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.ListCatalogQuery
+	if err := c.ShouldBindQuery(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	items, err := h.useCase.ListScopeTypes(c.Request.Context(), actor, param.SolutionID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "scope types", items)
+}
+
+// Create godoc
+//
+//	@Summary		Create a manual permission
+//	@Description	Permission manual dikelola platform admin dan tidak disentuh sync katalog. Sync yang memuat code permission manual ditolak (409).
+//	@Tags			Permissions
+//	@Security		BearerAuth
+//	@Accept			json
+//	@Produce		json
+//	@Param			solutionId			path		string						true	"Solution ID"
+//	@Param			body				body		dto.CreatePermissionRequest	true	"Permission"
+//	@Success		201					{object}	respond.SuccessBody{data=dto.PermissionResponse}
+//	@Failure		401,403,404,409,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/solutions/{solutionId}/permissions [post]
+func (h *PermissionHandler) Create(c *gin.Context) {
+	var param dto.SolutionIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.CreatePermissionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	resp, err := h.useCase.Create(c.Request.Context(), param.SolutionID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.Created(c, "permission created", resp)
+}
+
+// Get godoc
+//
+//	@Summary	Get a permission
+//	@Tags		Permissions
+//	@Security	BearerAuth
+//	@Produce	json
+//	@Param		permissionId	path		string	true	"Permission ID"
+//	@Success	200				{object}	respond.SuccessBody{data=dto.PermissionResponse}
+//	@Failure	401,404,422		{object}	respond.ErrorBody
+//	@Router		/api/v1/permissions/{permissionId} [get]
+func (h *PermissionHandler) Get(c *gin.Context) {
+	var param dto.PermissionIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	actor, _ := middleware.PrincipalFrom(c)
+	resp, err := h.useCase.Get(c.Request.Context(), actor, param.PermissionID)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "permission", resp)
+}
+
+// Update godoc
+//
+//	@Summary		Update a manual permission
+//	@Description	Hanya permission manual (hasil sync → 409). Code tidak bisa diubah. `status: deprecated` = hapus (permission tidak bisa ditambahkan ke role baru; yang sudah terpasang tetap berlaku).
+//	@Tags			Permissions
+//	@Security		BearerAuth
+//	@Accept			json
+//	@Produce		json
+//	@Param			permissionId		path		string						true	"Permission ID"
+//	@Param			body				body		dto.UpdatePermissionRequest	true	"Field yang diubah"
+//	@Success		200					{object}	respond.SuccessBody{data=dto.PermissionResponse}
+//	@Failure		401,403,404,409,422	{object}	respond.ErrorBody
+//	@Router			/api/v1/permissions/{permissionId} [patch]
+func (h *PermissionHandler) Update(c *gin.Context) {
+	var param dto.PermissionIDParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	var req dto.UpdatePermissionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	resp, err := h.useCase.Update(c.Request.Context(), param.PermissionID, req)
+	if err != nil {
+		httperror.Handle(c, err)
+		return
+	}
+	respond.OK(c, "permission updated", resp)
 }

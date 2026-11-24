@@ -371,7 +371,9 @@ export interface RoleHolder {
   user_id: string
   name: string
   email: string
-  scope_type: 'company' | 'branch'
+  /** company | branch | code scope type custom solution. */
+  scope_type: string
+  scope_type_name: string
   scope_id: string
   scope_name: string
   created_at: string
@@ -383,11 +385,20 @@ export interface CreateRoleRequest {
   description?: string | null
 }
 
+export interface PermissionGroupRef {
+  code: string
+  name: string
+  sort_order: number
+}
+
 export interface RolePermissionResponse {
   id: string
   code: string
   name: string
+  description: string | null
   status: string
+  group: PermissionGroupRef | null
+  scope_types: string[]
 }
 
 export interface PermissionResponse {
@@ -397,6 +408,12 @@ export interface PermissionResponse {
   name: string
   description: string | null
   status: 'active' | 'deprecated'
+  /** sync = dikelola sync katalog (read-only di platform); manual = dibuat platform admin. */
+  source: 'sync' | 'manual'
+  /** null = tanpa grup (UI mengelompokkan by prefix code). */
+  group: PermissionGroupRef | null
+  /** Scope type tempat permission berlaku; kosong = semua scope. */
+  scope_types: string[]
   created_at: string
   updated_at: string
 }
@@ -404,6 +421,45 @@ export interface PermissionResponse {
 export interface ListPermissionQuery extends PaginationParams {
   status?: string
   search?: string
+  /** Code group; '-' = tanpa grup. */
+  group?: string
+  source?: 'sync' | 'manual'
+}
+
+export interface CreatePermissionRequest {
+  code: string
+  name: string
+  description?: string | null
+  group?: string | null
+  scopes?: string[]
+}
+
+/** Hanya permission manual. description / group '' = dikosongkan; status deprecated = hapus. */
+export interface UpdatePermissionRequest {
+  name?: string
+  description?: string
+  group?: string
+  scopes?: string[]
+  status?: 'active' | 'deprecated'
+}
+
+export interface PermissionGroupResponse {
+  code: string
+  name: string
+  description: string | null
+  sort_order: number
+  status: 'active' | 'deprecated'
+}
+
+export interface ScopeTypeResponse {
+  code: string
+  name: string
+  description: string | null
+  /** '' untuk company; 'company' | 'branch' untuk lainnya. */
+  parent: '' | 'company' | 'branch'
+  builtin: boolean
+  sort_order: number
+  status: 'active' | 'deprecated'
 }
 
 export interface ReplaceRolePermissionsRequest {
@@ -412,7 +468,17 @@ export interface ReplaceRolePermissionsRequest {
 
 export interface SyncPermissionsRequest {
   version: string
-  permissions: { code: string; name: string; description?: string | null }[]
+  scope_types?: { code: string; name: string; description?: string | null; parent?: 'company' | 'branch' }[]
+  groups?: { code: string; name: string; description?: string | null }[]
+  permissions: { code: string; name: string; description?: string | null; group?: string | null; scopes?: string[] }[]
+}
+
+export interface SyncCounts {
+  created: number
+  updated: number
+  reactivated: number
+  deprecated: number
+  unchanged: number
 }
 
 export interface SyncPermissionsResponse {
@@ -423,13 +489,20 @@ export interface SyncPermissionsResponse {
   reactivated: number
   deprecated: number
   unchanged: number
+  groups: SyncCounts
+  scope_types: SyncCounts
 }
 
 // ── Authorization ───────────────────────────────────────────────────────────
 export interface CreateRoleAssignmentRequest {
   role_id: string
-  scope_type?: 'company' | 'branch'
+  /** company (default) | branch | code scope type custom solution role. */
+  scope_type?: string
   scope_id?: string
+  /** Scope custom ber-parent branch: UUID branch induk (opsional). */
+  parent_id?: string
+  /** Nama tampilan scope custom (opsional). */
+  scope_label?: string | null
 }
 
 export interface RoleAssignmentResponse {
@@ -441,6 +514,8 @@ export interface RoleAssignmentResponse {
   solution_id: string
   scope_type: string
   scope_id: string
+  scope_label: string | null
+  parent_id: string | null
   created_at: string
 }
 
@@ -455,15 +530,21 @@ export interface RoleAssignmentDetail {
   role_is_global: boolean
   solution_id: string
   solution_code: string
-  scope_type: 'company' | 'branch'
+  scope_type: string
+  scope_type_name: string
   scope_id: string
   scope_name: string
+  scope_label: string | null
+  parent_id: string | null
   created_at: string
 }
 
 export interface EffectivePermission {
   permission: string
-  grants: { role_code: string; scope_type: 'company' | 'branch'; scope_id: string }[]
+  name: string
+  group: PermissionGroupRef | null
+  scope_types: string[]
+  grants: { role_code: string; scope_type: string; scope_id: string }[]
 }
 
 // ── Error klien ─────────────────────────────────────────────────────────────

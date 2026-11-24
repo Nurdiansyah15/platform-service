@@ -55,19 +55,23 @@ type UpdateRoleRequest struct {
 
 // RoleHolderResponse — satu assignment role pada user di company.
 type RoleHolderResponse struct {
-	AssignmentID string    `json:"assignment_id"`
-	UserID       string    `json:"user_id"`
-	Name         string    `json:"name"`
-	Email        string    `json:"email"`
-	ScopeType    string    `json:"scope_type"`
-	ScopeID      string    `json:"scope_id"`
-	ScopeName    string    `json:"scope_name"`
-	CreatedAt    time.Time `json:"created_at"`
+	AssignmentID  string    `json:"assignment_id"`
+	UserID        string    `json:"user_id"`
+	Name          string    `json:"name"`
+	Email         string    `json:"email"`
+	ScopeType     string    `json:"scope_type"`
+	ScopeTypeName string    `json:"scope_type_name"`
+	ScopeID       string    `json:"scope_id"`
+	ScopeName     string    `json:"scope_name"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type RolePermissionResponse struct {
-	ID     string `json:"id"`
-	Code   string `json:"code"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
+	ID          string              `json:"id"`
+	Code        string              `json:"code"`
+	Name        string              `json:"name"`
+	Description *string             `json:"description"`
+	Status      string              `json:"status"`
+	Group       *PermissionGroupRef `json:"group"`
+	ScopeTypes  []string            `json:"scope_types"`
 }

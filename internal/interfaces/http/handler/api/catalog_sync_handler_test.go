@@ -203,3 +203,392 @@ func TestPermission_List_InactiveSolutionHidden(t *testing.T) {
 	assert.Equal(t, 404, testSrv.GET(permissionsPath(solID), userHeader()).Code)
 	assert.Equal(t, 200, testSrv.GET(permissionsPath(solID), adminHeader()).Code)
 }
+
+// ── Permission groups & scope types ──────────────────────────────────────────
+
+func permissionGroupsPath(solutionID string) string {
+	return "/api/v1/solutions/" + solutionID + "/permission-groups"
+}
+
+func scopeTypesPath(solutionID string) string {
+	return "/api/v1/solutions/" + solutionID + "/scope-types"
+}
+
+// richCatalog: scope type department (parent branch), group leave & payroll, permission
+// leave.approve (grup leave, scope company+department), payroll.run (grup payroll,
+// company saja), misc.read (tanpa grup & scope).
+func richCatalog(version string) map[string]any {
+	return map[string]any{
+		"version": version,
+		"scope_types": []any{
+			map[string]any{"code": "department", "name": "Departemen", "parent": "branch"},
+		},
+		"groups": []any{
+			map[string]any{"code": "leave", "name": "Cuti"},
+			map[string]any{"code": "payroll", "name": "Payroll", "description": "Penggajian"},
+		},
+		"permissions": []any{
+			map[string]any{"code": "leave.approve", "name": "Setujui cuti", "group": "leave", "scopes": []string{"department", "company"}},
+			map[string]any{"code": "payroll.run", "name": "Jalankan payroll", "group": "payroll", "scopes": []string{"company"}},
+			map[string]any{"code": "misc.read", "name": "Lihat lain-lain"},
+		},
+	}
+}
+
+func TestCatalogSync_WithGroupsAndScopes_Success(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	w := testSrv.PUT(syncPath(solID), richCatalog("v1"), adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got struct {
+		Created    int                   `json:"created"`
+		Groups     struct{ Created int } `json:"groups"`
+		ScopeTypes struct{ Created int } `json:"scope_types"`
+	}
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, 3, got.Created)
+	assert.Equal(t, 2, got.Groups.Created)
+	assert.Equal(t, 1, got.ScopeTypes.Created)
+
+	w = testSrv.GET(permissionsPath(solID), userHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var list []struct {
+		Code  string `json:"code"`
+		Group *struct {
+			Code      string `json:"code"`
+			Name      string `json:"name"`
+			SortOrder int    `json:"sort_order"`
+		} `json:"group"`
+		ScopeTypes []string `json:"scope_types"`
+	}
+	testhelper.DecodeBody(t, w, &list)
+	byCode := map[string]int{}
+	for i, p := range list {
+		byCode[p.Code] = i
+	}
+	leave := list[byCode["leave.approve"]]
+	require.NotNil(t, leave.Group)
+	assert.Equal(t, "Cuti", leave.Group.Name)
+	assert.Equal(t, []string{"company", "department"}, leave.ScopeTypes, "unik & terurut")
+	payroll := list[byCode["payroll.run"]]
+	require.NotNil(t, payroll.Group)
+	assert.Equal(t, 1, payroll.Group.SortOrder)
+	misc := list[byCode["misc.read"]]
+	assert.Nil(t, misc.Group)
+	assert.Equal(t, []string{}, misc.ScopeTypes)
+
+	// Filter group.
+	w = testSrv.GET(permissionsPath(solID)+"?group=-", userHeader())
+	require.Equal(t, 200, w.Code)
+	testhelper.DecodeBody(t, w, &list)
+	require.Len(t, list, 1)
+	assert.Equal(t, "misc.read", list[0].Code)
+
+	// Group & scope type yang hilang dari katalog → deprecated; permission lepas dari grup.
+	mustSync(t, solID, adminHeader(), catalog("v2", [2]string{"leave.approve", "Setujui cuti"}))
+	var groupStatus, scopeStatus string
+	var groupID *string
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
+		`SELECT status FROM permission_groups WHERE solution_id = $1 AND code = 'leave'`, solID).Scan(&groupStatus))
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
+		`SELECT status FROM solution_scope_types WHERE solution_id = $1 AND code = 'department'`, solID).Scan(&scopeStatus))
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
+		`SELECT group_id FROM permissions WHERE solution_id = $1 AND code = 'leave.approve'`, solID).Scan(&groupID))
+	assert.Equal(t, "deprecated", groupStatus)
+	assert.Equal(t, "deprecated", scopeStatus)
+	assert.Nil(t, groupID)
+}
+
+func TestCatalogSync_WithGroupsAndScopes_InvalidPayload(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	perm := func(extra map[string]any) []any {
+		p := map[string]any{"code": "a.read", "name": "A"}
+		for k, v := range extra {
+			p[k] = v
+		}
+		return []any{p}
+	}
+	tests := map[string]map[string]any{
+		"group tidak dikenal": {"version": "v1", "permissions": perm(map[string]any{"group": "nope"})},
+		"scope tidak dikenal": {"version": "v1", "permissions": perm(map[string]any{"scopes": []string{"project"}})},
+		"scope type reserved": {"version": "v1", "permissions": perm(nil),
+			"scope_types": []any{map[string]any{"code": "branch", "name": "Cabang"}}},
+		"scope type ganda": {"version": "v1", "permissions": perm(nil),
+			"scope_types": []any{map[string]any{"code": "dept", "name": "A"}, map[string]any{"code": "dept", "name": "B"}}},
+		"group ganda": {"version": "v1", "permissions": perm(nil),
+			"groups": []any{map[string]any{"code": "g", "name": "A"}, map[string]any{"code": "g", "name": "B"}}},
+		"parent tidak valid": {"version": "v1", "permissions": perm(nil),
+			"scope_types": []any{map[string]any{"code": "dept", "name": "A", "parent": "region"}}},
+		"group tanpa nama": {"version": "v1", "permissions": perm(nil), "groups": []any{map[string]any{"code": "g"}}},
+	}
+	for name, body := range tests {
+		t.Run(name, func(t *testing.T) {
+			w := testSrv.PUT(syncPath(solID), body, adminHeader())
+			assert.Equal(t, 422, w.Code, w.Body.String())
+		})
+	}
+}
+
+func TestCatalogSync_LegacyPayload_Success(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	got := mustSync(t, solID, adminHeader(), catalog("v1", [2]string{"a.read", "A"}))
+	assert.Equal(t, 1, got.Created)
+
+	w := testSrv.GET(scopeTypesPath(solID), userHeader())
+	require.Equal(t, 200, w.Code)
+	var scopes []struct {
+		Code string `json:"code"`
+	}
+	testhelper.DecodeBody(t, w, &scopes)
+	require.Len(t, scopes, 2, "hanya built-in")
+}
+
+func TestPermissionGroups_List_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.GET(permissionGroupsPath(uuid.NewString())).Code)
+}
+
+func TestPermissionGroups_List_NotFound(t *testing.T) {
+	assert.Equal(t, 404, testSrv.GET(permissionGroupsPath(uuid.NewString()), userHeader()).Code)
+}
+
+func TestPermissionGroups_List_InvalidQuery(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	assert.Equal(t, 422, testSrv.GET(permissionGroupsPath(solID)+"?status=gone", userHeader()).Code)
+}
+
+func TestPermissionGroups_List_Success(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	mustSync(t, solID, adminHeader(), richCatalog("v1"))
+
+	w := testSrv.GET(permissionGroupsPath(solID), userHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got []struct {
+		Code        string  `json:"code"`
+		Name        string  `json:"name"`
+		Description *string `json:"description"`
+		SortOrder   int     `json:"sort_order"`
+		Status      string  `json:"status"`
+	}
+	testhelper.DecodeBody(t, w, &got)
+	require.Len(t, got, 2)
+	assert.Equal(t, "leave", got[0].Code)
+	assert.Equal(t, "payroll", got[1].Code)
+	require.NotNil(t, got[1].Description)
+	assert.Equal(t, "Penggajian", *got[1].Description)
+	assert.Equal(t, "active", got[0].Status)
+}
+
+func TestScopeTypes_List_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.GET(scopeTypesPath(uuid.NewString())).Code)
+}
+
+func TestScopeTypes_List_NotFound(t *testing.T) {
+	assert.Equal(t, 404, testSrv.GET(scopeTypesPath(uuid.NewString()), userHeader()).Code)
+}
+
+func TestScopeTypes_List_Success(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	mustSync(t, solID, adminHeader(), richCatalog("v1"))
+
+	w := testSrv.GET(scopeTypesPath(solID), userHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got []struct {
+		Code    string `json:"code"`
+		Name    string `json:"name"`
+		Parent  string `json:"parent"`
+		Builtin bool   `json:"builtin"`
+	}
+	testhelper.DecodeBody(t, w, &got)
+	require.Len(t, got, 3)
+	assert.Equal(t, "company", got[0].Code)
+	assert.True(t, got[0].Builtin)
+	assert.Equal(t, "branch", got[1].Code)
+	assert.Equal(t, "department", got[2].Code)
+	assert.Equal(t, "Departemen", got[2].Name)
+	assert.Equal(t, "branch", got[2].Parent)
+	assert.False(t, got[2].Builtin)
+}
+
+// ── Permission manual (CRUD platform) ────────────────────────────────────────
+
+func permissionPath(id string) string { return "/api/v1/permissions/" + id }
+
+type permissionBody struct {
+	ID     string `json:"id"`
+	Code   string `json:"code"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Source string `json:"source"`
+	Group  *struct {
+		Code string `json:"code"`
+	} `json:"group"`
+	ScopeTypes  []string `json:"scope_types"`
+	Description *string  `json:"description"`
+}
+
+func mustCreatePermission(t *testing.T, solutionID string, body map[string]any) permissionBody {
+	t.Helper()
+	w := testSrv.POST(permissionsPath(solutionID), body, adminHeader())
+	require.Equal(t, 201, w.Code, "create permission: %s", w.Body.String())
+	var got permissionBody
+	testhelper.DecodeBody(t, w, &got)
+	return got
+}
+
+func TestPermission_Create_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.POST(permissionsPath(uuid.NewString()), map[string]any{"code": "a.read", "name": "A"}).Code)
+}
+
+func TestPermission_Create_Forbidden(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	body := map[string]any{"code": "a.read", "name": "A"}
+	assert.Equal(t, 403, testSrv.POST(permissionsPath(solID), body, userHeader()).Code)
+	svc := testhelper.BearerHeader(mustServiceToken(t, mustCreateClient(t, solID, "catalog:sync"), ""))
+	assert.Equal(t, 403, testSrv.POST(permissionsPath(solID), body, svc).Code)
+}
+
+func TestPermission_Create_NotFound(t *testing.T) {
+	assert.Equal(t, 404, testSrv.POST(permissionsPath(uuid.NewString()), map[string]any{"code": "a.read", "name": "A"}, adminHeader()).Code)
+}
+
+func TestPermission_Create_InvalidPayload(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	mustSync(t, solID, adminHeader(), richCatalog("v1"))
+	tests := map[string]map[string]any{
+		"tanpa name":          {"code": "a.read"},
+		"code tidak valid":    {"code": "A Read", "name": "A"},
+		"group tidak dikenal": {"code": "a.read", "name": "A", "group": "nope"},
+		"scope tidak dikenal": {"code": "a.read", "name": "A", "scopes": []string{"project"}},
+	}
+	for name, body := range tests {
+		t.Run(name, func(t *testing.T) {
+			w := testSrv.POST(permissionsPath(solID), body, adminHeader())
+			assert.True(t, w.Code == 400 || w.Code == 422, "%d %s", w.Code, w.Body.String())
+		})
+	}
+}
+
+func TestPermission_Create_Duplicate(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	mustSync(t, solID, adminHeader(), catalog("v1", [2]string{"a.read", "A"}))
+	assert.Equal(t, 409, testSrv.POST(permissionsPath(solID), map[string]any{"code": "a.read", "name": "A"}, adminHeader()).Code, "bentrok code sync")
+	mustCreatePermission(t, solID, map[string]any{"code": "b.read", "name": "B"})
+	assert.Equal(t, 409, testSrv.POST(permissionsPath(solID), map[string]any{"code": "b.read", "name": "B"}, adminHeader()).Code, "bentrok code manual")
+}
+
+func TestPermission_Create_Success(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	mustSync(t, solID, adminHeader(), richCatalog("v1"))
+	got := mustCreatePermission(t, solID, map[string]any{
+		"code": "report.export", "name": "Export laporan", "description": "CSV", "group": "leave", "scopes": []string{"department"},
+	})
+	assert.Equal(t, "manual", got.Source)
+	assert.Equal(t, "active", got.Status)
+	require.NotNil(t, got.Group)
+	assert.Equal(t, "leave", got.Group.Code)
+	assert.Equal(t, []string{"department"}, got.ScopeTypes)
+
+	// Muncul di list & filter source; bisa dipasang di role.
+	w := testSrv.GET(permissionsPath(solID)+"?source=manual", userHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var list []permissionBody
+	testhelper.DecodeBody(t, w, &list)
+	require.Len(t, list, 1)
+	assert.Equal(t, "report.export", list[0].Code)
+
+	roleID := mustCreateRole(t, solutionRolesPath(solID), "exporter", adminHeader())
+	assert.Equal(t, 200, testSrv.PUT(rolePermissionsPath(roleID), map[string]any{"permission_codes": []string{"report.export"}}, adminHeader()).Code)
+}
+
+func TestPermission_Get(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	p := mustCreatePermission(t, solID, map[string]any{"code": "a.read", "name": "A"})
+
+	assert.Equal(t, 401, testSrv.GET(permissionPath(p.ID)).Code)
+	assert.Equal(t, 404, testSrv.GET(permissionPath(uuid.NewString()), userHeader()).Code)
+	assert.Equal(t, 422, testSrv.GET(permissionPath("not-uuid"), userHeader()).Code)
+
+	w := testSrv.GET(permissionPath(p.ID), userHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got permissionBody
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, "a.read", got.Code)
+	assert.Equal(t, "manual", got.Source)
+}
+
+func TestPermission_Update_Unauthenticated(t *testing.T) {
+	assert.Equal(t, 401, testSrv.PATCH(permissionPath(uuid.NewString()), map[string]any{"name": "X"}).Code)
+}
+
+func TestPermission_Update_Forbidden(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	p := mustCreatePermission(t, solID, map[string]any{"code": "a.read", "name": "A"})
+	assert.Equal(t, 403, testSrv.PATCH(permissionPath(p.ID), map[string]any{"name": "X"}, userHeader()).Code)
+}
+
+func TestPermission_Update_NotFound(t *testing.T) {
+	assert.Equal(t, 404, testSrv.PATCH(permissionPath(uuid.NewString()), map[string]any{"name": "X"}, adminHeader()).Code)
+}
+
+func TestPermission_Update_InvalidPayload(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	p := mustCreatePermission(t, solID, map[string]any{"code": "a.read", "name": "A"})
+	assert.Equal(t, 422, testSrv.PATCH(permissionPath(p.ID), map[string]any{"status": "removed"}, adminHeader()).Code)
+	assert.Equal(t, 422, testSrv.PATCH(permissionPath(p.ID), map[string]any{"name": "  "}, adminHeader()).Code)
+	assert.Equal(t, 422, testSrv.PATCH(permissionPath(p.ID), map[string]any{"group": "nope"}, adminHeader()).Code)
+}
+
+func TestPermission_Update_SyncManaged_Conflict(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	mustSync(t, solID, adminHeader(), catalog("v1", [2]string{"a.read", "A"}))
+	var id string
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
+		`SELECT id FROM permissions WHERE solution_id = $1 AND code = 'a.read'`, solID).Scan(&id))
+	assert.Equal(t, 409, testSrv.PATCH(permissionPath(id), map[string]any{"name": "X"}, adminHeader()).Code)
+}
+
+func TestPermission_Update_Success(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	mustSync(t, solID, adminHeader(), richCatalog("v1"))
+	p := mustCreatePermission(t, solID, map[string]any{"code": "x.read", "name": "X", "description": "d", "group": "leave"})
+
+	w := testSrv.PATCH(permissionPath(p.ID), map[string]any{"name": "Lihat X", "description": "", "group": "", "scopes": []string{"company"}}, adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got permissionBody
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, "Lihat X", got.Name)
+	assert.Nil(t, got.Description)
+	assert.Nil(t, got.Group)
+	assert.Equal(t, []string{"company"}, got.ScopeTypes)
+	assert.Equal(t, "x.read", got.Code)
+
+	// "Hapus" = deprecated: tidak bisa ditambahkan ke role; aktifkan lagi bisa.
+	w = testSrv.PATCH(permissionPath(p.ID), map[string]any{"status": "deprecated"}, adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, "deprecated", got.Status)
+	roleID := mustCreateRole(t, solutionRolesPath(solID), "xr", adminHeader())
+	assert.Equal(t, 422, testSrv.PUT(rolePermissionsPath(roleID), map[string]any{"permission_codes": []string{"x.read"}}, adminHeader()).Code)
+
+	w = testSrv.PATCH(permissionPath(p.ID), map[string]any{"status": "active"}, adminHeader())
+	require.Equal(t, 200, w.Code)
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, "active", got.Status)
+}
+
+func TestCatalogSync_ManualPermission(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	mustCreatePermission(t, solID, map[string]any{"code": "custom.export", "name": "Export"})
+
+	// Sync tidak men-deprecate permission manual.
+	mustSync(t, solID, adminHeader(), catalog("v1", [2]string{"a.read", "A"}))
+	assert.Equal(t, map[string]string{"a.read": "active", "custom.export": "active"}, permissionStatuses(t, solID))
+
+	// Sync yang memuat code manual ditolak utuh.
+	w := testSrv.PUT(syncPath(solID), catalog("v2", [2]string{"a.read", "A"}, [2]string{"custom.export", "X"}), adminHeader())
+	assert.Equal(t, 409, w.Code, w.Body.String())
+	var version *string
+	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
+		`SELECT permission_catalog_version FROM solutions WHERE id = $1`, solID).Scan(&version))
+	require.NotNil(t, version)
+	assert.Equal(t, "v1", *version)
+}

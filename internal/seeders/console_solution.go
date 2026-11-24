@@ -55,15 +55,32 @@ func (s ConsoleSolutionSeeder) Run(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
+	groupIDs := make(map[string]string, len(authzconstant.PlatformPermissionGroups))
+	for i, g := range authzconstant.PlatformPermissionGroups {
+		var id string
+		if err := tx.QueryRowContext(ctx, `
+			INSERT INTO permission_groups (solution_id, code, name, description, sort_order, status)
+			VALUES ($1, $2, $3, $4, $5, 'active')
+			ON CONFLICT (solution_id, code) DO UPDATE SET
+				name = EXCLUDED.name, description = EXCLUDED.description,
+				sort_order = EXCLUDED.sort_order, status = 'active'
+			RETURNING id`,
+			solutionID, g.Code, g.Name, g.Description, i).Scan(&id); err != nil {
+			return fmt.Errorf("permission group %s: %w", g.Code, err)
+		}
+		groupIDs[g.Code] = id
+	}
+
 	codes := make([]string, 0, len(authzconstant.PlatformPermissions))
 	for _, p := range authzconstant.PlatformPermissions {
 		codes = append(codes, p.Code)
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO permissions (solution_id, code, name, description, status)
-			VALUES ($1, $2, $3, $4, 'active')
+			INSERT INTO permissions (solution_id, code, name, description, status, group_id)
+			VALUES ($1, $2, $3, $4, 'active', $5)
 			ON CONFLICT (solution_id, code) DO UPDATE SET
-				name = EXCLUDED.name, description = EXCLUDED.description, status = 'active'`,
-			solutionID, p.Code, p.Name, p.Description); err != nil {
+				name = EXCLUDED.name, description = EXCLUDED.description, status = 'active',
+				group_id = EXCLUDED.group_id`,
+			solutionID, p.Code, p.Name, p.Description, groupIDs[p.Group]); err != nil {
 			return fmt.Errorf("permission %s: %w", p.Code, err)
 		}
 	}

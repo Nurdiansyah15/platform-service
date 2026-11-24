@@ -1,29 +1,134 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
-import type { PermissionResponse } from '~/types/api'
+import type { PermissionGroupResponse, PermissionResponse } from '~/types/api'
 
 definePageMeta({ middleware: 'admin' })
 
+const api = useApi()
 const ctx = useSolutionContext()
+const toast = useToast()
+const { toastError } = useApiError()
+const { confirm } = useConfirm()
 const status = ref<string | undefined>(undefined)
+const group = ref<string | undefined>(undefined)
+const source = ref<string | undefined>(undefined)
 const list = useListQuery<PermissionResponse>(
   () => `/api/v1/solutions/${ctx.solutionId.value}/permissions`,
-  { filters: { status }, limit: 50, syncUrl: true },
+  { filters: { status, group, source }, limit: 50, syncUrl: true },
 )
 
+const sourceOptions = [
+  { label: 'Semua sumber', value: undefined as string | undefined },
+  { label: 'Sync katalog', value: 'sync' as string | undefined },
+  { label: 'Manual', value: 'manual' as string | undefined },
+]
+
+// ── Permission manual: tambah / ubah / deprecate ──
+const showForm = ref(false)
+const editing = ref<PermissionResponse | null>(null)
+function openCreate() {
+  editing.value = null
+  showForm.value = true
+}
+function openEdit(p: PermissionResponse) {
+  editing.value = p
+  showForm.value = true
+}
+function onSaved(p: PermissionResponse) {
+  toast.add({ title: editing.value ? 'Permission diperbarui' : `Permission ${p.code} ditambahkan`, color: 'success' })
+  list.reload()
+}
+async function setStatus(p: PermissionResponse, next: 'active' | 'deprecated') {
+  if (next === 'deprecated') {
+    const ok = await confirm({
+      title: `Hapus permission ${p.name}?`,
+      description: 'Permission menjadi deprecated: tidak bisa ditambahkan ke role lagi, tapi role yang sudah memakainya tetap berlaku. Bisa diaktifkan kembali.',
+      confirmLabel: 'Hapus',
+      danger: true,
+    })
+    if (!ok) return
+  }
+  try {
+    await api.patch(`/api/v1/permissions/${p.id}`, { status: next })
+    toast.add({ title: next === 'active' ? 'Permission diaktifkan' : 'Permission dihapus (deprecated)', color: 'success' })
+    list.reload()
+  } catch (err) {
+    toastError(err)
+  }
+}
+function rowActions(p: PermissionResponse) {
+  return [[
+    { label: 'Ubah', icon: 'i-lucide-pencil', onSelect: () => openEdit(p) },
+    p.status === 'active'
+      ? { label: 'Hapus', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => setStatus(p, 'deprecated') }
+      : { label: 'Aktifkan', icon: 'i-lucide-rotate-ccw', onSelect: () => setStatus(p, 'active') },
+  ]]
+}
+
+const scopeTypes = useScopeTypes(() => ctx.solutionId.value)
+const groups = ref<PermissionGroupResponse[]>([])
+async function loadGroups() {
+  try {
+    groups.value = (await api.get<PermissionGroupResponse[]>(`/api/v1/solutions/${ctx.solutionId.value}/permission-groups`)).data
+  } catch {
+    groups.value = []
+  }
+}
+watch(() => ctx.solutionId.value, loadGroups, { immediate: true })
+
+const groupOptions = computed(() => [
+  { label: 'Semua grup', value: undefined as string | undefined },
+  ...groups.value.map(g => ({ label: g.name, value: g.code as string | undefined })),
+  { label: 'Tanpa grup', value: '-' as string | undefined },
+])
+const customScopes = computed(() => scopeTypes.items.value.filter(s => !s.builtin))
+
 const StatusBadge = resolveComponent('StatusBadge')
+const UBadge = resolveComponent('UBadge')
+const UButton = resolveComponent('UButton')
+const UDropdownMenu = resolveComponent('UDropdownMenu')
 const columns: TableColumn<PermissionResponse>[] = [
-  { accessorKey: 'code', header: 'Kode', cell: ({ row }) => h('span', { class: 'font-mono text-xs text-highlighted' }, row.original.code) },
   {
     accessorKey: 'name',
-    header: 'Nama',
+    header: 'Permission',
     cell: ({ row }) => h('div', [
       h('p', { class: 'text-highlighted' }, row.original.name),
+      h('p', { class: 'font-mono text-xs text-muted' }, row.original.code),
       row.original.description ? h('p', { class: 'text-xs text-muted' }, row.original.description) : null,
     ]),
   },
+  {
+    id: 'group',
+    header: 'Grup',
+    cell: ({ row }) => row.original.group
+      ? h('span', { class: 'text-highlighted' }, row.original.group.name)
+      : h('span', { class: 'text-muted' }, '—'),
+  },
+  {
+    id: 'scopes',
+    header: 'Berlaku di',
+    cell: ({ row }) => row.original.scope_types.length
+      ? h('div', { class: 'flex flex-wrap gap-1' }, row.original.scope_types.map(s =>
+          h(UBadge, { label: scopeTypes.nameOf(s), color: 'neutral', variant: 'soft', size: 'sm' })))
+      : h('span', { class: 'text-muted' }, 'Semua scope'),
+  },
+  {
+    accessorKey: 'source',
+    header: 'Sumber',
+    cell: ({ row }) => h(UBadge, row.original.source === 'manual'
+      ? { label: 'Manual', color: 'primary', variant: 'subtle', size: 'sm' }
+      : { label: 'Sync', color: 'neutral', variant: 'subtle', size: 'sm' }),
+  },
   { accessorKey: 'status', header: 'Status', cell: ({ row }) => h(StatusBadge, { status: row.original.status }) },
+  {
+    id: 'actions',
+    header: '',
+    cell: ({ row }) => row.original.source === 'manual'
+      ? h('div', { class: 'flex justify-end' }, h(UDropdownMenu, { items: rowActions(row.original), content: { align: 'end' } },
+          () => h(UButton, { icon: 'i-lucide-ellipsis-vertical', color: 'neutral', variant: 'ghost', size: 'sm', 'aria-label': 'Aksi' })))
+      : null,
+  },
 ]
 </script>
 
@@ -33,13 +138,47 @@ const columns: TableColumn<PermissionResponse>[] = [
       color="neutral"
       variant="subtle"
       icon="i-lucide-refresh-cw"
-      title="Katalog dikirim oleh backend solution"
-      description="Permission disinkronkan lewat PUT /solutions/{id}/permissions/sync (token service, scope catalog:sync). Halaman ini hanya-baca."
+      title="Dua sumber permission"
+      description="Sync: dikirim backend solution lewat PUT /solutions/{id}/permissions/sync (beserta grup & scope type) dan hanya-baca di sini. Manual: ditambahkan dari halaman ini dan tidak disentuh sync — code-nya tidak boleh dipakai lagi di katalog sync."
     />
+
+    <div class="grid gap-4 lg:grid-cols-2">
+      <SectionCard title="Scope type" description="Lingkup tempat role bisa diberikan. Company dan cabang selalu tersedia.">
+        <ul class="divide-y divide-default text-sm">
+          <li v-for="s in scopeTypes.items.value" :key="s.code" class="flex items-start justify-between gap-3 py-2">
+            <div class="min-w-0">
+              <p class="text-highlighted">{{ scopeTypes.nameOf(s.code) }} <span class="font-mono text-xs text-muted">{{ s.code }}</span></p>
+              <p class="text-xs text-muted">
+                {{ s.builtin ? 'Bawaan platform' : `Di bawah ${s.parent === 'branch' ? 'cabang' : 'company'}` }}
+                <template v-if="s.description"> · {{ s.description }}</template>
+              </p>
+            </div>
+            <StatusBadge v-if="s.status !== 'active'" :status="s.status" size="xs" />
+          </li>
+        </ul>
+        <p v-if="!customScopes.length" class="text-xs text-muted">Solution ini belum mendefinisikan scope custom.</p>
+      </SectionCard>
+
+      <SectionCard title="Grup permission" description="Pengelompokan permission saat menyusun role.">
+        <ul v-if="groups.length" class="divide-y divide-default text-sm">
+          <li v-for="g in groups" :key="g.code" class="flex items-start justify-between gap-3 py-2">
+            <div class="min-w-0">
+              <p class="text-highlighted">{{ g.name }} <span class="font-mono text-xs text-muted">{{ g.code }}</span></p>
+              <p v-if="g.description" class="text-xs text-muted">{{ g.description }}</p>
+            </div>
+            <StatusBadge v-if="g.status !== 'active'" :status="g.status" size="xs" />
+          </li>
+        </ul>
+        <p v-else class="text-xs text-muted">Belum ada grup; permission dikelompokkan berdasarkan prefix kode.</p>
+      </SectionCard>
+    </div>
 
     <div class="flex flex-wrap items-center gap-2">
       <UInput v-model="list.search.value" icon="i-lucide-search" placeholder="Cari kode atau nama" class="w-full sm:w-72" />
+      <USelect v-model="group" :items="groupOptions" placeholder="Semua grup" class="w-44" />
+      <USelect v-model="source" :items="sourceOptions" placeholder="Semua sumber" class="w-40" />
       <USelect v-model="status" :items="statusOptions(['active', 'deprecated'])" placeholder="Semua status" class="w-40" />
+      <UButton icon="i-lucide-plus" class="ml-auto" @click="openCreate">Tambah permission</UButton>
     </div>
 
     <UTable :data="list.items.value" :columns="columns" :loading="list.loading.value" class="rounded-lg border border-default">
@@ -49,5 +188,14 @@ const columns: TableColumn<PermissionResponse>[] = [
     </UTable>
 
     <ListPagination v-model:page="list.page.value" :meta="list.meta.value" />
+
+    <PermissionFormModal
+      v-model:open="showForm"
+      :solution-id="ctx.solutionId.value"
+      :permission="editing"
+      :groups="groups"
+      :scope-types="scopeTypes.items.value"
+      @saved="onSaved"
+    />
   </SolutionPage>
 </template>

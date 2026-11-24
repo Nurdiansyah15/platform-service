@@ -29,6 +29,8 @@ const permissions = ref<EffectivePermission[]>([])
 const roles = ref<RoleResponse[]>([])
 const branches = ref<BranchResponse[]>([])
 const loadingAccess = ref(false)
+const scopeTypes = useScopeTypes(solutionId)
+const showCode = useShowPermissionCode()
 
 async function loadMember() {
   memberError.value = ''
@@ -102,7 +104,7 @@ async function setStatus(next: MemberStatus) {
 // ── Assign role ──
 const showAssign = ref(false)
 const assigning = ref(false)
-const form = reactive<{ role_id?: string; scope_type: 'company' | 'branch'; scope_id?: string }>({ scope_type: 'company' })
+const form = reactive<{ role_id?: string; scope_type: string; scope_id?: string; parent_id?: string; scope_label?: string }>({ scope_type: 'company' })
 
 const roleItems = computed(() => roles.value.map(r => ({
   label: r.name,
@@ -118,9 +120,33 @@ const canAssignCompany = computed(() => perms.can('role.assign'))
 const assignableBranches = computed(() => branches.value.filter(b => perms.canInBranch('role.assign', b.id)))
 const branchItems = computed(() => assignableBranches.value.map(b => ({ label: b.name, value: b.id, description: b.code })))
 
+// Scope custom (didefinisikan solution): pemberi role di level company boleh semua; pemberi
+// role di cabang hanya scope ber-parent cabang dengan cabang induk miliknya.
+const customScopes = computed(() => scopeTypes.items.value.filter(s => !s.builtin && s.status === 'active'))
+const selectedCustom = computed(() => customScopes.value.find(s => s.code === form.scope_type))
+const scopeOptions = computed(() => [
+  { label: 'Seluruh company', value: 'company', description: canAssignCompany.value ? 'Termasuk semua cabang dan scope di bawahnya.' : 'Butuh izin memberi role di level company.', disabled: !canAssignCompany.value },
+  { label: 'Cabang tertentu', value: 'branch', description: 'Hanya di satu cabang.', disabled: !assignableBranches.value.length },
+  ...customScopes.value.map(s => ({
+    label: `${s.name} tertentu`,
+    value: s.code,
+    description: s.description ?? (s.parent === 'branch' ? 'Bagian dari cabang.' : 'Bagian dari company.'),
+    disabled: !canAssignCompany.value && !(s.parent === 'branch' && assignableBranches.value.length),
+  })),
+])
+const parentRequired = computed(() => !!selectedCustom.value && selectedCustom.value.parent === 'branch' && !canAssignCompany.value)
+const canSubmitAssign = computed(() => {
+  if (!form.role_id) return false
+  if (form.scope_type === 'branch') return !!form.scope_id
+  if (selectedCustom.value) return !!form.scope_id?.trim() && (!parentRequired.value || !!form.parent_id)
+  return true
+})
+
 function canRevoke(a: RoleAssignmentDetail) {
   if (perms.isConsoleSolution(a.solution_id) && !perms.isCompanyAdmin.value) return false
-  return a.scope_type === 'company' ? perms.can('role.assign') : perms.canInBranch('role.assign', a.scope_id)
+  if (a.scope_type === 'company') return perms.can('role.assign')
+  if (a.scope_type === 'branch') return perms.canInBranch('role.assign', a.scope_id)
+  return a.parent_id ? perms.canInBranch('role.assign', a.parent_id) : perms.can('role.assign')
 }
 
 watch(showAssign, (v) => {
@@ -129,8 +155,15 @@ watch(showAssign, (v) => {
       role_id: undefined,
       scope_type: canAssignCompany.value ? 'company' : 'branch',
       scope_id: !canAssignCompany.value && assignableBranches.value.length === 1 ? assignableBranches.value[0]!.id : undefined,
+      parent_id: undefined,
+      scope_label: undefined,
     })
   }
+})
+watch(() => form.scope_type, () => {
+  form.scope_id = undefined
+  form.parent_id = undefined
+  form.scope_label = undefined
 })
 
 // Role diri sendiri berubah → muat ulang permission platform agar tampilan ikut menyesuaikan.
@@ -142,10 +175,13 @@ function afterAccessChange() {
 async function assign() {
   assigning.value = true
   try {
+    const custom = !!selectedCustom.value
     await api.post(`/api/v1/companies/${ctx.companyId.value}/users/${userId.value}/role-assignments`, {
       role_id: form.role_id,
       scope_type: form.scope_type,
-      scope_id: form.scope_type === 'branch' ? form.scope_id : undefined,
+      scope_id: form.scope_type === 'company' ? undefined : form.scope_id?.trim(),
+      parent_id: custom && form.parent_id ? form.parent_id : undefined,
+      scope_label: custom && form.scope_label?.trim() ? form.scope_label.trim() : undefined,
     })
     toast.add({ title: 'Role ditambahkan', color: 'success' })
     showAssign.value = false
@@ -160,7 +196,7 @@ async function assign() {
 async function revoke(a: RoleAssignmentDetail) {
   const ok = await confirm({
     title: `Cabut role ${a.role_name}?`,
-    description: a.scope_type === 'company' ? 'Berlaku di seluruh company.' : `Berlaku di cabang ${a.scope_name}.`,
+    description: `Berlaku di ${assignmentScopeText(a)}.`,
     confirmLabel: 'Cabut',
     danger: true,
   })
@@ -174,19 +210,25 @@ async function revoke(a: RoleAssignmentDetail) {
   }
 }
 
-// ── Permission efektif dikelompokkan per modul ──
-const permissionGroups = computed(() => {
-  const map = new Map<string, EffectivePermission[]>()
-  for (const p of permissions.value) {
-    const key = p.permission.includes('.') ? p.permission.split('.')[0]! : 'lainnya'
-    map.set(key, [...(map.get(key) ?? []), p])
-  }
-  return [...map.entries()].map(([name, items]) => ({ name, items }))
-})
+// ── Permission efektif dikelompokkan per grup katalog (fallback prefix code) ──
+const permissionGroups = computed(() =>
+  groupPermissions(permissions.value.map(p => ({ ...p, code: p.permission, name: p.name || p.permission }))))
+
+function assignmentScopeText(a: RoleAssignmentDetail) {
+  if (a.scope_type === 'company') return 'seluruh company'
+  if (a.scope_type === 'branch') return `cabang ${a.scope_name}`
+  return `${scopeTypes.nameOf(a.scope_type)} ${a.scope_name}`
+}
+
+function scopeIcon(type: string) {
+  return type === 'company' ? 'i-lucide-building-2' : type === 'branch' ? 'i-lucide-git-branch' : 'i-lucide-layers'
+}
 
 function scopeLabel(type: string, id: string) {
   if (type === 'company') return 'seluruh company'
-  return branches.value.find(b => b.id === id)?.name ?? 'cabang'
+  if (type === 'branch') return branches.value.find(b => b.id === id)?.name ?? 'cabang'
+  const named = assignments.value.find(a => a.scope_type === type && a.scope_id === id)?.scope_name ?? id
+  return `${scopeTypes.nameOf(type)} ${named}`
 }
 </script>
 
@@ -264,8 +306,8 @@ function scopeLabel(type: string, id: string) {
                   <UBadge size="xs" variant="subtle" :color="a.role_is_global ? 'neutral' : 'primary'">
                     {{ a.role_is_global ? 'global' : 'custom' }}
                   </UBadge>
-                  <UIcon :name="a.scope_type === 'company' ? 'i-lucide-building-2' : 'i-lucide-git-branch'" class="size-3.5" />
-                  {{ a.scope_type === 'company' ? 'Seluruh company' : a.scope_name }}
+                  <UIcon :name="scopeIcon(a.scope_type)" class="size-3.5" />
+                  {{ a.scope_type === 'company' ? 'Seluruh company' : a.scope_type === 'branch' ? a.scope_name : `${scopeTypes.nameOf(a.scope_type)}: ${a.scope_name}` }}
                 </p>
               </div>
               <UTooltip v-if="canRevoke(a)" text="Cabut role">
@@ -282,11 +324,17 @@ function scopeLabel(type: string, id: string) {
           </div>
           <UEmpty v-else-if="!permissions.length" icon="i-lucide-key-round" title="Tidak ada akses" description="Anggota belum punya permission di solution ini." variant="naked" />
           <div v-else class="space-y-4">
-            <div v-for="g in permissionGroups" :key="g.name">
-              <p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-dimmed">{{ g.name }}</p>
+            <div class="flex justify-end">
+              <USwitch v-model="showCode" label="Tampilkan kode" size="sm" />
+            </div>
+            <div v-for="g in permissionGroups" :key="g.key">
+              <p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-dimmed">{{ g.label }}</p>
               <ul class="space-y-1.5">
                 <li v-for="p in g.items" :key="p.permission" class="flex flex-wrap items-center justify-between gap-2 text-sm">
-                  <span class="font-mono text-xs text-highlighted">{{ p.permission }}</span>
+                  <span class="min-w-0">
+                    <span class="block text-highlighted">{{ p.name }}</span>
+                    <span v-if="showCode" class="block font-mono text-xs text-dimmed">{{ p.permission }}</span>
+                  </span>
                   <span class="flex flex-wrap gap-1">
                     <UBadge v-for="(gr, i) in p.grants" :key="i" size="xs" color="neutral" variant="outline">
                       {{ gr.role_code }} · {{ scopeLabel(gr.scope_type, gr.scope_id) }}
@@ -314,17 +362,27 @@ function scopeLabel(type: string, id: string) {
             />
           </UFormField>
           <UFormField label="Berlaku di">
-            <URadioGroup
-              v-model="form.scope_type"
-              :items="[
-                { label: 'Seluruh company', value: 'company', description: canAssignCompany ? 'Termasuk semua cabang.' : 'Butuh izin memberi role di level company.', disabled: !canAssignCompany },
-                { label: 'Cabang tertentu', value: 'branch', description: 'Hanya di satu cabang.', disabled: !assignableBranches.length },
-              ]"
-            />
+            <URadioGroup v-model="form.scope_type" :items="scopeOptions" />
           </UFormField>
           <UFormField v-if="form.scope_type === 'branch'" label="Cabang" required>
             <USelectMenu v-model="form.scope_id" :items="branchItems" value-key="value" placeholder="Pilih cabang" class="w-full" />
           </UFormField>
+          <template v-if="selectedCustom">
+            <UFormField :label="`ID ${selectedCustom.name}`" required help="ID dari aplikasi solution (mis. ID departemen di aplikasinya).">
+              <UInput v-model="form.scope_id" :placeholder="`ID ${selectedCustom.name.toLowerCase()}`" class="w-full" />
+            </UFormField>
+            <UFormField label="Nama tampilan" help="Opsional, agar daftar role mudah dibaca.">
+              <UInput v-model="form.scope_label" :placeholder="`Nama ${selectedCustom.name.toLowerCase()}`" class="w-full" />
+            </UFormField>
+            <UFormField
+              v-if="selectedCustom.parent === 'branch'"
+              label="Cabang induk"
+              :required="parentRequired"
+              help="Pemegang izin role di cabang ini ikut berlaku untuk scope ini."
+            >
+              <USelectMenu v-model="form.parent_id" :items="branchItems" value-key="value" placeholder="Pilih cabang" class="w-full" />
+            </UFormField>
+          </template>
         </div>
       </template>
       <template #footer>
@@ -332,7 +390,7 @@ function scopeLabel(type: string, id: string) {
           <UButton color="neutral" variant="ghost" @click="showAssign = false">Batal</UButton>
           <UButton
             :loading="assigning"
-            :disabled="!form.role_id || (form.scope_type === 'branch' && !form.scope_id)"
+            :disabled="!canSubmitAssign"
             @click="assign"
           >
             Tambahkan

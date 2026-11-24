@@ -3839,6 +3839,155 @@
                 }
             }
         },
+        "/api/v1/permissions/{permissionId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Permissions"
+                ],
+                "summary": "Get a permission",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Permission ID",
+                        "name": "permissionId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.PermissionResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Hanya permission manual (hasil sync → 409). Code tidak bisa diubah. `status: deprecated` = hapus (permission tidak bisa ditambahkan ke role baru; yang sudah terpasang tetap berlaku).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Permissions"
+                ],
+                "summary": "Update a manual permission",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Permission ID",
+                        "name": "permissionId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Field yang diubah",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdatePermissionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.PermissionResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/plans/{planId}/benefits": {
             "get": {
                 "security": [
@@ -5602,6 +5751,78 @@
                 }
             }
         },
+        "/api/v1/solutions/{solutionId}/permission-groups": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Permissions"
+                ],
+                "summary": "List permission groups of a solution",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Solution ID",
+                        "name": "solutionId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "active | deprecated",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/dto.PermissionGroupResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/solutions/{solutionId}/permissions": {
             "get": {
                 "security": [
@@ -5634,6 +5855,12 @@
                         "type": "string",
                         "description": "Cari di code / name",
                         "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Code group; '-' = tanpa grup",
+                        "name": "group",
                         "in": "query"
                     },
                     {
@@ -5705,6 +5932,92 @@
                         }
                     }
                 }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Permission manual dikelola platform admin dan tidak disentuh sync katalog. Sync yang memuat code permission manual ditolak (409).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Permissions"
+                ],
+                "summary": "Create a manual permission",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Solution ID",
+                        "name": "solutionId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Permission",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreatePermissionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.PermissionResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
             }
         },
         "/api/v1/solutions/{solutionId}/permissions/sync": {
@@ -5714,7 +6027,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Dipanggil solution saat deploy. Idempotent per version: permission baru dibuat, yang ada diperbarui / diaktifkan ulang, yang hilang menjadi deprecated (tidak dihapus).",
+                "description": "Dipanggil solution saat deploy. Idempotent per version: permission baru dibuat, yang ada diperbarui / diaktifkan ulang, yang hilang menjadi deprecated (tidak dihapus). `scope_types` (scope custom) dan `groups` (pengelompokan tampilan) opsional dan diperlakukan sama.",
                 "consumes": [
                     "application/json"
                 ],
@@ -6146,6 +6459,79 @@
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/solutions/{solutionId}/scope-types": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Scope yang bisa dipakai role assignment solution: company \u0026 branch (built-in) lalu scope type custom dari katalog.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Permissions"
+                ],
+                "summary": "List scope types of a solution",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Solution ID",
+                        "name": "solutionId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "active | deprecated",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/dto.ScopeTypeResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/respond.ErrorBody"
                         }
@@ -7452,19 +7838,20 @@
                 "permission"
             ],
             "properties": {
+                "parent_id": {
+                    "type": "string"
+                },
                 "permission": {
                     "type": "string",
                     "maxLength": 150
                 },
                 "scope_id": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 150
                 },
                 "scope_type": {
                     "type": "string",
-                    "enum": [
-                        "company",
-                        "branch"
-                    ]
+                    "maxLength": 30
                 }
             }
         },
@@ -7477,19 +7864,21 @@
                 "company_id": {
                     "type": "string"
                 },
+                "parent_id": {
+                    "description": "ParentID — scope custom ber-parent branch: UUID branch induk (opsional), agar\nassignment di branch itu ikut berlaku.",
+                    "type": "string"
+                },
                 "permission": {
                     "type": "string",
                     "maxLength": 150
                 },
                 "scope_id": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 150
                 },
                 "scope_type": {
                     "type": "string",
-                    "enum": [
-                        "company",
-                        "branch"
-                    ]
+                    "maxLength": 30
                 },
                 "user_id": {
                     "type": "string"
@@ -7867,6 +8256,39 @@
                 }
             }
         },
+        "dto.CreatePermissionRequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "name"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "maxLength": 150
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 1000
+                },
+                "group": {
+                    "description": "Group — code permission group solution (opsional).",
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "scopes": {
+                    "description": "Scopes — scope type tempat permission berlaku (opsional; kosong = semua scope).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "dto.CreatePlanRequest": {
             "type": "object",
             "required": [
@@ -7911,20 +8333,27 @@
                 "role_id"
             ],
             "properties": {
+                "parent_id": {
+                    "description": "ParentID — scope custom ber-parent branch: UUID branch induk (opsional). Membuat\npemegang role.assign di branch itu boleh mengelola assignment ini.",
+                    "type": "string"
+                },
                 "role_id": {
                     "type": "string"
                 },
                 "scope_id": {
-                    "description": "ScopeID — wajib untuk company / branch; untuk company boleh kosong (= company itu sendiri).",
-                    "type": "string"
+                    "description": "ScopeID — company boleh kosong (= company itu sendiri); branch = UUID branch;\nscope custom = id milik solution (string bebas, wajib).",
+                    "type": "string",
+                    "maxLength": 150
+                },
+                "scope_label": {
+                    "description": "ScopeLabel — nama tampilan scope custom (opsional; diabaikan untuk company/branch).",
+                    "type": "string",
+                    "maxLength": 255
                 },
                 "scope_type": {
-                    "description": "ScopeType — company (default) | branch.",
+                    "description": "ScopeType — company (default) | branch | scope type custom solution role (GET /solutions/{id}/scope-types).",
                     "type": "string",
-                    "enum": [
-                        "company",
-                        "branch"
-                    ]
+                    "maxLength": 30
                 }
             }
         },
@@ -8124,8 +8553,21 @@
                         "$ref": "#/definitions/dto.EffectiveGrantResponse"
                     }
                 },
+                "group": {
+                    "$ref": "#/definitions/dto.PermissionGroupRef"
+                },
+                "name": {
+                    "description": "Name \u0026 Group — info tampilan dari katalog (Name = code bila tidak ditemukan).",
+                    "type": "string"
+                },
                 "permission": {
                     "type": "string"
+                },
+                "scope_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -8402,9 +8844,75 @@
                 "description": {
                     "type": "string"
                 },
+                "group": {
+                    "description": "Group — code group di `groups` (opsional).",
+                    "type": "string",
+                    "maxLength": 100
+                },
                 "name": {
                     "type": "string",
                     "maxLength": 255
+                },
+                "scopes": {
+                    "description": "Scopes — scope type tempat permission berlaku (opsional; kosong = semua scope).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "dto.PermissionGroupDefinition": {
+            "type": "object",
+            "required": [
+                "code",
+                "name"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                }
+            }
+        },
+        "dto.PermissionGroupRef": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "sort_order": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.PermissionGroupResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "sort_order": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
                 }
             }
         },
@@ -8420,13 +8928,32 @@
                 "description": {
                     "type": "string"
                 },
+                "group": {
+                    "description": "Group — nil bila permission tanpa grup.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dto.PermissionGroupRef"
+                        }
+                    ]
+                },
                 "id": {
                     "type": "string"
                 },
                 "name": {
                     "type": "string"
                 },
+                "scope_types": {
+                    "description": "ScopeTypes — scope type tempat permission berlaku; kosong = semua scope.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "solution_id": {
+                    "type": "string"
+                },
+                "source": {
+                    "description": "Source — sync (dikelola sync katalog, read-only di platform) | manual (dibuat platform admin).",
                     "type": "string"
                 },
                 "status": {
@@ -8576,6 +9103,9 @@
                 "id": {
                     "type": "string"
                 },
+                "parent_id": {
+                    "type": "string"
+                },
                 "role_code": {
                     "type": "string"
                 },
@@ -8591,10 +9121,17 @@
                 "scope_id": {
                     "type": "string"
                 },
+                "scope_label": {
+                    "type": "string"
+                },
                 "scope_name": {
                     "type": "string"
                 },
                 "scope_type": {
+                    "type": "string"
+                },
+                "scope_type_name": {
+                    "description": "ScopeTypeName — nama tampilan scope type (Company / Branch / nama dari katalog solution).",
                     "type": "string"
                 },
                 "solution_code": {
@@ -8620,6 +9157,9 @@
                 "id": {
                     "type": "string"
                 },
+                "parent_id": {
+                    "type": "string"
+                },
                 "role_code": {
                     "type": "string"
                 },
@@ -8627,6 +9167,9 @@
                     "type": "string"
                 },
                 "scope_id": {
+                    "type": "string"
+                },
+                "scope_label": {
                     "type": "string"
                 },
                 "scope_type": {
@@ -8664,6 +9207,9 @@
                 "scope_type": {
                     "type": "string"
                 },
+                "scope_type_name": {
+                    "type": "string"
+                },
                 "user_id": {
                     "type": "string"
                 }
@@ -8675,11 +9221,23 @@
                 "code": {
                     "type": "string"
                 },
+                "description": {
+                    "type": "string"
+                },
+                "group": {
+                    "$ref": "#/definitions/dto.PermissionGroupRef"
+                },
                 "id": {
                     "type": "string"
                 },
                 "name": {
                     "type": "string"
+                },
+                "scope_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "status": {
                     "type": "string"
@@ -8725,6 +9283,62 @@
                     "type": "string"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.ScopeTypeDefinition": {
+            "type": "object",
+            "required": [
+                "code",
+                "name"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "maxLength": 30
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "parent": {
+                    "description": "Parent — company (default) atau branch.",
+                    "type": "string",
+                    "enum": [
+                        "company",
+                        "branch"
+                    ]
+                }
+            }
+        },
+        "dto.ScopeTypeResponse": {
+            "type": "object",
+            "properties": {
+                "builtin": {
+                    "description": "Builtin — company \u0026 branch (dikelola platform; scope_id divalidasi platform).",
+                    "type": "boolean"
+                },
+                "code": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "parent": {
+                    "description": "Parent — scope induk: \"\" untuk company, \"company\" / \"branch\" untuk lainnya.",
+                    "type": "string"
+                },
+                "sort_order": {
+                    "type": "integer"
+                },
+                "status": {
                     "type": "string"
                 }
             }
@@ -9005,6 +9619,26 @@
                 }
             }
         },
+        "dto.SyncCounts": {
+            "type": "object",
+            "properties": {
+                "created": {
+                    "type": "integer"
+                },
+                "deprecated": {
+                    "type": "integer"
+                },
+                "reactivated": {
+                    "type": "integer"
+                },
+                "unchanged": {
+                    "type": "integer"
+                },
+                "updated": {
+                    "type": "integer"
+                }
+            }
+        },
         "dto.SyncPermissionsRequest": {
             "type": "object",
             "required": [
@@ -9012,10 +9646,24 @@
                 "version"
             ],
             "properties": {
+                "groups": {
+                    "description": "Groups — permission group untuk tampilan (opsional). Urutan array = urutan tampil.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.PermissionGroupDefinition"
+                    }
+                },
                 "permissions": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/dto.PermissionDefinition"
+                    }
+                },
+                "scope_types": {
+                    "description": "ScopeTypes — scope type custom (opsional). company \u0026 branch selalu tersedia.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.ScopeTypeDefinition"
                     }
                 },
                 "version": {
@@ -9038,8 +9686,19 @@
                 "deprecated": {
                     "type": "integer"
                 },
+                "groups": {
+                    "description": "Groups \u0026 ScopeTypes — ringkasan sync group dan scope type custom.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dto.SyncCounts"
+                        }
+                    ]
+                },
                 "reactivated": {
                     "type": "integer"
+                },
+                "scope_types": {
+                    "$ref": "#/definitions/dto.SyncCounts"
                 },
                 "unchanged": {
                     "type": "integer"
@@ -9147,6 +9806,37 @@
                     "enum": [
                         "active",
                         "inactive"
+                    ]
+                }
+            }
+        },
+        "dto.UpdatePermissionRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "maxLength": 1000
+                },
+                "group": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "scopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "status": {
+                    "description": "Status — deprecated = \"hapus\" (tidak bisa ditambahkan ke role baru); active = aktifkan lagi.",
+                    "type": "string",
+                    "enum": [
+                        "active",
+                        "deprecated"
                     ]
                 }
             }

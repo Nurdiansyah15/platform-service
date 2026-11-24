@@ -17,5 +17,7 @@ type RoleAssignmentPayload struct {
 	SolutionID string    `json:"solution_id"`
 	ScopeType  string    `json:"scope_type"`
 	ScopeID    string    `json:"scope_id"`
+	ScopeLabel *string   `json:"scope_label,omitempty"`
+	ParentID   *string   `json:"parent_id,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 }

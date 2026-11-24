@@ -16,6 +16,7 @@ const selected = ref<string[]>([])
 const loading = ref(true)
 const saving = ref(false)
 const readonly = computed(() => !props.savePath)
+const scopeTypes = useScopeTypes(() => props.role.solution_id)
 
 const changes = computed(() => {
   const added = selected.value.filter(c => !original.value.includes(c)).length
@@ -42,7 +43,10 @@ async function load() {
     ])
     // Permission usang yang masih terpasang tetap ditampilkan.
     const extra = assigned.data.filter(a => !cat.some(c => c.code === a.code))
-      .map(a => ({ id: a.id, code: a.code, name: a.name, status: a.status } as PermissionResponse))
+      .map(a => ({
+        id: a.id, code: a.code, name: a.name, description: a.description, status: a.status,
+        group: a.group, scope_types: a.scope_types ?? [],
+      } as PermissionResponse))
     catalog.value = [...cat, ...extra]
     original.value = assigned.data.map(p => p.code)
     selected.value = [...original.value]
@@ -97,7 +101,7 @@ watch(() => props.role.id, load, { immediate: true })
         title="Hanya-baca"
         :description="role.scope === 'company' ? undefined : 'Role global dikelola admin platform. Buat custom role bila butuh kombinasi lain.'"
       />
-      <PermissionPicker v-model="selected" :catalog="catalog" :readonly="readonly" />
+      <PermissionPicker v-model="selected" :catalog="catalog" :readonly="readonly" :scope-name="scopeTypes.nameOf" />
 
       <div
         v-if="!readonly && changes > 0"

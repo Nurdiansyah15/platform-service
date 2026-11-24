@@ -3,6 +3,7 @@ package authz
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"platform-service/internal/app/apperror"
@@ -19,6 +20,7 @@ import (
 	orgconstant "platform-service/internal/domain/organization/constant"
 	orgrepo "platform-service/internal/domain/organization/repository"
 	orgservice "platform-service/internal/domain/organization/service"
+	permrepo "platform-service/internal/domain/permission/repository"
 	roleconstant "platform-service/internal/domain/role/constant"
 	rolerepo "platform-service/internal/domain/role/repository"
 	solutionrepo "platform-service/internal/domain/solution/repository"
@@ -36,6 +38,9 @@ type AuthzDeps struct {
 	Subscriptions subrepo.SubscriptionRepository
 	Solutions     solutionrepo.SolutionRepository
 	Query         port.RoleAssignmentQueryReadModel
+	// Permissions & PermissionGroups — info tampilan (nama, grup) untuk effective permissions.
+	Permissions      permrepo.PermissionRepository
+	PermissionGroups permrepo.PermissionGroupRepository
 	// Admin menegakkan permission platform role.assign untuk token user.
 	Admin *authzservice.CompanyAdminPolicy
 }
@@ -89,7 +94,10 @@ func (uc *AuthzUseCase) AssignRole(ctx context.Context, actor *principal.Princip
 	if err != nil {
 		return nil, mapAuthzDomainError(err)
 	}
-	scope, err := uc.deps.Scopes.Resolve(ctx, companyID, scopeType, req.ScopeID)
+	scope, err := uc.deps.Scopes.Resolve(ctx, authzservice.ScopeInput{
+		SolutionID: r.SolutionID, CompanyID: companyID, Type: scopeType, ID: req.ScopeID, ParentID: req.ParentID,
+		ForAssignment: true,
+	})
 	if err != nil {
 		return nil, mapAuthzDomainError(err)
 	}
@@ -97,7 +105,7 @@ func (uc *AuthzUseCase) AssignRole(ctx context.Context, actor *principal.Princip
 		return nil, err
 	}
 
-	a := entity.NewRoleAssignment(companyID, userID, r.ID, scope.Scope, uc.now())
+	a := entity.NewRoleAssignment(companyID, userID, r.ID, scope, trimLabel(req.ScopeLabel), uc.now())
 	err = uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
 		if err := uc.deps.Assignments.Create(ctx, a); err != nil {
 			return err
@@ -108,7 +116,8 @@ func (uc *AuthzUseCase) AssignRole(ctx context.Context, actor *principal.Princip
 			SolutionID: &r.SolutionID,
 			Payload: event.RoleAssignmentPayload{
 				ID: a.ID, CompanyID: companyID, UserID: userID, RoleID: r.ID, RoleCode: r.Code.Value(),
-				SolutionID: r.SolutionID, ScopeType: a.Scope.Type.String(), ScopeID: a.Scope.ID, CreatedAt: a.CreatedAt,
+				SolutionID: r.SolutionID, ScopeType: a.Scope.Type.String(), ScopeID: a.Scope.ID,
+				ScopeLabel: a.ScopeLabel, ParentID: a.ScopeParentID, CreatedAt: a.CreatedAt,
 			},
 		})
 	})
@@ -117,7 +126,8 @@ func (uc *AuthzUseCase) AssignRole(ctx context.Context, actor *principal.Princip
 	}
 	return &dto.RoleAssignmentResponse{
 		ID: a.ID, CompanyID: companyID, UserID: userID, RoleID: r.ID, RoleCode: r.Code.Value(), SolutionID: r.SolutionID,
-		ScopeType: a.Scope.Type.String(), ScopeID: a.Scope.ID, CreatedAt: a.CreatedAt,
+		ScopeType: a.Scope.Type.String(), ScopeID: a.Scope.ID, ScopeLabel: a.ScopeLabel, ParentID: a.ScopeParentID,
+		CreatedAt: a.CreatedAt,
 	}, nil
 }
 
@@ -159,11 +169,7 @@ func (uc *AuthzUseCase) RevokeAssignment(ctx context.Context, actor *principal.P
 	if actor.IsService() && actor.SolutionID != a.Role.SolutionID {
 		return notFound
 	}
-	check := entity.CheckScope{Scope: a.Scope}
-	if a.Scope.Type == valueobject.ScopeBranch {
-		check.BranchCompanyID = a.CompanyID
-	}
-	if err := uc.ensureCanAssign(ctx, actor, a.CompanyID, a.Role.SolutionID, check); err != nil {
+	if err := uc.ensureCanAssign(ctx, actor, a.CompanyID, a.Role.SolutionID, a.CheckScope()); err != nil {
 		return err
 	}
 
@@ -178,7 +184,8 @@ func (uc *AuthzUseCase) RevokeAssignment(ctx context.Context, actor *principal.P
 			SolutionID: &a.Role.SolutionID,
 			Payload: event.RoleAssignmentPayload{
 				ID: a.ID, CompanyID: a.CompanyID, UserID: a.UserID, RoleID: a.RoleID, RoleCode: a.Role.Code,
-				SolutionID: a.Role.SolutionID, ScopeType: a.Scope.Type.String(), ScopeID: a.Scope.ID, CreatedAt: a.CreatedAt,
+				SolutionID: a.Role.SolutionID, ScopeType: a.Scope.Type.String(), ScopeID: a.Scope.ID,
+				ScopeLabel: a.ScopeLabel, ParentID: a.ScopeParentID, CreatedAt: a.CreatedAt,
 			},
 			OccurredAt: now,
 		})
@@ -213,11 +220,18 @@ func (uc *AuthzUseCase) EffectivePermissions(ctx context.Context, actor *princip
 	if err != nil {
 		return nil, mapAuthzDomainError(err)
 	}
+	catalog, err := uc.permissionCatalog(ctx, solutionID)
+	if err != nil {
+		return nil, mapAuthzDomainError(err)
+	}
 	byPermission := map[string]*dto.EffectivePermissionResponse{}
 	for _, g := range grants {
 		p, ok := byPermission[g.PermissionCode]
 		if !ok {
-			p = &dto.EffectivePermissionResponse{Permission: g.PermissionCode}
+			p = &dto.EffectivePermissionResponse{Permission: g.PermissionCode, Name: g.PermissionCode, ScopeTypes: []string{}}
+			if info, found := catalog[g.PermissionCode]; found {
+				p.Name, p.Group, p.ScopeTypes = info.Name, info.Group, info.ScopeTypes
+			}
 			byPermission[g.PermissionCode] = p
 		}
 		p.Grants = append(p.Grants, dto.EffectiveGrantResponse{RoleCode: g.RoleCode, ScopeType: g.Scope.Type.String(), ScopeID: g.Scope.ID})
@@ -236,7 +250,7 @@ func (uc *AuthzUseCase) EffectivePermissions(ctx context.Context, actor *princip
 func (uc *AuthzUseCase) Check(ctx context.Context, actor *principal.Principal, req dto.AuthzCheckRequest) (*dto.AuthzCheckResult, error) {
 	resp, err := uc.CheckBatch(ctx, actor, dto.AuthzCheckBatchRequest{
 		CompanyID: req.CompanyID, UserID: req.UserID,
-		Checks: []dto.AuthzCheckItem{{Permission: req.Permission, ScopeType: req.ScopeType, ScopeID: req.ScopeID}},
+		Checks: []dto.AuthzCheckItem{{Permission: req.Permission, ScopeType: req.ScopeType, ScopeID: req.ScopeID, ParentID: req.ParentID}},
 	})
 	if err != nil {
 		return nil, err
@@ -261,7 +275,9 @@ func (uc *AuthzUseCase) CheckBatch(ctx context.Context, actor *principal.Princip
 		if err != nil {
 			return nil, mapAuthzDomainError(err)
 		}
-		if scopes[i], err = uc.deps.Scopes.Resolve(ctx, companyID, st, c.ScopeID); err != nil {
+		if scopes[i], err = uc.deps.Scopes.Resolve(ctx, authzservice.ScopeInput{
+			SolutionID: solutionID, CompanyID: companyID, Type: st, ID: c.ScopeID, ParentID: c.ParentID,
+		}); err != nil {
 			return nil, mapAuthzDomainError(err)
 		}
 	}
@@ -345,4 +361,47 @@ func (uc *AuthzUseCase) isActiveMember(ctx context.Context, companyID, userID st
 		return false, err
 	}
 	return m.IsActive(), nil
+}
+
+// permissionInfo — info tampilan permission dari katalog solution.
+type permissionInfo struct {
+	Name       string
+	Group      *dto.PermissionGroupRef
+	ScopeTypes []string
+}
+
+func (uc *AuthzUseCase) permissionCatalog(ctx context.Context, solutionID string) (map[string]permissionInfo, error) {
+	perms, err := uc.deps.Permissions.ListBySolution(ctx, solutionID)
+	if err != nil {
+		return nil, err
+	}
+	groups, err := uc.deps.PermissionGroups.ListBySolution(ctx, solutionID)
+	if err != nil {
+		return nil, err
+	}
+	groupByID := make(map[string]*dto.PermissionGroupRef, len(groups))
+	for _, g := range groups {
+		groupByID[g.ID] = &dto.PermissionGroupRef{Code: g.Code.Value(), Name: g.Name, SortOrder: g.SortOrder}
+	}
+	out := make(map[string]permissionInfo, len(perms))
+	for _, p := range perms {
+		info := permissionInfo{Name: p.Name, ScopeTypes: p.ScopeTypes}
+		if p.GroupID != nil {
+			info.Group = groupByID[*p.GroupID]
+		}
+		out[p.Code.Value()] = info
+	}
+	return out, nil
+}
+
+// trimLabel — label kosong dianggap tidak diisi.
+func trimLabel(v *string) *string {
+	if v == nil {
+		return nil
+	}
+	t := strings.TrimSpace(*v)
+	if t == "" {
+		return nil
+	}
+	return &t
 }

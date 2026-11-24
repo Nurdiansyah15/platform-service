@@ -24,6 +24,9 @@ const (
 // MaxBatchChecks — batas jumlah cek per POST /authz/check-batch.
 const MaxBatchChecks = 100
 
+// ScopeIDMaxLength — panjang maksimum scope_id (scope custom memakai id milik solution).
+const ScopeIDMaxLength = 150
+
 // Permission platform: administrasi company. Permission ini milik katalog solution console
 // (CONSOLE_SOLUTION_CODE) sehingga memakai mesin RBAC yang sama (role, assignment, scope
 // company ⊇ branch). Token user wajib memilikinya untuk operasi tulis data company;
@@ -39,19 +42,36 @@ const (
 	// platform. Diberikan otomatis ke pembuat company.
 	CompanyAdminRoleCode = "company_admin"
 	// PlatformCatalogVersion — versi katalog permission platform di solution console.
-	PlatformCatalogVersion = "platform-2026.10.30"
+	PlatformCatalogVersion = "platform-2026.11.24"
 )
 
-// PlatformPermission — satu entri katalog permission platform.
-type PlatformPermission struct {
+// PlatformPermissionGroup — satu group tampilan katalog permission platform.
+type PlatformPermissionGroup struct {
 	Code, Name, Description string
+}
+
+// Group permission platform (urut tampilan).
+const (
+	PlatformGroupOrganization = "organization"
+	PlatformGroupAccess       = "access"
+)
+
+var PlatformPermissionGroups = []PlatformPermissionGroup{
+	{Code: PlatformGroupOrganization, Name: "Organisasi", Description: "Info company, anggota, dan cabang."},
+	{Code: PlatformGroupAccess, Name: "Role & akses", Description: "Role custom dan penugasan role."},
+}
+
+// PlatformPermission — satu entri katalog permission platform. Scope tidak dibatasi
+// (berlaku di company & branch).
+type PlatformPermission struct {
+	Code, Name, Description, Group string
 }
 
 // PlatformPermissions — katalog permission platform (urut tampilan).
 var PlatformPermissions = []PlatformPermission{
-	{PermCompanyManage, "Kelola info company", "Mengubah nama dan slug company."},
-	{PermMemberManage, "Kelola anggota", "Membuat akun user, menambah, mengubah status, dan mengeluarkan anggota."},
-	{PermBranchManage, "Kelola cabang", "Menambah, mengubah, dan menghapus cabang."},
-	{PermRoleManage, "Kelola role custom", "Membuat, mengubah, dan menghapus role custom beserta permission-nya."},
-	{PermRoleAssign, "Beri & cabut role", "Memberi dan mencabut role anggota pada scope yang dimiliki."},
+	{PermCompanyManage, "Kelola info company", "Mengubah nama dan slug company.", PlatformGroupOrganization},
+	{PermMemberManage, "Kelola anggota", "Membuat akun user, menambah, mengubah status, dan mengeluarkan anggota.", PlatformGroupOrganization},
+	{PermBranchManage, "Kelola cabang", "Menambah, mengubah, dan menghapus cabang.", PlatformGroupOrganization},
+	{PermRoleManage, "Kelola role custom", "Membuat, mengubah, dan menghapus role custom beserta permission-nya.", PlatformGroupAccess},
+	{PermRoleAssign, "Beri & cabut role", "Memberi dan mencabut role anggota pada scope yang dimiliki.", PlatformGroupAccess},
 }

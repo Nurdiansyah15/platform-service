@@ -133,6 +133,8 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	snapshotReader := persistence.NewPostgresSnapshotReader(opts.DB)
 	permissionRepo := persistence.NewPostgresPermissionRepository(opts.DB)
 	permissionQuery := persistence.NewPostgresPermissionQuery(opts.DB)
+	permissionGroupRepo := persistence.NewPostgresPermissionGroupRepository(opts.DB)
+	scopeTypeRepo := persistence.NewPostgresScopeTypeRepository(opts.DB)
 	roleRepo := persistence.NewPostgresRoleRepository(opts.DB)
 	rolePermissionRepo := persistence.NewPostgresRolePermissionRepository(opts.DB)
 	roleQuery := persistence.NewPostgresRoleQuery(opts.DB)
@@ -254,7 +256,8 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Query:              subscriptionQuery,
 	})
 	permissionUC := permission.NewPermissionUseCase(permission.PermissionDeps{
-		Tx: transactor, Permissions: permissionRepo, Solutions: solutionRepo, Query: permissionQuery,
+		Tx: transactor, Permissions: permissionRepo, Groups: permissionGroupRepo, ScopeTypes: scopeTypeRepo,
+		Solutions: solutionRepo, Query: permissionQuery,
 	})
 	roleUC := role.NewRoleUseCase(role.RoleDeps{
 		Tx:              transactor,
@@ -275,13 +278,16 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Outbox:        outbox,
 		Assignments:   assignmentRepo,
 		Grants:        grantReader,
-		Scopes:        authzservice.NewScopeValidator(branchRepo),
+		Scopes:        authzservice.NewScopeValidator(branchRepo, scopeTypeRepo),
 		Roles:         roleRepo,
 		Members:       memberRepo,
 		Subscriptions: subscriptionRepo,
 		Solutions:     solutionRepo,
 		Query:         persistence.NewPostgresRoleAssignmentQuery(opts.DB),
 		Admin:         adminPolicy,
+
+		Permissions:      permissionRepo,
+		PermissionGroups: permissionGroupRepo,
 	})
 	entitlementResolver := entservice.NewResolver(subscriptionRepo, snapshotReader)
 	entitlementUC := entitlement.NewEntitlementUseCase(entitlement.EntitlementDeps{

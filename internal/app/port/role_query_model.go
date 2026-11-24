@@ -38,10 +38,13 @@ type RoleStats struct {
 }
 
 type RolePermissionReadItem struct {
-	ID     string
-	Code   string
-	Name   string
-	Status string
+	ID          string
+	Code        string
+	Name        string
+	Description *string
+	Status      string
+	Group       *dto.PermissionGroupRef
+	ScopeTypes  []string
 }
 
 type RoleQueryReadModel interface {

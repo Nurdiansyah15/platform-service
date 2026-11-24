@@ -67,3 +67,136 @@ func TestNewDefinition_Invalid(t *testing.T) {
 	_, err := entity.NewDefinition("a.read", " ", nil)
 	testhelper.AssertDomainError(t, err, constant.CodePermissionNameInvalid)
 }
+
+func groupDef(t *testing.T, code, name string, order int) entity.GroupDefinition {
+	t.Helper()
+	d, err := entity.NewGroupDefinition(code, name, nil, order)
+	require.NoError(t, err)
+	return d
+}
+
+func scopeDef(t *testing.T, code, parent string, order int) entity.ScopeTypeDefinition {
+	t.Helper()
+	d, err := entity.NewScopeTypeDefinition(code, code, nil, parent, order)
+	require.NoError(t, err)
+	return d
+}
+
+func TestPlanGroupSync(t *testing.T) {
+	now := time.Now()
+	leave := entity.NewGroup("s", groupDef(t, "leave", "Cuti", 0), now)
+	old := entity.NewGroup("s", groupDef(t, "old", "Lama", 1), now)
+
+	plan, err := service.PlanGroupSync("s", []*entity.Group{leave, old}, []entity.GroupDefinition{
+		groupDef(t, "payroll", "Payroll", 0), // created
+		groupDef(t, "leave", "Cuti", 1),      // updated (urutan berubah)
+	}, now)
+	require.NoError(t, err)
+	assert.Equal(t, 1, plan.Created)
+	assert.Equal(t, 1, plan.Updated)
+	assert.Equal(t, 1, plan.Deprecated)
+	assert.Equal(t, 1, leave.SortOrder)
+	assert.False(t, old.IsActive())
+
+	_, err = service.PlanGroupSync("s", nil, []entity.GroupDefinition{groupDef(t, "a", "A", 0), groupDef(t, "a", "B", 1)}, now)
+	testhelper.AssertDomainError(t, err, constant.CodeGroupDuplicate)
+}
+
+func TestPlanScopeTypeSync(t *testing.T) {
+	now := time.Now()
+	dept := entity.NewScopeType("s", scopeDef(t, "department", "", 0), now)
+	plan, err := service.PlanScopeTypeSync("s", []*entity.ScopeType{dept}, []entity.ScopeTypeDefinition{
+		scopeDef(t, "department", "branch", 0),
+	}, now)
+	require.NoError(t, err)
+	assert.Equal(t, 1, plan.Updated)
+	assert.Equal(t, valueobject.ParentBranch, dept.Parent)
+}
+
+func TestScopeTypeDefinition_Invalid(t *testing.T) {
+	_, err := entity.NewScopeTypeDefinition("branch", "Cabang", nil, "", 0)
+	testhelper.AssertDomainError(t, err, constant.CodeScopeTypeReserved)
+	_, err = entity.NewScopeTypeDefinition("Dept", "Dept", nil, "", 0)
+	testhelper.AssertDomainError(t, err, constant.CodeScopeTypeCodeInvalid)
+	_, err = entity.NewScopeTypeDefinition("dept", "Dept", nil, "region", 0)
+	testhelper.AssertDomainError(t, err, constant.CodeScopeTypeParentInvalid)
+}
+
+func TestValidateCatalogRefs(t *testing.T) {
+	withRefs := func(code string, group *string, scopes ...string) entity.Definition {
+		d, err := def(t, code, code).WithCatalogRefs(group, scopes)
+		require.NoError(t, err)
+		return d
+	}
+	leave := "leave"
+	unknown := "unknown"
+	groups := []entity.GroupDefinition{groupDef(t, "leave", "Cuti", 0)}
+	scopes := []entity.ScopeTypeDefinition{scopeDef(t, "department", "", 0)}
+
+	assert.NoError(t, service.ValidateCatalogRefs([]entity.Definition{
+		withRefs("leave.approve", &leave, "company", "department", "company"),
+		withRefs("misc.read", nil),
+	}, groups, scopes))
+
+	err := service.ValidateCatalogRefs([]entity.Definition{withRefs("x.read", &unknown)}, groups, scopes)
+	testhelper.AssertDomainError(t, err, constant.CodeGroupUnknown)
+
+	err = service.ValidateCatalogRefs([]entity.Definition{withRefs("x.read", nil, "project")}, groups, scopes)
+	testhelper.AssertDomainError(t, err, constant.CodeScopeTypeUnknown)
+
+	d := withRefs("leave.approve", &leave, "department", "company", "department")
+	assert.Equal(t, []string{"company", "department"}, d.Scopes, "unik & terurut")
+}
+
+func TestPlanCatalogSync_GroupAndScopesChange(t *testing.T) {
+	now := time.Now()
+	p := entity.NewPermission("s", def(t, "leave.approve", "Approve"), now)
+	gid := "g1"
+	d, err := def(t, "leave.approve", "Approve").WithCatalogRefs(nil, []string{"company"})
+	require.NoError(t, err)
+	d.GroupID = &gid
+
+	plan, err := service.PlanCatalogSync("s", []*entity.Permission{p}, []entity.Definition{d}, now)
+	require.NoError(t, err)
+	assert.Equal(t, 1, plan.Updated)
+	assert.Equal(t, &gid, p.GroupID)
+	assert.Equal(t, []string{"company"}, p.ScopeTypes)
+	assert.True(t, p.AppliesTo("company"))
+	assert.False(t, p.AppliesTo("branch"))
+}
+
+func TestPlanCatalogSync_ManualUntouched(t *testing.T) {
+	now := time.Now()
+	manual := entity.NewManualPermission("s", def(t, "custom.export", "Export"), now)
+	synced := entity.NewPermission("s", def(t, "a.read", "A"), now)
+
+	plan, err := service.PlanCatalogSync("s", []*entity.Permission{manual, synced}, nil, now)
+	require.NoError(t, err)
+	assert.Equal(t, 1, plan.Deprecated, "hanya permission sync yang di-deprecate")
+	assert.True(t, manual.IsActive())
+
+	_, err = service.PlanCatalogSync("s", []*entity.Permission{manual}, []entity.Definition{def(t, "custom.export", "X")}, now)
+	testhelper.AssertDomainError(t, err, constant.CodePermissionSourceConflict)
+}
+
+func TestResolveManualRefs(t *testing.T) {
+	now := time.Now()
+	g := entity.NewGroup("s", groupDef(t, "leave", "Cuti", 0), now)
+	st := entity.NewScopeType("s", scopeDef(t, "department", "", 0), now)
+	leave, unknown := "leave", "nope"
+
+	d, err := def(t, "x.read", "X").WithCatalogRefs(&leave, []string{"department", "company"})
+	require.NoError(t, err)
+	d, err = service.ResolveManualRefs(d, []*entity.Group{g}, []*entity.ScopeType{st})
+	require.NoError(t, err)
+	require.NotNil(t, d.GroupID)
+	assert.Equal(t, g.ID, *d.GroupID)
+
+	d, _ = def(t, "x.read", "X").WithCatalogRefs(&unknown, nil)
+	_, err = service.ResolveManualRefs(d, []*entity.Group{g}, nil)
+	testhelper.AssertDomainError(t, err, constant.CodeGroupUnknown)
+
+	d, _ = def(t, "x.read", "X").WithCatalogRefs(nil, []string{"project"})
+	_, err = service.ResolveManualRefs(d, nil, []*entity.ScopeType{st})
+	testhelper.AssertDomainError(t, err, constant.CodeScopeTypeUnknown)
+}

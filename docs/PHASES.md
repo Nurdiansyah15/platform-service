@@ -412,11 +412,15 @@ Pola sama: usecase + handler + handler test wajib.
 - [x] `GET/PATCH/DELETE /roles/{roleId}` (hapus = soft delete + hapus assignment)
 - [x] `GET/PATCH/DELETE /companies/{companyId}/roles/{roleId}` (+ `GET .../members`: pemegang role)
 - [ ] `GET /companies/{companyId}/roles/{roleId}/permissions` (sementara: `GET /roles/{roleId}/permissions`)
-- [ ] `POST /solutions/{solutionId}/permissions`, `GET/PATCH /permissions/{permissionId}`
+- [x] `POST /solutions/{solutionId}/permissions`, `GET/PATCH /permissions/{permissionId}` (2026-11-24) — permission `manual` (platform admin), kolom `source` sync|manual; sync tidak menyentuh permission manual dan ditolak 409 bila memuat code-nya; permission sync read-only (PATCH 409); hapus = `status: deprecated`. Test: `catalog_sync_handler_test.go`, `catalog_sync_test.go`
 - [ ] `PUT /solutions/{solutionId}/roles/sync`, `GET /solutions/{solutionId}/catalog-version`
 - [x] `GET /companies/{companyId}/users/{userId}/role-assignments`, `DELETE /role-assignments/{assignmentId}`
 - [ ] `PATCH /role-assignments/{assignmentId}` (sementara: cabut lalu assign ulang)
 - [x] `GET /companies/{companyId}/users/{userId}/effective-permissions` (`solution_id` wajib untuk token user)
+- [x] Scope custom per solution & permission group (2026-11-24): sync katalog menerima `scope_types` (parent `company`/`branch`) dan `groups` (opsional), permission bisa membatasi `scopes`; assignment menerima scope custom (`scope_id` string bebas, `parent_id`, `scope_label`); check menerima `parent_id`
+  - [x] `GET /solutions/{solutionId}/permission-groups`
+  - [x] `GET /solutions/{solutionId}/scope-types` (company & branch built-in + custom)
+  - Test: `catalog_sync_handler_test.go` (grup/scope, payload lama, validasi), `authz_handler_test.go` (assign & check scope custom, restriksi scope permission, scope type deprecated), `permission_evaluator_test.go`, `catalog_sync_test.go`
 
 ### L7 — Service Auth & Keys
 - [ ] `GET /.well-known/openid-configuration`

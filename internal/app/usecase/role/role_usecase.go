@@ -449,7 +449,10 @@ func (uc *RoleUseCase) permissions(ctx context.Context, roleID string) ([]dto.Ro
 	}
 	out := make([]dto.RolePermissionResponse, 0, len(items))
 	for _, it := range items {
-		out = append(out, dto.RolePermissionResponse{ID: it.ID, Code: it.Code, Name: it.Name, Status: it.Status})
+		out = append(out, dto.RolePermissionResponse{
+			ID: it.ID, Code: it.Code, Name: it.Name, Description: it.Description, Status: it.Status,
+			Group: it.Group, ScopeTypes: it.ScopeTypes,
+		})
 	}
 	return out, nil
 }

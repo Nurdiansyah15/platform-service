@@ -34,17 +34,17 @@ func TestPostgresRoleAssignmentRepository(t *testing.T) {
 
 		repo := persistence.NewPostgresRoleAssignmentRepository(testDB)
 		scope := valueobject.Scope{Type: valueobject.ScopeCompany, ID: tn.ID}
-		require.NoError(t, repo.Create(ctx, entity.NewRoleAssignment(tn.ID, member.ID, role.ID, scope, time.Now())))
+		require.NoError(t, repo.Create(ctx, entity.NewRoleAssignment(tn.ID, member.ID, role.ID, entity.CheckScope{Scope: scope, CompanyID: tn.ID}, nil, time.Now())))
 
 		_, err = tx.ExecContext(ctx, `SAVEPOINT dup`)
 		require.NoError(t, err)
-		testhelper.AssertDomainError(t, repo.Create(ctx, entity.NewRoleAssignment(tn.ID, member.ID, role.ID, scope, time.Now())),
+		testhelper.AssertDomainError(t, repo.Create(ctx, entity.NewRoleAssignment(tn.ID, member.ID, role.ID, entity.CheckScope{Scope: scope, CompanyID: tn.ID}, nil, time.Now())),
 			constant.CodeAssignmentDuplicate)
 		_, err = tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT dup`)
 		require.NoError(t, err)
 
 		// FK (company_id, user_id) → company_members: bukan member ditolak DB.
-		testhelper.AssertDomainError(t, repo.Create(ctx, entity.NewRoleAssignment(tn.ID, uuid.NewString(), role.ID, scope, time.Now())),
+		testhelper.AssertDomainError(t, repo.Create(ctx, entity.NewRoleAssignment(tn.ID, uuid.NewString(), role.ID, entity.CheckScope{Scope: scope, CompanyID: tn.ID}, nil, time.Now())),
 			constant.CodeAssignmentNotMember)
 	})
 }

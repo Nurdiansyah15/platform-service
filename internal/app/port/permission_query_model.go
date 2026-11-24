@@ -10,6 +10,8 @@ type PermissionListReadQuery struct {
 	SolutionID string
 	Status     *string
 	Search     *string // code / name
+	Group      *string // code group; "-" = tanpa grup
+	Source     *string // sync | manual
 	dto.PaginationParams
 }
 

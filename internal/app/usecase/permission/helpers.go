@@ -3,6 +3,9 @@ package permission
 import (
 	"errors"
 
+	"platform-service/internal/app/dto"
+	"platform-service/internal/domain/permission/entity"
+
 	"platform-service/internal/app/apperror"
 	"platform-service/internal/app/principal"
 	domainerr "platform-service/internal/domain/errors"
@@ -20,8 +23,14 @@ func mapPermissionDomainError(err error) error {
 		return apperror.NotFound(string(de.Code))
 	case constant.CodeCatalogSyncForbidden:
 		return apperror.Forbidden(string(de.Code))
+	case constant.CodePermissionCodeTaken, constant.CodePermissionSourceConflict, constant.CodePermissionSyncManaged:
+		return apperror.Conflict(string(de.Code), err)
 	case constant.CodePermissionCodeInvalid, constant.CodePermissionNameInvalid, constant.CodePermissionCodeDuplicate,
-		constant.CodeCatalogVersionInvalid:
+		constant.CodeCatalogVersionInvalid,
+		constant.CodeGroupCodeInvalid, constant.CodeGroupNameInvalid, constant.CodeGroupDuplicate, constant.CodeGroupUnknown,
+		constant.CodeScopeTypeCodeInvalid, constant.CodeScopeTypeReserved, constant.CodeScopeTypeNameInvalid,
+		constant.CodeScopeTypeParentInvalid, constant.CodeScopeTypeDuplicate, constant.CodeScopeTypeUnknown,
+		constant.CodePermissionStatusInvalid:
 		return apperror.Unprocessable(string(de.Code), nil, err)
 	default:
 		return apperror.Internal(string(de.Code), err)
@@ -36,4 +45,44 @@ func isPlatformAdmin(p *principal.Principal) bool {
 // (scope catalog:sync dicek di route).
 func canSync(p *principal.Principal, solutionID string) bool {
 	return isPlatformAdmin(p) || (p.IsService() && p.SolutionID == solutionID)
+}
+
+func isNotFound(err error) bool {
+	var de *domainerr.DomainError
+	return errors.As(err, &de) && de.Code == solutionconstant.CodeSolutionNotFound
+}
+
+// toPermissionResponse memetakan permission (domain) ke DTO, dengan ringkasan group-nya.
+func toPermissionResponse(p *entity.Permission, groups []*entity.Group) *dto.PermissionResponse {
+	resp := &dto.PermissionResponse{
+		ID: p.ID, SolutionID: p.SolutionID, Code: p.Code.Value(), Name: p.Name, Description: p.Description,
+		Status: p.Status.String(), Source: p.Source.String(), ScopeTypes: p.ScopeTypes,
+		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+	}
+	if resp.ScopeTypes == nil {
+		resp.ScopeTypes = []string{}
+	}
+	if p.GroupID != nil {
+		for _, g := range groups {
+			if g.ID == *p.GroupID {
+				resp.Group = &dto.PermissionGroupRef{Code: g.Code.Value(), Name: g.Name, SortOrder: g.SortOrder}
+				break
+			}
+		}
+	}
+	return resp
+}
+
+// currentGroupCode — code group permission saat ini (nil bila tanpa grup).
+func currentGroupCode(p *entity.Permission, groups []*entity.Group) *string {
+	if p.GroupID == nil {
+		return nil
+	}
+	for _, g := range groups {
+		if g.ID == *p.GroupID {
+			c := g.Code.Value()
+			return &c
+		}
+	}
+	return nil
 }

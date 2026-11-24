@@ -7,12 +7,13 @@ import (
 	domainerr "platform-service/internal/domain/errors"
 	"platform-service/internal/domain/permission/constant"
 	"platform-service/internal/domain/permission/entity"
+	"platform-service/internal/domain/permission/valueobject"
 )
 
-// SyncPlan adalah hasil perencanaan sync katalog permission.
-type SyncPlan struct {
-	// Changed berisi permission yang harus disimpan (baru, berubah, diaktifkan ulang, di-deprecate).
-	Changed     []*entity.Permission
+// SyncPlan adalah hasil perencanaan sync satu jenis entri katalog (permission, group, scope type).
+type SyncPlan[T any] struct {
+	// Changed berisi entri yang harus disimpan (baru, berubah, diaktifkan ulang, di-deprecate).
+	Changed     []T
 	Created     int
 	Updated     int
 	Reactivated int
@@ -20,36 +21,43 @@ type SyncPlan struct {
 	Unchanged   int
 }
 
-// PlanCatalogSync membandingkan permission yang ada dengan katalog baru (spec §3.20):
+// catalogEntry — entri katalog tersimpan yang bisa diselaraskan dengan definisi D.
+type catalogEntry[D any] interface {
+	Apply(d D, now time.Time) (changed, reactivated bool)
+	Deprecate(now time.Time) bool
+}
+
+// planSync membandingkan entri tersimpan dengan katalog baru (spec §3.20):
 //   - code baru → dibuat active
-//   - code yang ada → nama/deskripsi diperbarui; deprecated → active lagi
+//   - code yang ada → atribut diperbarui; deprecated → active lagi
 //   - code yang tidak ada di katalog → deprecated (tidak dihapus)
-//
-// Code ganda di katalog → CodePermissionCodeDuplicate.
-func PlanCatalogSync(solutionID string, existing []*entity.Permission, catalog []entity.Definition, now time.Time) (*SyncPlan, error) {
-	incoming := make(map[string]entity.Definition, len(catalog))
+func planSync[T catalogEntry[D], D any](
+	existing []T, catalog []D, codeOf func(T) string, defCode func(D) string,
+	create func(D) T, dup domainerr.Code, now time.Time,
+) (*SyncPlan[T], error) {
+	incoming := make(map[string]D, len(catalog))
 	for _, d := range catalog {
-		if _, dup := incoming[d.Code.Value()]; dup {
-			return nil, domainerr.New(constant.CodePermissionCodeDuplicate)
+		if _, ok := incoming[defCode(d)]; ok {
+			return nil, domainerr.New(dup)
 		}
-		incoming[d.Code.Value()] = d
+		incoming[defCode(d)] = d
 	}
 
-	plan := &SyncPlan{}
+	plan := &SyncPlan[T]{}
 	seen := make(map[string]bool, len(existing))
-	for _, p := range existing {
-		seen[p.Code.Value()] = true
-		d, ok := incoming[p.Code.Value()]
+	for _, e := range existing {
+		seen[codeOf(e)] = true
+		d, ok := incoming[codeOf(e)]
 		if !ok {
-			if p.Deprecate(now) {
+			if e.Deprecate(now) {
 				plan.Deprecated++
-				plan.Changed = append(plan.Changed, p)
+				plan.Changed = append(plan.Changed, e)
 			} else {
 				plan.Unchanged++
 			}
 			continue
 		}
-		changed, reactivated := p.Apply(d, now)
+		changed, reactivated := e.Apply(d, now)
 		switch {
 		case reactivated:
 			plan.Reactivated++
@@ -59,16 +67,113 @@ func PlanCatalogSync(solutionID string, existing []*entity.Permission, catalog [
 			plan.Unchanged++
 		}
 		if changed {
-			plan.Changed = append(plan.Changed, p)
+			plan.Changed = append(plan.Changed, e)
 		}
 	}
 
 	for _, d := range catalog {
-		if seen[d.Code.Value()] {
+		if seen[defCode(d)] {
 			continue
 		}
 		plan.Created++
-		plan.Changed = append(plan.Changed, entity.NewPermission(solutionID, d, now))
+		plan.Changed = append(plan.Changed, create(d))
 	}
 	return plan, nil
+}
+
+// PlanCatalogSync merencanakan sync permission. Code ganda → CodePermissionCodeDuplicate.
+// GroupID pada definisi harus sudah di-resolve oleh pemanggil. Hanya permission ber-source
+// sync yang dikelola; permission manual tidak disentuh, dan katalog yang memuat code
+// permission manual ditolak (CodePermissionSourceConflict).
+func PlanCatalogSync(solutionID string, existing []*entity.Permission, catalog []entity.Definition, now time.Time) (*SyncPlan[*entity.Permission], error) {
+	manual := map[string]bool{}
+	synced := make([]*entity.Permission, 0, len(existing))
+	for _, p := range existing {
+		if p.IsManual() {
+			manual[p.Code.Value()] = true
+		} else {
+			synced = append(synced, p)
+		}
+	}
+	for _, d := range catalog {
+		if manual[d.Code.Value()] {
+			return nil, domainerr.New(constant.CodePermissionSourceConflict)
+		}
+	}
+	return planSync(synced, catalog,
+		func(p *entity.Permission) string { return p.Code.Value() },
+		func(d entity.Definition) string { return d.Code.Value() },
+		func(d entity.Definition) *entity.Permission { return entity.NewPermission(solutionID, d, now) },
+		constant.CodePermissionCodeDuplicate, now)
+}
+
+// PlanGroupSync merencanakan sync permission group. Code ganda → CodeGroupDuplicate.
+func PlanGroupSync(solutionID string, existing []*entity.Group, catalog []entity.GroupDefinition, now time.Time) (*SyncPlan[*entity.Group], error) {
+	return planSync(existing, catalog,
+		func(g *entity.Group) string { return g.Code.Value() },
+		func(d entity.GroupDefinition) string { return d.Code.Value() },
+		func(d entity.GroupDefinition) *entity.Group { return entity.NewGroup(solutionID, d, now) },
+		constant.CodeGroupDuplicate, now)
+}
+
+// PlanScopeTypeSync merencanakan sync scope type custom. Code ganda → CodeScopeTypeDuplicate.
+func PlanScopeTypeSync(solutionID string, existing []*entity.ScopeType, catalog []entity.ScopeTypeDefinition, now time.Time) (*SyncPlan[*entity.ScopeType], error) {
+	return planSync(existing, catalog,
+		func(s *entity.ScopeType) string { return s.Code.Value() },
+		func(d entity.ScopeTypeDefinition) string { return d.Code.Value() },
+		func(d entity.ScopeTypeDefinition) *entity.ScopeType { return entity.NewScopeType(solutionID, d, now) },
+		constant.CodeScopeTypeDuplicate, now)
+}
+
+// ValidateCatalogRefs memastikan setiap permission hanya merujuk group dan scope type yang
+// ada di katalog yang sama (scope built-in company/branch selalu boleh).
+func ValidateCatalogRefs(perms []entity.Definition, groups []entity.GroupDefinition, scopeTypes []entity.ScopeTypeDefinition) error {
+	groupSet := make(map[string]bool, len(groups))
+	for _, g := range groups {
+		groupSet[g.Code.Value()] = true
+	}
+	scopeSet := make(map[string]bool, len(scopeTypes))
+	for _, s := range scopeTypes {
+		scopeSet[s.Code.Value()] = true
+	}
+	for _, p := range perms {
+		if p.GroupCode != "" && !groupSet[p.GroupCode] {
+			return domainerr.New(constant.CodeGroupUnknown)
+		}
+		for _, s := range p.Scopes {
+			if !valueobject.IsBuiltinScopeType(s) && !scopeSet[s] {
+				return domainerr.New(constant.CodeScopeTypeUnknown)
+			}
+		}
+	}
+	return nil
+}
+
+// ResolveManualRefs memvalidasi referensi group & scope permission manual terhadap katalog
+// solution yang tersimpan dan mengisi GroupID. Group / scope type deprecated tetap boleh
+// dirujuk (agar permission yang sudah merujuknya tetap bisa diedit).
+func ResolveManualRefs(d entity.Definition, groups []*entity.Group, scopeTypes []*entity.ScopeType) (entity.Definition, error) {
+	d.GroupID = nil
+	if d.GroupCode != "" {
+		for _, g := range groups {
+			if g.Code.Value() == d.GroupCode {
+				id := g.ID
+				d.GroupID = &id
+				break
+			}
+		}
+		if d.GroupID == nil {
+			return entity.Definition{}, domainerr.New(constant.CodeGroupUnknown)
+		}
+	}
+	known := make(map[string]bool, len(scopeTypes))
+	for _, s := range scopeTypes {
+		known[s.Code.Value()] = true
+	}
+	for _, s := range d.Scopes {
+		if !valueobject.IsBuiltinScopeType(s) && !known[s] {
+			return entity.Definition{}, domainerr.New(constant.CodeScopeTypeUnknown)
+		}
+	}
+	return d, nil
 }

@@ -2,6 +2,7 @@ package permission
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"platform-service/internal/app/dto"
@@ -20,6 +21,8 @@ import (
 type PermissionDeps struct {
 	Tx          port.Transactor
 	Permissions permrepo.PermissionRepository
+	Groups      permrepo.PermissionGroupRepository
+	ScopeTypes  permrepo.ScopeTypeRepository
 	Solutions   solutionrepo.SolutionRepository
 	Query       port.PermissionQueryReadModel
 }
@@ -33,9 +36,10 @@ func NewPermissionUseCase(deps PermissionDeps) *PermissionUseCase {
 	return &PermissionUseCase{deps: deps, now: time.Now}
 }
 
-// Sync menyelaraskan katalog permission solution (spec §3.20). Idempotent: versi yang
-// sama dengan versi tersimpan tidak mengubah apa pun. Permission yang hilang dari katalog
-// menjadi deprecated. Baris solution dikunci selama sync agar deploy paralel tidak bentrok.
+// Sync menyelaraskan katalog permission solution (spec §3.20) beserta scope type custom dan
+// permission group (keduanya opsional). Idempotent: versi yang sama dengan versi tersimpan
+// tidak mengubah apa pun. Entri yang hilang dari katalog menjadi deprecated. Baris solution
+// dikunci selama sync agar deploy paralel tidak bentrok.
 //
 // Required — auth: service milik solution (scope catalog:sync) atau user platform admin | scope: catalog:sync
 func (uc *PermissionUseCase) Sync(ctx context.Context, actor *principal.Principal, solutionID string, req dto.SyncPermissionsRequest) (*dto.SyncPermissionsResponse, error) {
@@ -46,13 +50,35 @@ func (uc *PermissionUseCase) Sync(ctx context.Context, actor *principal.Principa
 	if err != nil {
 		return nil, mapPermissionDomainError(err)
 	}
+	scopeTypes := make([]entity.ScopeTypeDefinition, 0, len(req.ScopeTypes))
+	for i, st := range req.ScopeTypes {
+		d, err := entity.NewScopeTypeDefinition(st.Code, st.Name, st.Description, st.Parent, i)
+		if err != nil {
+			return nil, mapPermissionDomainError(err)
+		}
+		scopeTypes = append(scopeTypes, d)
+	}
+	groups := make([]entity.GroupDefinition, 0, len(req.Groups))
+	for i, g := range req.Groups {
+		d, err := entity.NewGroupDefinition(g.Code, g.Name, g.Description, i)
+		if err != nil {
+			return nil, mapPermissionDomainError(err)
+		}
+		groups = append(groups, d)
+	}
 	catalog := make([]entity.Definition, 0, len(req.Permissions))
 	for _, p := range req.Permissions {
 		d, err := entity.NewDefinition(p.Code, p.Name, p.Description)
 		if err != nil {
 			return nil, mapPermissionDomainError(err)
 		}
+		if d, err = d.WithCatalogRefs(p.Group, p.Scopes); err != nil {
+			return nil, mapPermissionDomainError(err)
+		}
 		catalog = append(catalog, d)
+	}
+	if err := service.ValidateCatalogRefs(catalog, groups, scopeTypes); err != nil {
+		return nil, mapPermissionDomainError(err)
 	}
 
 	resp := &dto.SyncPermissionsResponse{Version: version.Value()}
@@ -64,11 +90,26 @@ func (uc *PermissionUseCase) Sync(ctx context.Context, actor *principal.Principa
 		if sol.HasPermissionCatalogVersion(version.Value()) {
 			return nil
 		}
+		now := uc.now()
+		if resp.ScopeTypes, err = uc.syncScopeTypes(ctx, solutionID, scopeTypes, now); err != nil {
+			return err
+		}
+		groupIDs, groupCounts, err := uc.syncGroups(ctx, solutionID, groups, now)
+		if err != nil {
+			return err
+		}
+		resp.Groups = groupCounts
+		for i := range catalog {
+			if catalog[i].GroupCode != "" {
+				id := groupIDs[catalog[i].GroupCode]
+				catalog[i].GroupID = &id
+			}
+		}
+
 		existing, err := uc.deps.Permissions.ListBySolution(ctx, solutionID)
 		if err != nil {
 			return err
 		}
-		now := uc.now()
 		plan, err := service.PlanCatalogSync(solutionID, existing, catalog, now)
 		if err != nil {
 			return err
@@ -97,18 +138,254 @@ func (uc *PermissionUseCase) Sync(ctx context.Context, actor *principal.Principa
 //
 // Required — auth: user / service (token valid apa pun) | scope: -
 func (uc *PermissionUseCase) List(ctx context.Context, actor *principal.Principal, solutionID string, req dto.ListPermissionQuery) ([]dto.PermissionResponse, dto.Meta, error) {
-	sol, err := uc.deps.Solutions.FindByID(ctx, solutionID)
-	if err != nil {
+	if err := uc.ensureSolutionVisible(ctx, actor, solutionID); err != nil {
 		return nil, dto.Meta{}, mapPermissionDomainError(err)
 	}
-	if !sol.IsActive() && !isPlatformAdmin(actor) {
-		return nil, dto.Meta{}, mapPermissionDomainError(domainerr.New(solutionconstant.CodeSolutionNotFound))
-	}
 	items, meta, err := uc.deps.Query.List(ctx, port.PermissionListReadQuery{
-		SolutionID: solutionID, Status: req.Status, Search: req.Search, PaginationParams: req.PaginationParams,
+		SolutionID: solutionID, Status: req.Status, Search: req.Search, Group: req.Group, Source: req.Source,
+		PaginationParams: req.PaginationParams,
 	})
 	if err != nil {
 		return nil, dto.Meta{}, mapPermissionDomainError(err)
 	}
 	return items, meta, nil
+}
+
+func (uc *PermissionUseCase) syncScopeTypes(ctx context.Context, solutionID string, catalog []entity.ScopeTypeDefinition, now time.Time) (dto.SyncCounts, error) {
+	existing, err := uc.deps.ScopeTypes.ListBySolution(ctx, solutionID)
+	if err != nil {
+		return dto.SyncCounts{}, err
+	}
+	plan, err := service.PlanScopeTypeSync(solutionID, existing, catalog, now)
+	if err != nil {
+		return dto.SyncCounts{}, err
+	}
+	for _, st := range plan.Changed {
+		if err := uc.deps.ScopeTypes.Save(ctx, st); err != nil {
+			return dto.SyncCounts{}, err
+		}
+	}
+	return countsOf(plan), nil
+}
+
+// syncGroups menyimpan group dan mengembalikan peta code → id (semua group solution).
+func (uc *PermissionUseCase) syncGroups(ctx context.Context, solutionID string, catalog []entity.GroupDefinition, now time.Time) (map[string]string, dto.SyncCounts, error) {
+	existing, err := uc.deps.Groups.ListBySolution(ctx, solutionID)
+	if err != nil {
+		return nil, dto.SyncCounts{}, err
+	}
+	plan, err := service.PlanGroupSync(solutionID, existing, catalog, now)
+	if err != nil {
+		return nil, dto.SyncCounts{}, err
+	}
+	ids := make(map[string]string, len(existing)+plan.Created)
+	for _, g := range existing {
+		ids[g.Code.Value()] = g.ID
+	}
+	for _, g := range plan.Changed {
+		if err := uc.deps.Groups.Save(ctx, g); err != nil {
+			return nil, dto.SyncCounts{}, err
+		}
+		ids[g.Code.Value()] = g.ID
+	}
+	return ids, countsOf(plan), nil
+}
+
+func countsOf[T any](p *service.SyncPlan[T]) dto.SyncCounts {
+	return dto.SyncCounts{
+		Created: p.Created, Updated: p.Updated, Reactivated: p.Reactivated, Deprecated: p.Deprecated, Unchanged: p.Unchanged,
+	}
+}
+
+// ListGroups menampilkan permission group solution (urut tampil).
+//
+// Required — auth: user / service (token valid apa pun) | scope: -
+func (uc *PermissionUseCase) ListGroups(ctx context.Context, actor *principal.Principal, solutionID string, req dto.ListCatalogQuery) ([]dto.PermissionGroupResponse, error) {
+	if err := uc.ensureSolutionVisible(ctx, actor, solutionID); err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	groups, err := uc.deps.Groups.ListBySolution(ctx, solutionID)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	out := make([]dto.PermissionGroupResponse, 0, len(groups))
+	for _, g := range groups {
+		if req.Status != nil && g.Status.String() != *req.Status {
+			continue
+		}
+		out = append(out, dto.PermissionGroupResponse{
+			Code: g.Code.Value(), Name: g.Name, Description: g.Description, SortOrder: g.SortOrder, Status: g.Status.String(),
+		})
+	}
+	return out, nil
+}
+
+// ListScopeTypes menampilkan scope type yang bisa dipakai assignment role solution:
+// company & branch (built-in) di depan, lalu scope type custom (urut tampil).
+//
+// Required — auth: user / service (token valid apa pun) | scope: -
+func (uc *PermissionUseCase) ListScopeTypes(ctx context.Context, actor *principal.Principal, solutionID string, req dto.ListCatalogQuery) ([]dto.ScopeTypeResponse, error) {
+	if err := uc.ensureSolutionVisible(ctx, actor, solutionID); err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	custom, err := uc.deps.ScopeTypes.ListBySolution(ctx, solutionID)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	active := valueobject.StatusActive.String()
+	out := make([]dto.ScopeTypeResponse, 0, len(custom)+2)
+	if req.Status == nil || *req.Status == active {
+		out = append(out,
+			dto.ScopeTypeResponse{Code: constant.ScopeTypeCompany, Name: "Company", Builtin: true, Status: active},
+			dto.ScopeTypeResponse{Code: constant.ScopeTypeBranch, Name: "Branch", Parent: constant.ScopeTypeCompany, Builtin: true, Status: active},
+		)
+	}
+	for _, st := range custom {
+		if req.Status != nil && st.Status.String() != *req.Status {
+			continue
+		}
+		out = append(out, dto.ScopeTypeResponse{
+			Code: st.Code.Value(), Name: st.Name, Description: st.Description, Parent: st.Parent.String(),
+			SortOrder: st.SortOrder, Status: st.Status.String(),
+		})
+	}
+	return out, nil
+}
+
+// ensureSolutionVisible — solution harus ada; solution inactive disembunyikan dari non-admin.
+func (uc *PermissionUseCase) ensureSolutionVisible(ctx context.Context, actor *principal.Principal, solutionID string) error {
+	sol, err := uc.deps.Solutions.FindByID(ctx, solutionID)
+	if err != nil {
+		return err
+	}
+	if !sol.IsActive() && !isPlatformAdmin(actor) {
+		return domainerr.New(solutionconstant.CodeSolutionNotFound)
+	}
+	return nil
+}
+
+// Create membuat permission manual. Code yang sudah dipakai (manual atau hasil sync) → 409.
+// Permission manual tidak pernah di-deprecate oleh sync; sync yang memuat code-nya ditolak.
+//
+// Required — auth: user (platform admin) | scope: -
+func (uc *PermissionUseCase) Create(ctx context.Context, solutionID string, req dto.CreatePermissionRequest) (*dto.PermissionResponse, error) {
+	if _, err := uc.deps.Solutions.FindByID(ctx, solutionID); err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	d, err := entity.NewDefinition(req.Code, req.Name, req.Description)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	if d, err = d.WithCatalogRefs(req.Group, req.Scopes); err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	groups, scopeTypes, err := uc.catalogRefs(ctx, solutionID)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	if d, err = service.ResolveManualRefs(d, groups, scopeTypes); err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	p := entity.NewManualPermission(solutionID, d, uc.now())
+	if err := uc.deps.Permissions.Save(ctx, p); err != nil {
+		var de *domainerr.DomainError
+		if errors.As(err, &de) && de.Code == constant.CodePermissionCodeDuplicate {
+			err = domainerr.New(constant.CodePermissionCodeTaken)
+		}
+		return nil, mapPermissionDomainError(err)
+	}
+	return toPermissionResponse(p, groups), nil
+}
+
+// Get menampilkan satu permission. Solution inactive disembunyikan dari non-admin.
+//
+// Required — auth: user / service (token valid apa pun) | scope: -
+func (uc *PermissionUseCase) Get(ctx context.Context, actor *principal.Principal, permissionID string) (*dto.PermissionResponse, error) {
+	p, err := uc.deps.Permissions.FindByID(ctx, permissionID)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	if err := uc.ensureSolutionVisible(ctx, actor, p.SolutionID); err != nil {
+		if isNotFound(err) {
+			err = domainerr.New(constant.CodePermissionNotFound)
+		}
+		return nil, mapPermissionDomainError(err)
+	}
+	groups, err := uc.deps.Groups.ListBySolution(ctx, p.SolutionID)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	return toPermissionResponse(p, groups), nil
+}
+
+// Update mengubah permission manual (nama, deskripsi, grup, scope, status). Permission hasil
+// sync read-only (409) karena dikelola kode solution.
+//
+// Required — auth: user (platform admin) | scope: -
+func (uc *PermissionUseCase) Update(ctx context.Context, permissionID string, req dto.UpdatePermissionRequest) (*dto.PermissionResponse, error) {
+	p, err := uc.deps.Permissions.FindByID(ctx, permissionID)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	if err := p.EnsureManual(); err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	groups, scopeTypes, err := uc.catalogRefs(ctx, p.SolutionID)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+
+	name, description := p.Name, p.Description
+	if req.Name != nil {
+		name = *req.Name
+	}
+	if req.Description != nil {
+		description = req.Description
+	}
+	d, err := entity.NewDefinition(p.Code.Value(), name, description)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	group := currentGroupCode(p, groups)
+	if req.Group != nil {
+		group = req.Group
+	}
+	scopes := p.ScopeTypes
+	if req.Scopes != nil {
+		scopes = *req.Scopes
+	}
+	if d, err = d.WithCatalogRefs(group, scopes); err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	if d, err = service.ResolveManualRefs(d, groups, scopeTypes); err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+
+	now := uc.now()
+	changed := p.Edit(d, now)
+	if req.Status != nil {
+		st, err := valueobject.NewPermissionStatus(*req.Status)
+		if err != nil {
+			return nil, mapPermissionDomainError(err)
+		}
+		changed = p.SetStatus(st, now) || changed
+	}
+	if changed {
+		if err := uc.deps.Permissions.Save(ctx, p); err != nil {
+			return nil, mapPermissionDomainError(err)
+		}
+	}
+	return toPermissionResponse(p, groups), nil
+}
+
+func (uc *PermissionUseCase) catalogRefs(ctx context.Context, solutionID string) ([]*entity.Group, []*entity.ScopeType, error) {
+	groups, err := uc.deps.Groups.ListBySolution(ctx, solutionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	scopeTypes, err := uc.deps.ScopeTypes.ListBySolution(ctx, solutionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return groups, scopeTypes, nil
 }

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"platform-service/internal/domain/authz/constant"
 	"platform-service/internal/domain/authz/entity"
 	"platform-service/internal/domain/authz/valueobject"
@@ -22,9 +24,9 @@ func NewPostgresRoleAssignmentRepository(db *sql.DB) *PostgresRoleAssignmentRepo
 
 func (r *PostgresRoleAssignmentRepository) Create(ctx context.Context, a *entity.RoleAssignment) error {
 	_, err := execFromContext(ctx, r.db).ExecContext(ctx, `
-		INSERT INTO user_role_assignments (id, company_id, user_id, role_id, scope_type, scope_id, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		a.ID, a.CompanyID, a.UserID, a.RoleID, a.Scope.Type.String(), a.Scope.ID, a.CreatedAt)
+		INSERT INTO user_role_assignments (id, company_id, user_id, role_id, scope_type, scope_id, scope_label, scope_parent_id, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		a.ID, a.CompanyID, a.UserID, a.RoleID, a.Scope.Type.String(), a.Scope.ID, a.ScopeLabel, a.ScopeParentID, a.CreatedAt)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return domainerr.New(constant.CodeAssignmentDuplicate)
@@ -43,12 +45,13 @@ func (r *PostgresRoleAssignmentRepository) FindByID(ctx context.Context, id stri
 		scopeType string
 	)
 	err := execFromContext(ctx, r.db).QueryRowContext(ctx, `
-		SELECT ura.id, ura.company_id, ura.user_id, ura.role_id, ura.scope_type, ura.scope_id, ura.created_at,
-			r.solution_id, r.code
+		SELECT ura.id, ura.company_id, ura.user_id, ura.role_id, ura.scope_type, ura.scope_id, ura.scope_label,
+			ura.scope_parent_id, ura.created_at, r.solution_id, r.code
 		FROM user_role_assignments ura
 		JOIN roles r ON r.id = ura.role_id
 		WHERE ura.id = $1`, id,
-	).Scan(&a.ID, &a.CompanyID, &a.UserID, &a.RoleID, &scopeType, &a.Scope.ID, &a.CreatedAt, &a.Role.SolutionID, &a.Role.Code)
+	).Scan(&a.ID, &a.CompanyID, &a.UserID, &a.RoleID, &scopeType, &a.Scope.ID, &a.ScopeLabel, &a.ScopeParentID,
+		&a.CreatedAt, &a.Role.SolutionID, &a.Role.Code)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domainerr.New(constant.CodeAssignmentNotFound)
@@ -96,18 +99,19 @@ func (r *PostgresRoleAssignmentRepository) DeleteByMember(ctx context.Context, c
 
 // PostgresGrantReader implements repository.GrantReader.
 type PostgresGrantReader struct {
-	db *sql.DB
+	db      *sql.DB
+	typeMap *pgtype.Map
 }
 
 func NewPostgresGrantReader(db *sql.DB) *PostgresGrantReader {
-	return &PostgresGrantReader{db: db}
+	return &PostgresGrantReader{db: db, typeMap: pgtype.NewMap()}
 }
 
 // Grants: assignment user di company → role solution (belum dihapus; global atau custom milik
 // company) → permission role (termasuk deprecated yang masih terpasang).
 func (r *PostgresGrantReader) Grants(ctx context.Context, companyID, userID, solutionID string) ([]entity.Grant, error) {
 	rows, err := execFromContext(ctx, r.db).QueryContext(ctx, `
-		SELECT r.code, p.code, ura.scope_type, ura.scope_id
+		SELECT r.code, p.code, p.scope_types, ura.scope_type, ura.scope_id
 		FROM user_role_assignments ura
 		JOIN roles r ON r.id = ura.role_id
 		JOIN role_permissions rp ON rp.role_id = r.id
@@ -126,7 +130,7 @@ func (r *PostgresGrantReader) Grants(ctx context.Context, companyID, userID, sol
 			g         entity.Grant
 			scopeType string
 		)
-		if err := rows.Scan(&g.RoleCode, &g.PermissionCode, &scopeType, &g.Scope.ID); err != nil {
+		if err := rows.Scan(&g.RoleCode, &g.PermissionCode, r.typeMap.SQLScanner(&g.PermissionScopes), &scopeType, &g.Scope.ID); err != nil {
 			return nil, domainerr.Wrap(constant.CodeAuthzQueryFailed, err)
 		}
 		g.Scope.Type = valueobject.ScopeType(scopeType)

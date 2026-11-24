@@ -52,12 +52,12 @@ func (p *CompanyAdminPolicy) EnsurePermission(ctx context.Context, a orgservice.
 
 // CompanyScope — scope cek level company.
 func CompanyScope(companyID string) entity.CheckScope {
-	return entity.CheckScope{Scope: valueobject.Scope{Type: valueobject.ScopeCompany, ID: companyID}}
+	return entity.CheckScope{Scope: valueobject.Scope{Type: valueobject.ScopeCompany, ID: companyID}, CompanyID: companyID}
 }
 
 // BranchScope — scope cek level branch (assignment level company induknya ikut berlaku).
 func BranchScope(companyID, branchID string) entity.CheckScope {
-	return entity.CheckScope{Scope: valueobject.Scope{Type: valueobject.ScopeBranch, ID: branchID}, BranchCompanyID: companyID}
+	return entity.CheckScope{Scope: valueobject.Scope{Type: valueobject.ScopeBranch, ID: branchID}, CompanyID: companyID}
 }
 
 // EnsurePlatformRoleControl mencegah eskalasi hak: role milik solution console (berisi

@@ -200,7 +200,7 @@ func (uc *CompanyUseCase) grantCompanyAdmin(ctx context.Context, companyID, user
 		return err
 	}
 	scope := authzvo.Scope{Type: authzvo.ScopeCompany, ID: companyID}
-	a := authzentity.NewRoleAssignment(companyID, userID, r.ID, scope, now)
+	a := authzentity.NewRoleAssignment(companyID, userID, r.ID, authzentity.CheckScope{Scope: scope, CompanyID: companyID}, nil, now)
 	if err := uc.deps.RoleAssignments.Create(ctx, a); err != nil {
 		return err
 	}

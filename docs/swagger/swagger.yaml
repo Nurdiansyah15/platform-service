@@ -213,15 +213,16 @@ definitions:
     type: object
   dto.AuthzCheckItem:
     properties:
+      parent_id:
+        type: string
       permission:
         maxLength: 150
         type: string
       scope_id:
+        maxLength: 150
         type: string
       scope_type:
-        enum:
-        - company
-        - branch
+        maxLength: 30
         type: string
     required:
     - permission
@@ -230,15 +231,19 @@ definitions:
     properties:
       company_id:
         type: string
+      parent_id:
+        description: |-
+          ParentID — scope custom ber-parent branch: UUID branch induk (opsional), agar
+          assignment di branch itu ikut berlaku.
+        type: string
       permission:
         maxLength: 150
         type: string
       scope_id:
+        maxLength: 150
         type: string
       scope_type:
-        enum:
-        - company
-        - branch
+        maxLength: 30
         type: string
       user_id:
         type: string
@@ -504,6 +509,31 @@ definitions:
     - code
     - name
     type: object
+  dto.CreatePermissionRequest:
+    properties:
+      code:
+        maxLength: 150
+        type: string
+      description:
+        maxLength: 1000
+        type: string
+      group:
+        description: Group — code permission group solution (opsional).
+        maxLength: 100
+        type: string
+      name:
+        maxLength: 255
+        type: string
+      scopes:
+        description: Scopes — scope type tempat permission berlaku (opsional; kosong
+          = semua scope).
+        items:
+          type: string
+        type: array
+    required:
+    - code
+    - name
+    type: object
   dto.CreatePlanRequest:
     properties:
       billing_cycle:
@@ -534,17 +564,28 @@ definitions:
     type: object
   dto.CreateRoleAssignmentRequest:
     properties:
+      parent_id:
+        description: |-
+          ParentID — scope custom ber-parent branch: UUID branch induk (opsional). Membuat
+          pemegang role.assign di branch itu boleh mengelola assignment ini.
+        type: string
       role_id:
         type: string
       scope_id:
-        description: ScopeID — wajib untuk company / branch; untuk company boleh kosong
-          (= company itu sendiri).
+        description: |-
+          ScopeID — company boleh kosong (= company itu sendiri); branch = UUID branch;
+          scope custom = id milik solution (string bebas, wajib).
+        maxLength: 150
+        type: string
+      scope_label:
+        description: ScopeLabel — nama tampilan scope custom (opsional; diabaikan
+          untuk company/branch).
+        maxLength: 255
         type: string
       scope_type:
-        description: ScopeType — company (default) | branch.
-        enum:
-        - company
-        - branch
+        description: ScopeType — company (default) | branch | scope type custom solution
+          role (GET /solutions/{id}/scope-types).
+        maxLength: 30
         type: string
     required:
     - role_id
@@ -691,8 +732,18 @@ definitions:
         items:
           $ref: '#/definitions/dto.EffectiveGrantResponse'
         type: array
+      group:
+        $ref: '#/definitions/dto.PermissionGroupRef'
+      name:
+        description: Name & Group — info tampilan dari katalog (Name = code bila tidak
+          ditemukan).
+        type: string
       permission:
         type: string
+      scope_types:
+        items:
+          type: string
+        type: array
     type: object
   dto.EntitlementResponse:
     properties:
@@ -873,12 +924,58 @@ definitions:
         type: string
       description:
         type: string
+      group:
+        description: Group — code group di `groups` (opsional).
+        maxLength: 100
+        type: string
+      name:
+        maxLength: 255
+        type: string
+      scopes:
+        description: Scopes — scope type tempat permission berlaku (opsional; kosong
+          = semua scope).
+        items:
+          type: string
+        type: array
+    required:
+    - code
+    - name
+    type: object
+  dto.PermissionGroupDefinition:
+    properties:
+      code:
+        maxLength: 100
+        type: string
+      description:
+        type: string
       name:
         maxLength: 255
         type: string
     required:
     - code
     - name
+    type: object
+  dto.PermissionGroupRef:
+    properties:
+      code:
+        type: string
+      name:
+        type: string
+      sort_order:
+        type: integer
+    type: object
+  dto.PermissionGroupResponse:
+    properties:
+      code:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+      sort_order:
+        type: integer
+      status:
+        type: string
     type: object
   dto.PermissionResponse:
     properties:
@@ -888,11 +985,25 @@ definitions:
         type: string
       description:
         type: string
+      group:
+        allOf:
+        - $ref: '#/definitions/dto.PermissionGroupRef'
+        description: Group — nil bila permission tanpa grup.
       id:
         type: string
       name:
         type: string
+      scope_types:
+        description: ScopeTypes — scope type tempat permission berlaku; kosong = semua
+          scope.
+        items:
+          type: string
+        type: array
       solution_id:
+        type: string
+      source:
+        description: Source — sync (dikelola sync katalog, read-only di platform)
+          | manual (dibuat platform admin).
         type: string
       status:
         type: string
@@ -995,6 +1106,8 @@ definitions:
         type: string
       id:
         type: string
+      parent_id:
+        type: string
       role_code:
         type: string
       role_id:
@@ -1005,9 +1118,15 @@ definitions:
         type: string
       scope_id:
         type: string
+      scope_label:
+        type: string
       scope_name:
         type: string
       scope_type:
+        type: string
+      scope_type_name:
+        description: ScopeTypeName — nama tampilan scope type (Company / Branch /
+          nama dari katalog solution).
         type: string
       solution_code:
         type: string
@@ -1024,11 +1143,15 @@ definitions:
         type: string
       id:
         type: string
+      parent_id:
+        type: string
       role_code:
         type: string
       role_id:
         type: string
       scope_id:
+        type: string
+      scope_label:
         type: string
       scope_type:
         type: string
@@ -1053,6 +1176,8 @@ definitions:
         type: string
       scope_type:
         type: string
+      scope_type_name:
+        type: string
       user_id:
         type: string
     type: object
@@ -1060,10 +1185,18 @@ definitions:
     properties:
       code:
         type: string
+      description:
+        type: string
+      group:
+        $ref: '#/definitions/dto.PermissionGroupRef'
       id:
         type: string
       name:
         type: string
+      scope_types:
+        items:
+          type: string
+        type: array
       status:
         type: string
     type: object
@@ -1096,6 +1229,47 @@ definitions:
       solution_id:
         type: string
       updated_at:
+        type: string
+    type: object
+  dto.ScopeTypeDefinition:
+    properties:
+      code:
+        maxLength: 30
+        type: string
+      description:
+        type: string
+      name:
+        maxLength: 255
+        type: string
+      parent:
+        description: Parent — company (default) atau branch.
+        enum:
+        - company
+        - branch
+        type: string
+    required:
+    - code
+    - name
+    type: object
+  dto.ScopeTypeResponse:
+    properties:
+      builtin:
+        description: Builtin — company & branch (dikelola platform; scope_id divalidasi
+          platform).
+        type: boolean
+      code:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+      parent:
+        description: 'Parent — scope induk: "" untuk company, "company" / "branch"
+          untuk lainnya.'
+        type: string
+      sort_order:
+        type: integer
+      status:
         type: string
     type: object
   dto.SelectableCompanyResponse:
@@ -1280,11 +1454,36 @@ definitions:
     required:
     - company_id
     type: object
+  dto.SyncCounts:
+    properties:
+      created:
+        type: integer
+      deprecated:
+        type: integer
+      reactivated:
+        type: integer
+      unchanged:
+        type: integer
+      updated:
+        type: integer
+    type: object
   dto.SyncPermissionsRequest:
     properties:
+      groups:
+        description: Groups — permission group untuk tampilan (opsional). Urutan array
+          = urutan tampil.
+        items:
+          $ref: '#/definitions/dto.PermissionGroupDefinition'
+        type: array
       permissions:
         items:
           $ref: '#/definitions/dto.PermissionDefinition'
+        type: array
+      scope_types:
+        description: ScopeTypes — scope type custom (opsional). company & branch selalu
+          tersedia.
+        items:
+          $ref: '#/definitions/dto.ScopeTypeDefinition'
         type: array
       version:
         description: Version — versi katalog; sama dengan versi tersimpan → tidak
@@ -1305,8 +1504,14 @@ definitions:
         type: integer
       deprecated:
         type: integer
+      groups:
+        allOf:
+        - $ref: '#/definitions/dto.SyncCounts'
+        description: Groups & ScopeTypes — ringkasan sync group dan scope type custom.
       reactivated:
         type: integer
+      scope_types:
+        $ref: '#/definitions/dto.SyncCounts'
       unchanged:
         type: integer
       updated:
@@ -1383,6 +1588,29 @@ definitions:
         enum:
         - active
         - inactive
+        type: string
+    type: object
+  dto.UpdatePermissionRequest:
+    properties:
+      description:
+        maxLength: 1000
+        type: string
+      group:
+        maxLength: 100
+        type: string
+      name:
+        maxLength: 255
+        type: string
+      scopes:
+        items:
+          type: string
+        type: array
+      status:
+        description: Status — deprecated = "hapus" (tidak bisa ditambahkan ke role
+          baru); active = aktifkan lagi.
+        enum:
+        - active
+        - deprecated
         type: string
     type: object
   dto.UpdateRoleRequest:
@@ -3982,6 +4210,98 @@ paths:
       summary: OAuth2 token (client credentials)
       tags:
       - Service Auth
+  /api/v1/permissions/{permissionId}:
+    get:
+      parameters:
+      - description: Permission ID
+        in: path
+        name: permissionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.PermissionResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Get a permission
+      tags:
+      - Permissions
+    patch:
+      consumes:
+      - application/json
+      description: 'Hanya permission manual (hasil sync → 409). Code tidak bisa diubah.
+        `status: deprecated` = hapus (permission tidak bisa ditambahkan ke role baru;
+        yang sudah terpasang tetap berlaku).'
+      parameters:
+      - description: Permission ID
+        in: path
+        name: permissionId
+        required: true
+        type: string
+      - description: Field yang diubah
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdatePermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.PermissionResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Update a manual permission
+      tags:
+      - Permissions
   /api/v1/plans/{planId}/benefits:
     get:
       parameters:
@@ -5074,6 +5394,49 @@ paths:
       summary: Create solution client
       tags:
       - Solution Clients
+  /api/v1/solutions/{solutionId}/permission-groups:
+    get:
+      parameters:
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: active | deprecated
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.PermissionGroupResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List permission groups of a solution
+      tags:
+      - Permissions
   /api/v1/solutions/{solutionId}/permissions:
     get:
       parameters:
@@ -5089,6 +5452,10 @@ paths:
       - description: Cari di code / name
         in: query
         name: search
+        type: string
+      - description: Code group; '-' = tanpa grup
+        in: query
+        name: group
         type: string
       - description: Halaman
         in: query
@@ -5139,13 +5506,68 @@ paths:
       summary: List permissions of a solution
       tags:
       - Permissions
+    post:
+      consumes:
+      - application/json
+      description: Permission manual dikelola platform admin dan tidak disentuh sync
+        katalog. Sync yang memuat code permission manual ditolak (409).
+      parameters:
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: Permission
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreatePermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.PermissionResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Create a manual permission
+      tags:
+      - Permissions
   /api/v1/solutions/{solutionId}/permissions/sync:
     put:
       consumes:
       - application/json
       description: 'Dipanggil solution saat deploy. Idempotent per version: permission
         baru dibuat, yang ada diperbarui / diaktifkan ulang, yang hilang menjadi deprecated
-        (tidak dihapus).'
+        (tidak dihapus). `scope_types` (scope custom) dan `groups` (pengelompokan
+        tampilan) opsional dan diperlakukan sama.'
       parameters:
       - description: Solution ID
         in: path
@@ -5420,6 +5842,51 @@ paths:
       summary: Create global role
       tags:
       - Roles
+  /api/v1/solutions/{solutionId}/scope-types:
+    get:
+      description: 'Scope yang bisa dipakai role assignment solution: company & branch
+        (built-in) lalu scope type custom dari katalog.'
+      parameters:
+      - description: Solution ID
+        in: path
+        name: solutionId
+        required: true
+        type: string
+      - description: active | deprecated
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/respond.SuccessBody'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.ScopeTypeResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/respond.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List scope types of a solution
+      tags:
+      - Permissions
   /api/v1/solutions/{solutionId}/webhooks:
     post:
       consumes:
