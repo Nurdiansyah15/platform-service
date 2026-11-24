@@ -22,8 +22,10 @@ type Group struct {
 	Description *string
 	SortOrder   int
 	Status      valueobject.PermissionStatus
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// Source — sync (dikelola sync katalog, read-only di platform) atau manual.
+	Source    valueobject.PermissionSource
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // GroupDefinition — satu group dalam katalog. SortOrder = posisi di katalog.
@@ -50,11 +52,49 @@ func NewGroup(solutionID string, d GroupDefinition, now time.Time) *Group {
 	now = now.UTC()
 	return &Group{
 		ID: uuid.NewString(), SolutionID: solutionID, Code: d.Code, Name: d.Name, Description: d.Description,
-		SortOrder: d.SortOrder, Status: valueobject.StatusActive, CreatedAt: now, UpdatedAt: now,
+		SortOrder: d.SortOrder, Status: valueobject.StatusActive, Source: valueobject.SourceSync,
+		CreatedAt: now, UpdatedAt: now,
 	}
 }
 
+// NewManualGroup membuat group yang dikelola platform admin (tidak disentuh sync).
+func NewManualGroup(solutionID string, d GroupDefinition, now time.Time) *Group {
+	g := NewGroup(solutionID, d, now)
+	g.Source = valueobject.SourceManual
+	return g
+}
+
 func (g *Group) IsActive() bool { return g.Status == valueobject.StatusActive }
+
+func (g *Group) IsManual() bool { return g.Source == valueobject.SourceManual }
+
+// EnsureManual — group hasil sync dikelola kode solution dan read-only di platform.
+func (g *Group) EnsureManual() error {
+	if !g.IsManual() {
+		return domainerr.New(constant.CodeGroupSyncManaged)
+	}
+	return nil
+}
+
+// Edit mengubah nama, deskripsi, dan urutan group manual (code & status tetap).
+func (g *Group) Edit(d GroupDefinition, now time.Time) bool {
+	if g.Name == d.Name && equalOptional(g.Description, d.Description) && g.SortOrder == d.SortOrder {
+		return false
+	}
+	g.Name, g.Description, g.SortOrder = d.Name, d.Description, d.SortOrder
+	g.UpdatedAt = now.UTC()
+	return true
+}
+
+// SetStatus mengaktifkan / men-deprecate group. Mengembalikan apakah status berubah.
+func (g *Group) SetStatus(s valueobject.PermissionStatus, now time.Time) bool {
+	if g.Status == s {
+		return false
+	}
+	g.Status = s
+	g.UpdatedAt = now.UTC()
+	return true
+}
 
 func (g *Group) Apply(d GroupDefinition, now time.Time) (changed, reactivated bool) {
 	if g.Status == valueobject.StatusDeprecated {
@@ -92,8 +132,10 @@ type ScopeType struct {
 	Parent      valueobject.ScopeParent
 	SortOrder   int
 	Status      valueobject.PermissionStatus
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// Source — sync (dikelola sync katalog, read-only di platform) atau manual.
+	Source    valueobject.PermissionSource
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type ScopeTypeDefinition struct {
@@ -124,11 +166,49 @@ func NewScopeType(solutionID string, d ScopeTypeDefinition, now time.Time) *Scop
 	now = now.UTC()
 	return &ScopeType{
 		ID: uuid.NewString(), SolutionID: solutionID, Code: d.Code, Name: d.Name, Description: d.Description,
-		Parent: d.Parent, SortOrder: d.SortOrder, Status: valueobject.StatusActive, CreatedAt: now, UpdatedAt: now,
+		Parent: d.Parent, SortOrder: d.SortOrder, Status: valueobject.StatusActive, Source: valueobject.SourceSync,
+		CreatedAt: now, UpdatedAt: now,
 	}
 }
 
+// NewManualScopeType membuat scope type yang dikelola platform admin (tidak disentuh sync).
+func NewManualScopeType(solutionID string, d ScopeTypeDefinition, now time.Time) *ScopeType {
+	s := NewScopeType(solutionID, d, now)
+	s.Source = valueobject.SourceManual
+	return s
+}
+
 func (s *ScopeType) IsActive() bool { return s.Status == valueobject.StatusActive }
+
+func (s *ScopeType) IsManual() bool { return s.Source == valueobject.SourceManual }
+
+// EnsureManual — scope type hasil sync dikelola kode solution dan read-only di platform.
+func (s *ScopeType) EnsureManual() error {
+	if !s.IsManual() {
+		return domainerr.New(constant.CodeScopeTypeSyncManaged)
+	}
+	return nil
+}
+
+// Edit mengubah nama, deskripsi, parent, dan urutan scope type manual (code & status tetap).
+func (s *ScopeType) Edit(d ScopeTypeDefinition, now time.Time) bool {
+	if s.Name == d.Name && equalOptional(s.Description, d.Description) && s.Parent == d.Parent && s.SortOrder == d.SortOrder {
+		return false
+	}
+	s.Name, s.Description, s.Parent, s.SortOrder = d.Name, d.Description, d.Parent, d.SortOrder
+	s.UpdatedAt = now.UTC()
+	return true
+}
+
+// SetStatus mengaktifkan / men-deprecate scope type. Mengembalikan apakah status berubah.
+func (s *ScopeType) SetStatus(st valueobject.PermissionStatus, now time.Time) bool {
+	if s.Status == st {
+		return false
+	}
+	s.Status = st
+	s.UpdatedAt = now.UTC()
+	return true
+}
 
 func (s *ScopeType) Apply(d ScopeTypeDefinition, now time.Time) (changed, reactivated bool) {
 	if s.Status == valueobject.StatusDeprecated {

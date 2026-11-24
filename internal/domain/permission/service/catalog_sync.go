@@ -107,9 +107,25 @@ func PlanCatalogSync(solutionID string, existing []*entity.Permission, catalog [
 		constant.CodePermissionCodeDuplicate, now)
 }
 
-// PlanGroupSync merencanakan sync permission group. Code ganda → CodeGroupDuplicate.
+// PlanGroupSync merencanakan sync permission group. Code ganda → CodeGroupDuplicate. Hanya
+// group ber-source sync yang dikelola; katalog yang memuat code group manual ditolak
+// (CodeGroupSourceConflict).
 func PlanGroupSync(solutionID string, existing []*entity.Group, catalog []entity.GroupDefinition, now time.Time) (*SyncPlan[*entity.Group], error) {
-	return planSync(existing, catalog,
+	manual := map[string]bool{}
+	synced := make([]*entity.Group, 0, len(existing))
+	for _, g := range existing {
+		if g.IsManual() {
+			manual[g.Code.Value()] = true
+		} else {
+			synced = append(synced, g)
+		}
+	}
+	for _, d := range catalog {
+		if manual[d.Code.Value()] {
+			return nil, domainerr.New(constant.CodeGroupSourceConflict)
+		}
+	}
+	return planSync(synced, catalog,
 		func(g *entity.Group) string { return g.Code.Value() },
 		func(d entity.GroupDefinition) string { return d.Code.Value() },
 		func(d entity.GroupDefinition) *entity.Group { return entity.NewGroup(solutionID, d, now) },
@@ -117,8 +133,24 @@ func PlanGroupSync(solutionID string, existing []*entity.Group, catalog []entity
 }
 
 // PlanScopeTypeSync merencanakan sync scope type custom. Code ganda → CodeScopeTypeDuplicate.
+// Hanya scope type ber-source sync yang dikelola; katalog yang memuat code scope type manual
+// ditolak (CodeScopeTypeSourceConflict).
 func PlanScopeTypeSync(solutionID string, existing []*entity.ScopeType, catalog []entity.ScopeTypeDefinition, now time.Time) (*SyncPlan[*entity.ScopeType], error) {
-	return planSync(existing, catalog,
+	manual := map[string]bool{}
+	synced := make([]*entity.ScopeType, 0, len(existing))
+	for _, s := range existing {
+		if s.IsManual() {
+			manual[s.Code.Value()] = true
+		} else {
+			synced = append(synced, s)
+		}
+	}
+	for _, d := range catalog {
+		if manual[d.Code.Value()] {
+			return nil, domainerr.New(constant.CodeScopeTypeSourceConflict)
+		}
+	}
+	return planSync(synced, catalog,
 		func(s *entity.ScopeType) string { return s.Code.Value() },
 		func(d entity.ScopeTypeDefinition) string { return d.Code.Value() },
 		func(d entity.ScopeTypeDefinition) *entity.ScopeType { return entity.NewScopeType(solutionID, d, now) },

@@ -30,6 +30,17 @@ const (
 	CodePermissionSourceConflict domainerr.Code = "DOMAIN_PERMISSION_SOURCE_CONFLICT"
 	CodePermissionSyncManaged    domainerr.Code = "DOMAIN_PERMISSION_SYNC_MANAGED"
 	CodePermissionStatusInvalid  domainerr.Code = "DOMAIN_PERMISSION_STATUS_INVALID"
+
+	// Group manual (dibuat platform admin) vs group hasil sync.
+	CodeGroupNotFound       domainerr.Code = "DOMAIN_PERMISSION_GROUP_NOT_FOUND"
+	CodeGroupCodeTaken      domainerr.Code = "DOMAIN_PERMISSION_GROUP_CODE_TAKEN"
+	CodeGroupSourceConflict domainerr.Code = "DOMAIN_PERMISSION_GROUP_SOURCE_CONFLICT"
+	CodeGroupSyncManaged    domainerr.Code = "DOMAIN_PERMISSION_GROUP_SYNC_MANAGED"
+
+	// Scope type manual (dibuat platform admin) vs scope type hasil sync.
+	CodeScopeTypeCodeTaken      domainerr.Code = "DOMAIN_PERMISSION_SCOPE_TYPE_CODE_TAKEN"
+	CodeScopeTypeSourceConflict domainerr.Code = "DOMAIN_PERMISSION_SCOPE_TYPE_SOURCE_CONFLICT"
+	CodeScopeTypeSyncManaged    domainerr.Code = "DOMAIN_PERMISSION_SCOPE_TYPE_SYNC_MANAGED"
 )
 
 const (

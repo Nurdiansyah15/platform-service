@@ -3839,6 +3839,155 @@
                 }
             }
         },
+        "/api/v1/permission-groups/{groupId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Permissions"
+                ],
+                "summary": "Get a permission group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.PermissionGroupResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Hanya group manual (hasil sync → 409). Code tidak bisa diubah. `status: deprecated` = hapus (tidak bisa dipilih untuk permission baru; permission yang sudah memakainya tetap di grup itu).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Permissions"
+                ],
+                "summary": "Update a manual permission group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Field yang diubah",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdatePermissionGroupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.PermissionGroupResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/permissions/{permissionId}": {
             "get": {
                 "security": [
@@ -4544,6 +4693,155 @@
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/scope-types/{scopeTypeId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Permissions"
+                ],
+                "summary": "Get a custom scope type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Scope type ID",
+                        "name": "scopeTypeId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.ScopeTypeResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Hanya scope type manual (hasil sync → 409). Code tidak bisa diubah. `status: deprecated` = hapus (tidak bisa dipakai assignment baru; assignment lama tetap berlaku).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Permissions"
+                ],
+                "summary": "Update a manual scope type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Scope type ID",
+                        "name": "scopeTypeId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Field yang diubah",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateScopeTypeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.ScopeTypeResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/respond.ErrorBody"
                         }
@@ -5821,6 +6119,92 @@
                         }
                     }
                 }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Group manual dikelola platform admin dan tidak disentuh sync katalog. Sync yang memuat code group manual ditolak (409).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Permissions"
+                ],
+                "summary": "Create a manual permission group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Solution ID",
+                        "name": "solutionId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Group",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreatePermissionGroupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.PermissionGroupResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
             }
         },
         "/api/v1/solutions/{solutionId}/permissions": {
@@ -6532,6 +6916,92 @@
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Scope type custom manual dikelola platform admin dan tidak disentuh sync katalog. Sync yang memuat code-nya ditolak (409). Code company / branch reserved.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Permissions"
+                ],
+                "summary": "Create a manual scope type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Solution ID",
+                        "name": "solutionId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Scope type",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateScopeTypeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/respond.SuccessBody"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.ScopeTypeResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/respond.ErrorBody"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/respond.ErrorBody"
                         }
@@ -8256,6 +8726,33 @@
                 }
             }
         },
+        "dto.CreatePermissionGroupRequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "name"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 1000
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "sort_order": {
+                    "description": "SortOrder — urutan tampil (opsional; default setelah group terakhir).",
+                    "type": "integer",
+                    "maximum": 100000,
+                    "minimum": 0
+                }
+            }
+        },
         "dto.CreatePermissionRequest": {
             "type": "object",
             "required": [
@@ -8374,6 +8871,41 @@
                 "name": {
                     "type": "string",
                     "maxLength": 255
+                }
+            }
+        },
+        "dto.CreateScopeTypeRequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "name"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "maxLength": 30
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 1000
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "parent": {
+                    "description": "Parent — company (default) atau branch.",
+                    "type": "string",
+                    "enum": [
+                        "company",
+                        "branch"
+                    ]
+                },
+                "sort_order": {
+                    "description": "SortOrder — urutan tampil (opsional; default setelah scope type terakhir).",
+                    "type": "integer",
+                    "maximum": 100000,
+                    "minimum": 0
                 }
             }
         },
@@ -8905,11 +9437,18 @@
                 "description": {
                     "type": "string"
                 },
+                "id": {
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 },
                 "sort_order": {
                     "type": "integer"
+                },
+                "source": {
+                    "description": "Source — sync (dikelola sync katalog, read-only di platform) | manual (dibuat platform admin).",
+                    "type": "string"
                 },
                 "status": {
                     "type": "string"
@@ -9328,6 +9867,10 @@
                 "description": {
                     "type": "string"
                 },
+                "id": {
+                    "description": "ID — kosong untuk scope built-in (company / branch).",
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -9337,6 +9880,10 @@
                 },
                 "sort_order": {
                     "type": "integer"
+                },
+                "source": {
+                    "description": "Source — builtin | sync (dikelola sync katalog, read-only di platform) | manual (dibuat platform admin).",
+                    "type": "string"
                 },
                 "status": {
                     "type": "string"
@@ -9810,6 +10357,32 @@
                 }
             }
         },
+        "dto.UpdatePermissionGroupRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "maxLength": 1000
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "sort_order": {
+                    "type": "integer",
+                    "maximum": 100000,
+                    "minimum": 0
+                },
+                "status": {
+                    "description": "Status — deprecated = hapus (tidak bisa dipilih untuk permission baru); active = aktifkan lagi.",
+                    "type": "string",
+                    "enum": [
+                        "active",
+                        "deprecated"
+                    ]
+                }
+            }
+        },
         "dto.UpdatePermissionRequest": {
             "type": "object",
             "properties": {
@@ -9851,6 +10424,39 @@
                 "name": {
                     "type": "string",
                     "maxLength": 255
+                }
+            }
+        },
+        "dto.UpdateScopeTypeRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "maxLength": 1000
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "parent": {
+                    "type": "string",
+                    "enum": [
+                        "company",
+                        "branch"
+                    ]
+                },
+                "sort_order": {
+                    "type": "integer",
+                    "maximum": 100000,
+                    "minimum": 0
+                },
+                "status": {
+                    "description": "Status — deprecated = hapus (tidak bisa dipakai assignment baru; yang lama tetap berlaku).",
+                    "type": "string",
+                    "enum": [
+                        "active",
+                        "deprecated"
+                    ]
                 }
             }
         },

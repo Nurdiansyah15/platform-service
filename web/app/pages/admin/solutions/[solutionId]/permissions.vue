@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
-import type { PermissionGroupResponse, PermissionResponse } from '~/types/api'
+import type { PermissionGroupResponse, PermissionResponse, ScopeTypeResponse } from '~/types/api'
 
 definePageMeta({ middleware: 'admin' })
 
@@ -57,6 +57,83 @@ async function setStatus(p: PermissionResponse, next: 'active' | 'deprecated') {
     toastError(err)
   }
 }
+// ── Scope type manual: tambah / ubah / deprecate ──
+const showScopeForm = ref(false)
+const editingScope = ref<ScopeTypeResponse | null>(null)
+function openScopeForm(st: ScopeTypeResponse | null) {
+  editingScope.value = st
+  showScopeForm.value = true
+}
+function onScopeSaved(st: ScopeTypeResponse) {
+  toast.add({ title: editingScope.value ? 'Scope type diperbarui' : `Scope type ${st.name} ditambahkan`, color: 'success' })
+  scopeTypes.load(true)
+}
+async function setScopeStatus(st: ScopeTypeResponse, next: 'active' | 'deprecated') {
+  if (next === 'deprecated') {
+    const ok = await confirm({
+      title: `Hapus scope type ${st.name}?`,
+      description: 'Scope type menjadi deprecated: tidak bisa dipakai untuk memberi role lagi, tapi role yang sudah diberikan di scope ini tetap berlaku. Bisa diaktifkan kembali.',
+      confirmLabel: 'Hapus',
+      danger: true,
+    })
+    if (!ok) return
+  }
+  try {
+    await api.patch(`/api/v1/scope-types/${st.id}`, { status: next })
+    toast.add({ title: next === 'active' ? 'Scope type diaktifkan' : 'Scope type dihapus (deprecated)', color: 'success' })
+    scopeTypes.load(true)
+  } catch (err) {
+    toastError(err)
+  }
+}
+function scopeActions(st: ScopeTypeResponse) {
+  return [[
+    { label: 'Ubah', icon: 'i-lucide-pencil', onSelect: () => openScopeForm(st) },
+    st.status === 'active'
+      ? { label: 'Hapus', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => setScopeStatus(st, 'deprecated') }
+      : { label: 'Aktifkan', icon: 'i-lucide-rotate-ccw', onSelect: () => setScopeStatus(st, 'active') },
+  ]]
+}
+
+// ── Grup manual: tambah / ubah / deprecate ──
+const showGroupForm = ref(false)
+const editingGroup = ref<PermissionGroupResponse | null>(null)
+function openGroupForm(g: PermissionGroupResponse | null) {
+  editingGroup.value = g
+  showGroupForm.value = true
+}
+function onGroupSaved(g: PermissionGroupResponse) {
+  toast.add({ title: editingGroup.value ? 'Grup diperbarui' : `Grup ${g.name} ditambahkan`, color: 'success' })
+  loadGroups()
+  list.reload()
+}
+async function setGroupStatus(g: PermissionGroupResponse, next: 'active' | 'deprecated') {
+  if (next === 'deprecated') {
+    const ok = await confirm({
+      title: `Hapus grup ${g.name}?`,
+      description: 'Grup menjadi deprecated: tidak bisa dipilih untuk permission lagi, tapi permission yang sudah ada di grup ini tetap tampil di dalamnya. Bisa diaktifkan kembali.',
+      confirmLabel: 'Hapus',
+      danger: true,
+    })
+    if (!ok) return
+  }
+  try {
+    await api.patch(`/api/v1/permission-groups/${g.id}`, { status: next })
+    toast.add({ title: next === 'active' ? 'Grup diaktifkan' : 'Grup dihapus (deprecated)', color: 'success' })
+    loadGroups()
+  } catch (err) {
+    toastError(err)
+  }
+}
+function groupActions(g: PermissionGroupResponse) {
+  return [[
+    { label: 'Ubah', icon: 'i-lucide-pencil', onSelect: () => openGroupForm(g) },
+    g.status === 'active'
+      ? { label: 'Hapus', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => setGroupStatus(g, 'deprecated') }
+      : { label: 'Aktifkan', icon: 'i-lucide-rotate-ccw', onSelect: () => setGroupStatus(g, 'active') },
+  ]]
+}
+
 function rowActions(p: PermissionResponse) {
   return [[
     { label: 'Ubah', icon: 'i-lucide-pencil', onSelect: () => openEdit(p) },
@@ -144,6 +221,9 @@ const columns: TableColumn<PermissionResponse>[] = [
 
     <div class="grid gap-4 lg:grid-cols-2">
       <SectionCard title="Scope type" description="Lingkup tempat role bisa diberikan. Company dan cabang selalu tersedia.">
+        <template #actions>
+          <UButton icon="i-lucide-plus" size="sm" variant="soft" @click="openScopeForm(null)">Tambah scope</UButton>
+        </template>
         <ul class="divide-y divide-default text-sm">
           <li v-for="s in scopeTypes.items.value" :key="s.code" class="flex items-start justify-between gap-3 py-2">
             <div class="min-w-0">
@@ -153,20 +233,35 @@ const columns: TableColumn<PermissionResponse>[] = [
                 <template v-if="s.description"> · {{ s.description }}</template>
               </p>
             </div>
-            <StatusBadge v-if="s.status !== 'active'" :status="s.status" size="xs" />
+            <div class="flex shrink-0 items-center gap-2">
+              <UBadge v-if="!s.builtin" :label="s.source === 'manual' ? 'Manual' : 'Sync'" :color="s.source === 'manual' ? 'primary' : 'neutral'" variant="subtle" size="sm" />
+              <StatusBadge v-if="s.status !== 'active'" :status="s.status" size="xs" />
+              <UDropdownMenu v-if="s.source === 'manual'" :items="scopeActions(s)" :content="{ align: 'end' }">
+                <UButton icon="i-lucide-ellipsis-vertical" color="neutral" variant="ghost" size="xs" aria-label="Aksi scope type" />
+              </UDropdownMenu>
+            </div>
           </li>
         </ul>
         <p v-if="!customScopes.length" class="text-xs text-muted">Solution ini belum mendefinisikan scope custom.</p>
       </SectionCard>
 
       <SectionCard title="Grup permission" description="Pengelompokan permission saat menyusun role.">
+        <template #actions>
+          <UButton icon="i-lucide-plus" size="sm" variant="soft" @click="openGroupForm(null)">Tambah grup</UButton>
+        </template>
         <ul v-if="groups.length" class="divide-y divide-default text-sm">
           <li v-for="g in groups" :key="g.code" class="flex items-start justify-between gap-3 py-2">
             <div class="min-w-0">
               <p class="text-highlighted">{{ g.name }} <span class="font-mono text-xs text-muted">{{ g.code }}</span></p>
               <p v-if="g.description" class="text-xs text-muted">{{ g.description }}</p>
             </div>
-            <StatusBadge v-if="g.status !== 'active'" :status="g.status" size="xs" />
+            <div class="flex shrink-0 items-center gap-2">
+              <UBadge :label="g.source === 'manual' ? 'Manual' : 'Sync'" :color="g.source === 'manual' ? 'primary' : 'neutral'" variant="subtle" size="sm" />
+              <StatusBadge v-if="g.status !== 'active'" :status="g.status" size="xs" />
+              <UDropdownMenu v-if="g.source === 'manual'" :items="groupActions(g)" :content="{ align: 'end' }">
+                <UButton icon="i-lucide-ellipsis-vertical" color="neutral" variant="ghost" size="xs" aria-label="Aksi grup" />
+              </UDropdownMenu>
+            </div>
           </li>
         </ul>
         <p v-else class="text-xs text-muted">Belum ada grup; permission dikelompokkan berdasarkan prefix kode.</p>
@@ -196,6 +291,18 @@ const columns: TableColumn<PermissionResponse>[] = [
       :groups="groups"
       :scope-types="scopeTypes.items.value"
       @saved="onSaved"
+    />
+    <ScopeTypeFormModal
+      v-model:open="showScopeForm"
+      :solution-id="ctx.solutionId.value"
+      :scope-type="editingScope"
+      @saved="onScopeSaved"
+    />
+    <PermissionGroupFormModal
+      v-model:open="showGroupForm"
+      :solution-id="ctx.solutionId.value"
+      :group="editingGroup"
+      @saved="onGroupSaved"
     />
   </SolutionPage>
 </template>

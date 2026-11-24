@@ -19,11 +19,14 @@ func mapPermissionDomainError(err error) error {
 		return apperror.Internal(string(apperror.CodeInternal), err)
 	}
 	switch de.Code {
-	case constant.CodePermissionNotFound, solutionconstant.CodeSolutionNotFound:
+	case constant.CodePermissionNotFound, constant.CodeGroupNotFound, constant.CodeScopeTypeNotFound,
+		solutionconstant.CodeSolutionNotFound:
 		return apperror.NotFound(string(de.Code))
 	case constant.CodeCatalogSyncForbidden:
 		return apperror.Forbidden(string(de.Code))
-	case constant.CodePermissionCodeTaken, constant.CodePermissionSourceConflict, constant.CodePermissionSyncManaged:
+	case constant.CodePermissionCodeTaken, constant.CodePermissionSourceConflict, constant.CodePermissionSyncManaged,
+		constant.CodeGroupCodeTaken, constant.CodeGroupSourceConflict, constant.CodeGroupSyncManaged,
+		constant.CodeScopeTypeCodeTaken, constant.CodeScopeTypeSourceConflict, constant.CodeScopeTypeSyncManaged:
 		return apperror.Conflict(string(de.Code), err)
 	case constant.CodePermissionCodeInvalid, constant.CodePermissionNameInvalid, constant.CodePermissionCodeDuplicate,
 		constant.CodeCatalogVersionInvalid,
@@ -85,4 +88,21 @@ func currentGroupCode(p *entity.Permission, groups []*entity.Group) *string {
 		}
 	}
 	return nil
+}
+
+func toGroupResponse(g *entity.Group) *dto.PermissionGroupResponse {
+	return &dto.PermissionGroupResponse{
+		ID: g.ID, Code: g.Code.Value(), Name: g.Name, Description: g.Description, SortOrder: g.SortOrder,
+		Status: g.Status.String(), Source: g.Source.String(),
+	}
+}
+
+// sourceBuiltin — source scope type company & branch (dikelola platform).
+const sourceBuiltin = "builtin"
+
+func toScopeTypeResponse(st *entity.ScopeType) *dto.ScopeTypeResponse {
+	return &dto.ScopeTypeResponse{
+		ID: st.ID, Code: st.Code.Value(), Name: st.Name, Description: st.Description, Parent: st.Parent.String(),
+		SortOrder: st.SortOrder, Status: st.Status.String(), Source: st.Source.String(),
+	}
 }

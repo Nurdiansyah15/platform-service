@@ -200,3 +200,31 @@ func TestResolveManualRefs(t *testing.T) {
 	_, err = service.ResolveManualRefs(d, nil, []*entity.ScopeType{st})
 	testhelper.AssertDomainError(t, err, constant.CodeScopeTypeUnknown)
 }
+
+func TestPlanGroupSync_ManualUntouched(t *testing.T) {
+	now := time.Now()
+	manual := entity.NewManualGroup("s", groupDef(t, "custom", "Custom", 5), now)
+	synced := entity.NewGroup("s", groupDef(t, "leave", "Cuti", 0), now)
+
+	plan, err := service.PlanGroupSync("s", []*entity.Group{manual, synced}, nil, now)
+	require.NoError(t, err)
+	assert.Equal(t, 1, plan.Deprecated)
+	assert.True(t, manual.IsActive())
+
+	_, err = service.PlanGroupSync("s", []*entity.Group{manual}, []entity.GroupDefinition{groupDef(t, "custom", "X", 0)}, now)
+	testhelper.AssertDomainError(t, err, constant.CodeGroupSourceConflict)
+}
+
+func TestPlanScopeTypeSync_ManualUntouched(t *testing.T) {
+	now := time.Now()
+	manual := entity.NewManualScopeType("s", scopeDef(t, "project", "", 3), now)
+	synced := entity.NewScopeType("s", scopeDef(t, "department", "", 0), now)
+
+	plan, err := service.PlanScopeTypeSync("s", []*entity.ScopeType{manual, synced}, nil, now)
+	require.NoError(t, err)
+	assert.Equal(t, 1, plan.Deprecated)
+	assert.True(t, manual.IsActive())
+
+	_, err = service.PlanScopeTypeSync("s", []*entity.ScopeType{manual}, []entity.ScopeTypeDefinition{scopeDef(t, "project", "", 0)}, now)
+	testhelper.AssertDomainError(t, err, constant.CodeScopeTypeSourceConflict)
+}

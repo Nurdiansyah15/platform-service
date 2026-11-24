@@ -213,9 +213,7 @@ func (uc *PermissionUseCase) ListGroups(ctx context.Context, actor *principal.Pr
 		if req.Status != nil && g.Status.String() != *req.Status {
 			continue
 		}
-		out = append(out, dto.PermissionGroupResponse{
-			Code: g.Code.Value(), Name: g.Name, Description: g.Description, SortOrder: g.SortOrder, Status: g.Status.String(),
-		})
+		out = append(out, *toGroupResponse(g))
 	}
 	return out, nil
 }
@@ -236,18 +234,16 @@ func (uc *PermissionUseCase) ListScopeTypes(ctx context.Context, actor *principa
 	out := make([]dto.ScopeTypeResponse, 0, len(custom)+2)
 	if req.Status == nil || *req.Status == active {
 		out = append(out,
-			dto.ScopeTypeResponse{Code: constant.ScopeTypeCompany, Name: "Company", Builtin: true, Status: active},
-			dto.ScopeTypeResponse{Code: constant.ScopeTypeBranch, Name: "Branch", Parent: constant.ScopeTypeCompany, Builtin: true, Status: active},
+			dto.ScopeTypeResponse{Code: constant.ScopeTypeCompany, Name: "Company", Builtin: true, Status: active, Source: sourceBuiltin},
+			dto.ScopeTypeResponse{Code: constant.ScopeTypeBranch, Name: "Branch", Parent: constant.ScopeTypeCompany, Builtin: true,
+				Status: active, Source: sourceBuiltin},
 		)
 	}
 	for _, st := range custom {
 		if req.Status != nil && st.Status.String() != *req.Status {
 			continue
 		}
-		out = append(out, dto.ScopeTypeResponse{
-			Code: st.Code.Value(), Name: st.Name, Description: st.Description, Parent: st.Parent.String(),
-			SortOrder: st.SortOrder, Status: st.Status.String(),
-		})
+		out = append(out, *toScopeTypeResponse(st))
 	}
 	return out, nil
 }
@@ -388,4 +384,201 @@ func (uc *PermissionUseCase) catalogRefs(ctx context.Context, solutionID string)
 		return nil, nil, err
 	}
 	return groups, scopeTypes, nil
+}
+
+// CreateGroup membuat permission group manual. Code yang sudah dipakai (manual atau hasil
+// sync) → 409. Group manual tidak disentuh sync; sync yang memuat code-nya ditolak.
+//
+// Required — auth: user (platform admin) | scope: -
+func (uc *PermissionUseCase) CreateGroup(ctx context.Context, solutionID string, req dto.CreatePermissionGroupRequest) (*dto.PermissionGroupResponse, error) {
+	if _, err := uc.deps.Solutions.FindByID(ctx, solutionID); err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	existing, err := uc.deps.Groups.ListBySolution(ctx, solutionID)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	order := 0
+	for _, g := range existing {
+		if g.SortOrder >= order {
+			order = g.SortOrder + 1
+		}
+	}
+	if req.SortOrder != nil {
+		order = *req.SortOrder
+	}
+	d, err := entity.NewGroupDefinition(req.Code, req.Name, req.Description, order)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	g := entity.NewManualGroup(solutionID, d, uc.now())
+	if err := uc.deps.Groups.Save(ctx, g); err != nil {
+		var de *domainerr.DomainError
+		if errors.As(err, &de) && de.Code == constant.CodeGroupDuplicate {
+			err = domainerr.New(constant.CodeGroupCodeTaken)
+		}
+		return nil, mapPermissionDomainError(err)
+	}
+	return toGroupResponse(g), nil
+}
+
+// GetGroup menampilkan satu permission group. Solution inactive disembunyikan dari non-admin.
+//
+// Required — auth: user / service (token valid apa pun) | scope: -
+func (uc *PermissionUseCase) GetGroup(ctx context.Context, actor *principal.Principal, groupID string) (*dto.PermissionGroupResponse, error) {
+	g, err := uc.deps.Groups.FindByID(ctx, groupID)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	if err := uc.ensureSolutionVisible(ctx, actor, g.SolutionID); err != nil {
+		if isNotFound(err) {
+			err = domainerr.New(constant.CodeGroupNotFound)
+		}
+		return nil, mapPermissionDomainError(err)
+	}
+	return toGroupResponse(g), nil
+}
+
+// UpdateGroup mengubah group manual (nama, deskripsi, urutan, status). Group hasil sync
+// read-only (409). Group deprecated tidak bisa dipilih untuk permission baru; permission yang
+// sudah memakainya tetap tampil di grup itu.
+//
+// Required — auth: user (platform admin) | scope: -
+func (uc *PermissionUseCase) UpdateGroup(ctx context.Context, groupID string, req dto.UpdatePermissionGroupRequest) (*dto.PermissionGroupResponse, error) {
+	g, err := uc.deps.Groups.FindByID(ctx, groupID)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	if err := g.EnsureManual(); err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	name, description, order := g.Name, g.Description, g.SortOrder
+	if req.Name != nil {
+		name = *req.Name
+	}
+	if req.Description != nil {
+		description = req.Description
+	}
+	if req.SortOrder != nil {
+		order = *req.SortOrder
+	}
+	d, err := entity.NewGroupDefinition(g.Code.Value(), name, description, order)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	now := uc.now()
+	changed := g.Edit(d, now)
+	if req.Status != nil {
+		st, err := valueobject.NewPermissionStatus(*req.Status)
+		if err != nil {
+			return nil, mapPermissionDomainError(err)
+		}
+		changed = g.SetStatus(st, now) || changed
+	}
+	if changed {
+		if err := uc.deps.Groups.Save(ctx, g); err != nil {
+			return nil, mapPermissionDomainError(err)
+		}
+	}
+	return toGroupResponse(g), nil
+}
+
+// CreateScopeType membuat scope type custom manual. Code yang sudah dipakai (manual atau
+// hasil sync) → 409. Scope type manual tidak disentuh sync; sync yang memuat code-nya ditolak.
+//
+// Required — auth: user (platform admin) | scope: -
+func (uc *PermissionUseCase) CreateScopeType(ctx context.Context, solutionID string, req dto.CreateScopeTypeRequest) (*dto.ScopeTypeResponse, error) {
+	if _, err := uc.deps.Solutions.FindByID(ctx, solutionID); err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	existing, err := uc.deps.ScopeTypes.ListBySolution(ctx, solutionID)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	order := 0
+	for _, st := range existing {
+		if st.SortOrder >= order {
+			order = st.SortOrder + 1
+		}
+	}
+	if req.SortOrder != nil {
+		order = *req.SortOrder
+	}
+	d, err := entity.NewScopeTypeDefinition(req.Code, req.Name, req.Description, req.Parent, order)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	st := entity.NewManualScopeType(solutionID, d, uc.now())
+	if err := uc.deps.ScopeTypes.Save(ctx, st); err != nil {
+		var de *domainerr.DomainError
+		if errors.As(err, &de) && de.Code == constant.CodeScopeTypeDuplicate {
+			err = domainerr.New(constant.CodeScopeTypeCodeTaken)
+		}
+		return nil, mapPermissionDomainError(err)
+	}
+	return toScopeTypeResponse(st), nil
+}
+
+// GetScopeType menampilkan satu scope type custom. Solution inactive disembunyikan dari non-admin.
+//
+// Required — auth: user / service (token valid apa pun) | scope: -
+func (uc *PermissionUseCase) GetScopeType(ctx context.Context, actor *principal.Principal, scopeTypeID string) (*dto.ScopeTypeResponse, error) {
+	st, err := uc.deps.ScopeTypes.FindByID(ctx, scopeTypeID)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	if err := uc.ensureSolutionVisible(ctx, actor, st.SolutionID); err != nil {
+		if isNotFound(err) {
+			err = domainerr.New(constant.CodeScopeTypeNotFound)
+		}
+		return nil, mapPermissionDomainError(err)
+	}
+	return toScopeTypeResponse(st), nil
+}
+
+// UpdateScopeType mengubah scope type manual (nama, deskripsi, parent, urutan, status). Scope
+// type hasil sync read-only (409). Deprecated = tidak bisa dipakai assignment baru;
+// assignment lama tetap dievaluasi.
+//
+// Required — auth: user (platform admin) | scope: -
+func (uc *PermissionUseCase) UpdateScopeType(ctx context.Context, scopeTypeID string, req dto.UpdateScopeTypeRequest) (*dto.ScopeTypeResponse, error) {
+	st, err := uc.deps.ScopeTypes.FindByID(ctx, scopeTypeID)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	if err := st.EnsureManual(); err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	name, description, parent, order := st.Name, st.Description, st.Parent.String(), st.SortOrder
+	if req.Name != nil {
+		name = *req.Name
+	}
+	if req.Description != nil {
+		description = req.Description
+	}
+	if req.Parent != nil {
+		parent = *req.Parent
+	}
+	if req.SortOrder != nil {
+		order = *req.SortOrder
+	}
+	d, err := entity.NewScopeTypeDefinition(st.Code.Value(), name, description, parent, order)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	now := uc.now()
+	changed := st.Edit(d, now)
+	if req.Status != nil {
+		status, err := valueobject.NewPermissionStatus(*req.Status)
+		if err != nil {
+			return nil, mapPermissionDomainError(err)
+		}
+		changed = st.SetStatus(status, now) || changed
+	}
+	if changed {
+		if err := uc.deps.ScopeTypes.Save(ctx, st); err != nil {
+			return nil, mapPermissionDomainError(err)
+		}
+	}
+	return toScopeTypeResponse(st), nil
 }

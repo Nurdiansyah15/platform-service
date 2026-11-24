@@ -14,7 +14,13 @@ func RegisterPermissionRoutes(r Routes, h *api.PermissionHandler) {
 	r.Authenticated.GET("/permissions/:permissionId", h.Get)
 	r.Authenticated.PATCH("/permissions/:permissionId", middleware.RequirePlatformAdmin(), h.Update)
 	r.Authenticated.GET("/solutions/:solutionId/permission-groups", h.ListGroups)
+	r.Authenticated.POST("/solutions/:solutionId/permission-groups", middleware.RequirePlatformAdmin(), h.CreateGroup)
+	r.Authenticated.GET("/permission-groups/:groupId", h.GetGroup)
+	r.Authenticated.PATCH("/permission-groups/:groupId", middleware.RequirePlatformAdmin(), h.UpdateGroup)
 	r.Authenticated.GET("/solutions/:solutionId/scope-types", h.ListScopeTypes)
+	r.Authenticated.POST("/solutions/:solutionId/scope-types", middleware.RequirePlatformAdmin(), h.CreateScopeType)
+	r.Authenticated.GET("/scope-types/:scopeTypeId", h.GetScopeType)
+	r.Authenticated.PATCH("/scope-types/:scopeTypeId", middleware.RequirePlatformAdmin(), h.UpdateScopeType)
 	// User: hanya platform admin (dicek usecase). Service: catalog:sync milik solution tersebut.
 	r.Authenticated.PUT("/solutions/:solutionId/permissions/sync", middleware.RequireUserOrService(scopeCatalogSync), h.Sync)
 }

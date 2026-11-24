@@ -94,11 +94,37 @@ type PermissionResponse struct {
 }
 
 type PermissionGroupResponse struct {
+	ID          string  `json:"id"`
 	Code        string  `json:"code"`
 	Name        string  `json:"name"`
 	Description *string `json:"description"`
 	SortOrder   int     `json:"sort_order"`
 	Status      string  `json:"status"`
+	// Source — sync (dikelola sync katalog, read-only di platform) | manual (dibuat platform admin).
+	Source string `json:"source"`
+}
+
+type PermissionGroupIDParam struct {
+	GroupID string `uri:"groupId" binding:"required,uuid"`
+}
+
+// CreatePermissionGroupRequest — group manual (dibuat platform admin, tidak disentuh sync).
+type CreatePermissionGroupRequest struct {
+	Code        string  `json:"code" binding:"required,max=100"`
+	Name        string  `json:"name" binding:"required,max=255"`
+	Description *string `json:"description" binding:"omitempty,max=1000"`
+	// SortOrder — urutan tampil (opsional; default setelah group terakhir).
+	SortOrder *int `json:"sort_order" binding:"omitempty,min=0,max=100000"`
+}
+
+// UpdatePermissionGroupRequest — hanya group manual. Field nil tidak diubah; description ""
+// = dikosongkan. Code tidak bisa diubah.
+type UpdatePermissionGroupRequest struct {
+	Name        *string `json:"name" binding:"omitempty,max=255"`
+	Description *string `json:"description" binding:"omitempty,max=1000"`
+	SortOrder   *int    `json:"sort_order" binding:"omitempty,min=0,max=100000"`
+	// Status — deprecated = hapus (tidak bisa dipilih untuk permission baru); active = aktifkan lagi.
+	Status *string `json:"status" binding:"omitempty,oneof=active deprecated"`
 }
 
 type ListCatalogQuery struct {
@@ -106,6 +132,8 @@ type ListCatalogQuery struct {
 }
 
 type ScopeTypeResponse struct {
+	// ID — kosong untuk scope built-in (company / branch).
+	ID          string  `json:"id"`
 	Code        string  `json:"code"`
 	Name        string  `json:"name"`
 	Description *string `json:"description"`
@@ -115,6 +143,34 @@ type ScopeTypeResponse struct {
 	Builtin   bool   `json:"builtin"`
 	SortOrder int    `json:"sort_order"`
 	Status    string `json:"status"`
+	// Source — builtin | sync (dikelola sync katalog, read-only di platform) | manual (dibuat platform admin).
+	Source string `json:"source"`
+}
+
+type ScopeTypeIDParam struct {
+	ScopeTypeID string `uri:"scopeTypeId" binding:"required,uuid"`
+}
+
+// CreateScopeTypeRequest — scope type custom manual (dibuat platform admin, tidak disentuh sync).
+type CreateScopeTypeRequest struct {
+	Code        string  `json:"code" binding:"required,max=30"`
+	Name        string  `json:"name" binding:"required,max=255"`
+	Description *string `json:"description" binding:"omitempty,max=1000"`
+	// Parent — company (default) atau branch.
+	Parent string `json:"parent" binding:"omitempty,oneof=company branch"`
+	// SortOrder — urutan tampil (opsional; default setelah scope type terakhir).
+	SortOrder *int `json:"sort_order" binding:"omitempty,min=0,max=100000"`
+}
+
+// UpdateScopeTypeRequest — hanya scope type manual. Field nil tidak diubah; description "" =
+// dikosongkan. Code tidak bisa diubah.
+type UpdateScopeTypeRequest struct {
+	Name        *string `json:"name" binding:"omitempty,max=255"`
+	Description *string `json:"description" binding:"omitempty,max=1000"`
+	Parent      *string `json:"parent" binding:"omitempty,oneof=company branch"`
+	SortOrder   *int    `json:"sort_order" binding:"omitempty,min=0,max=100000"`
+	// Status — deprecated = hapus (tidak bisa dipakai assignment baru; yang lama tetap berlaku).
+	Status *string `json:"status" binding:"omitempty,oneof=active deprecated"`
 }
 
 type PermissionIDParam struct {

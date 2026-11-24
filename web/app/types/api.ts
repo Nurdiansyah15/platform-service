@@ -444,14 +444,33 @@ export interface UpdatePermissionRequest {
 }
 
 export interface PermissionGroupResponse {
+  id: string
   code: string
   name: string
   description: string | null
   sort_order: number
   status: 'active' | 'deprecated'
+  source: 'sync' | 'manual'
+}
+
+export interface CreatePermissionGroupRequest {
+  code: string
+  name: string
+  description?: string | null
+  sort_order?: number
+}
+
+/** Hanya group manual. description '' = dikosongkan; status deprecated = hapus. */
+export interface UpdatePermissionGroupRequest {
+  name?: string
+  description?: string
+  sort_order?: number
+  status?: 'active' | 'deprecated'
 }
 
 export interface ScopeTypeResponse {
+  /** Kosong untuk built-in (company / branch). */
+  id: string
   code: string
   name: string
   description: string | null
@@ -460,6 +479,24 @@ export interface ScopeTypeResponse {
   builtin: boolean
   sort_order: number
   status: 'active' | 'deprecated'
+  source: 'builtin' | 'sync' | 'manual'
+}
+
+export interface CreateScopeTypeRequest {
+  code: string
+  name: string
+  description?: string | null
+  parent?: 'company' | 'branch'
+  sort_order?: number
+}
+
+/** Hanya scope type manual. description '' = dikosongkan; status deprecated = hapus. */
+export interface UpdateScopeTypeRequest {
+  name?: string
+  description?: string
+  parent?: 'company' | 'branch'
+  sort_order?: number
+  status?: 'active' | 'deprecated'
 }
 
 export interface ReplaceRolePermissionsRequest {
