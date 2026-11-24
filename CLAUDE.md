@@ -25,7 +25,7 @@ Domain model berisi rule bisnis inti. Usecase mengatur alur. Infrastruktur hanya
 
 ## 1. Stack & Layout
 
-- Go 1.25, Gin, `database/sql` + `pgx/v5/stdlib` (SQL ditulis manual, tanpa ORM), golang-migrate (file di-embed), go-playground/validator (tag `binding`), golang-jwt/v5 (RS256), testify, testcontainers-go.
+- Go 1.25, Gin, `database/sql` + `pgx/v5/stdlib` (SQL ditulis manual, tanpa ORM), migrator internal `internal/migrator` (file SQL di-embed, riwayat per file di tabel `migrations`), go-playground/validator (tag `binding`), golang-jwt/v5 (RS256), testify, testcontainers-go.
 - PostgreSQL 16 (minimal 15 untuk `UNIQUE NULLS NOT DISTINCT`).
 - `web/`: Nuxt 4 SPA (`ssr: false`), Nuxt UI v4 + Pinia, bun; dev via service `web` di compose (`make dev-up`) atau `make dev-web-serve`.
   - UI berbahasa Indonesia. Status → label/warna hanya lewat `utils/status.ts` (`StatusBadge`). Konfirmasi aksi pakai `useConfirm()` (bukan `window.confirm`); aksi permanen pakai `typeToConfirm`. Form pakai `UForm` + `validate`, error field API lewat `useApiError().fieldErrors`.
@@ -391,4 +391,10 @@ make dev-migrate-create NAME=create_companies
 - Setiap `up` wajib punya `down` yang benar-benar membalikkan perubahan.
 - Seluruh kolom enum diberi `CHECK (kolom IN (...))` sesuai spec §2.0; index sesuai spec §2.11.
 
-Alasan: nomor urut dari dua branch berbeda bisa bertabrakan, dan golang-migrate bisa diam-diam melewatkan migrasi yang versinya dianggap sudah diterapkan.
+Alasan: nomor urut dari dua branch berbeda bisa bertabrakan.
+
+Cara kerja migrator (`internal/migrator`, dipakai `cmd/migrate` & `testhelper`):
+- Setiap file yang diterapkan dicatat di tabel `migrations` (versi, nama, checksum file up). `up` menjalankan **semua file yang belum tercatat**, urut versi — termasuk migrasi dari branch lain yang timestamp-nya lebih tua dari migrasi terakhir yang sudah jalan.
+- Satu file = satu transaksi (SQL + catatan riwayat), jadi tidak ada state "dirty"; jangan memakai statement yang tidak boleh di dalam transaksi (mis. `CREATE INDEX CONCURRENTLY`).
+- `down [N]` membalik N migrasi terakhir menurut **urutan diterapkan**, bukan versi.
+- `status` menampilkan `applied` / `pending` / `changed` (isi file up diubah setelah diterapkan — tidak dijalankan ulang; buat migrasi baru) / `missing` (tercatat di DB, file tidak ada — biasanya dari branch lain).

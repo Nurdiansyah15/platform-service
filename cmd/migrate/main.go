@@ -1,25 +1,32 @@
 // Command migrate menjalankan migrasi database dari file SQL yang di-embed
-// (internal/migrations). Pemakaian: migrate [up|down|fresh|version|force VERSION]
+// (internal/migrations) memakai internal/migrator: setiap file yang diterapkan
+// dicatat di tabel migrations, jadi migrasi dari branch lain yang
+// versinya lebih tua tetap dijalankan.
+//
+// Pemakaian: migrate [up | down [N] | fresh | status]
 package main
 
 import (
-	"errors"
+	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
+	"text/tabwriter"
 
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"platform-service/internal/config"
 	"platform-service/internal/migrations"
+	"platform-service/internal/migrator"
 )
+
+const usage = "Usage: migrate [up | down [N] | fresh | status]"
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: migrate [up|down|fresh|version|force VERSION]")
+		fmt.Println(usage)
 		os.Exit(1)
 	}
 
@@ -28,78 +35,80 @@ func main() {
 		log.Fatalf("gagal load config: %v", err)
 	}
 
-	m := newMigrator(cfg)
-	defer m.Close()
+	db, err := sql.Open("pgx", cfg.Database.DSN())
+	if err != nil {
+		log.Fatalf("gagal membuka koneksi database: %v", err)
+	}
+	defer db.Close()
 
+	m, err := migrator.New(db, migrations.FS, migrator.WithLogger(log.Default()))
+	if err != nil {
+		log.Fatalf("gagal membaca migrasi: %v", err)
+	}
+
+	ctx := context.Background()
 	switch cmd := os.Args[1]; cmd {
 	case "up":
-		if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		ran, err := m.Up(ctx)
+		if err != nil {
 			log.Fatalf("migrate up gagal: %v", err)
 		}
-		log.Println("Migrasi UP berhasil")
+		log.Printf("Migrasi UP berhasil (%d file dijalankan)", len(ran))
 
 	case "down":
-		if err := m.Steps(-1); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		steps := 1
+		if len(os.Args) >= 3 {
+			steps, err = strconv.Atoi(os.Args[2])
+			if err != nil || steps < 1 {
+				log.Fatalf("N tidak valid: %q", os.Args[2])
+			}
+		}
+		reverted, err := m.Down(ctx, steps)
+		if err != nil {
 			log.Fatalf("migrate down gagal: %v", err)
 		}
-		log.Println("Migrasi DOWN (mundur 1 langkah) berhasil")
+		log.Printf("Migrasi DOWN berhasil (%d file dibatalkan)", len(reverted))
 
 	case "fresh":
-		if err := m.Drop(); err != nil {
-			log.Fatalf("migrate fresh gagal saat drop: %v", err)
-		}
-		// Drop menghapus tabel schema_migrations; migrator baru diperlukan untuk Up.
-		fresh := newMigrator(cfg)
-		defer fresh.Close()
-		if err := fresh.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-			log.Fatalf("migrate fresh gagal saat up: %v", err)
-		}
-		log.Println("Migrasi FRESH berhasil")
-
-	case "version":
-		version, dirty, err := m.Version()
+		ran, err := m.Fresh(ctx)
 		if err != nil {
-			log.Fatalf("gagal cek versi: %v", err)
+			log.Fatalf("migrate fresh gagal: %v", err)
 		}
-		fmt.Printf("Versi: %d (dirty: %v)\n", version, dirty)
+		log.Printf("Migrasi FRESH berhasil (%d file dijalankan)", len(ran))
 
-	case "force":
-		if len(os.Args) < 3 {
-			fmt.Println("Usage: migrate force VERSION")
-			os.Exit(1)
-		}
-		version, err := strconv.Atoi(os.Args[2])
+	case "status", "version":
+		rows, err := m.Status(ctx)
 		if err != nil {
-			log.Fatalf("VERSION tidak valid: %v", err)
+			log.Fatalf("gagal cek status: %v", err)
 		}
-		if err := m.Force(version); err != nil {
-			log.Fatalf("migrate force gagal: %v", err)
-		}
-		log.Printf("Force ke versi %d berhasil", version)
+		printStatus(rows)
 
 	default:
-		fmt.Printf("Command tidak dikenal: %s\n", cmd)
+		fmt.Printf("Command tidak dikenal: %s\n%s\n", cmd, usage)
 		os.Exit(1)
 	}
 }
 
-func newMigrator(cfg *config.Config) *migrate.Migrate {
-	src, err := iofs.New(migrations.FS, ".")
-	if err != nil {
-		log.Fatalf("gagal membaca migrasi: %v", err)
+func printStatus(rows []migrator.StatusRow) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "STATUS\tMIGRASI\tDITERAPKAN")
+	counts := map[migrator.State]int{}
+	for _, r := range rows {
+		counts[r.State]++
+		at := "-"
+		if r.AppliedAt != nil {
+			at = r.AppliedAt.Local().Format("2006-01-02 15:04:05")
+		}
+		fmt.Fprintf(w, "%s\t%d_%s\t%s\n", r.State, r.Version, r.Name, at)
 	}
-	m, err := migrate.NewWithSourceInstance("iofs", src, migrateURL(cfg.Database.DSN()))
-	if err != nil {
-		log.Fatalf("gagal init migrator: %v", err)
+	_ = w.Flush()
+	fmt.Printf("\napplied: %d, pending: %d, changed: %d, missing: %d\n",
+		counts[migrator.StateApplied], counts[migrator.StatePending],
+		counts[migrator.StateChanged], counts[migrator.StateMissing])
+	if counts[migrator.StateChanged] > 0 {
+		fmt.Println("changed = isi file .up.sql berubah setelah diterapkan (tidak dijalankan ulang otomatis).")
 	}
-	return m
-}
-
-// migrateURL mengganti scheme ke "pgx5" (driver golang-migrate berbasis pgx/v5).
-func migrateURL(dsn string) string {
-	const prefix = "postgres://"
-	if len(dsn) > len(prefix) && dsn[:len(prefix)] == prefix {
-		return "pgx5://" + dsn[len(prefix):]
+	if counts[migrator.StateMissing] > 0 {
+		fmt.Println("missing = tercatat di DB tapi file tidak ada (kemungkinan dari branch lain).")
 	}
-	return dsn
 }

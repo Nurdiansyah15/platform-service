@@ -3,19 +3,16 @@ package testhelper
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"log"
 	"time"
 
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"platform-service/internal/migrations"
+	"platform-service/internal/migrator"
 )
 
 const (
@@ -92,15 +89,11 @@ func mustOpenAndMigrate(ctx context.Context, hostPort string) *sql.DB {
 		}
 	}
 
-	src, err := iofs.New(migrations.FS, ".")
+	m, err := migrator.New(db, migrations.FS)
 	if err != nil {
-		log.Fatalf("testhelper: create migration source: %v", err)
+		log.Fatalf("testhelper: load migrations: %v", err)
 	}
-	m, err := migrate.NewWithSourceInstance("iofs", src, "pgx5://"+dsn[len("postgres://"):])
-	if err != nil {
-		log.Fatalf("testhelper: create migrator: %v", err)
-	}
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+	if _, err := m.Up(ctx); err != nil {
 		log.Fatalf("testhelper: run migrations: %v", err)
 	}
 	return db

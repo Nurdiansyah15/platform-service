@@ -24,7 +24,7 @@ help:
 	@echo "    make dev-restart               Restart app + worker (muat ulang kode)"
 	@echo "    make dev-build                 Build ulang image dev"
 	@echo "    make dev-web                   Jalankan hanya UI Nuxt (web/)"
-	@echo "    make dev-migrate CMD=up        Migrasi di container: up | down | fresh | version | \"force <versi>\""
+	@echo "    make dev-migrate CMD=up        Migrasi di container: up | down | \"down <N>\" | fresh | status"
 	@echo "                                   (default: up; CMD=fresh ikut restart app + worker)"
 	@echo "    make dev-migrate-create NAME=x Buat pasangan file migrasi bertimestamp"
 	@echo "    make dev-seed ONLY=\"a b\"       Jalankan seeder di container"

@@ -71,7 +71,7 @@ type DatabaseConfig struct {
 	ConnMaxLifetime time.Duration
 }
 
-// DSN mengembalikan URL koneksi yang dipakai bersama oleh pgx dan golang-migrate.
+// DSN mengembalikan URL koneksi PostgreSQL (dipakai pgx untuk app, worker, dan migrate).
 func (d DatabaseConfig) DSN() string {
 	u := url.URL{
 		Scheme:   "postgres",
