@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"platform-service/internal/app/dto"
 	"platform-service/internal/app/port"
 	domainerr "platform-service/internal/domain/errors"
@@ -16,12 +14,11 @@ import (
 
 // PostgresPermissionQuery implements port.PermissionQueryReadModel.
 type PostgresPermissionQuery struct {
-	db      *sql.DB
-	typeMap *pgtype.Map
+	db *sql.DB
 }
 
 func NewPostgresPermissionQuery(db *sql.DB) *PostgresPermissionQuery {
-	return &PostgresPermissionQuery{db: db, typeMap: pgtype.NewMap()}
+	return &PostgresPermissionQuery{db: db}
 }
 
 var permissionSortable = map[string]string{"code": "p.code", "name": "p.name", "created_at": "p.created_at"}
@@ -55,7 +52,7 @@ func (r *PostgresPermissionQuery) List(ctx context.Context, q port.PermissionLis
 		return nil, dto.Meta{}, domainerr.Wrap(constant.CodePermissionQueryFailed, err)
 	}
 	rows, err := exec.QueryContext(ctx, fmt.Sprintf(`
-		SELECT p.id, p.solution_id, p.code, p.name, p.description, p.status, p.source, p.scope_types, p.created_at, p.updated_at,
+		SELECT p.id, p.solution_id, p.code, p.name, p.description, p.status, p.source, p.created_at, p.updated_at,
 			g.code, g.name, g.sort_order
 		%s %s ORDER BY %s %s, p.id LIMIT %d OFFSET %d`,
 		from, w.sql(), sortColumn, sortType, limit, offset), w.args...)
@@ -71,11 +68,8 @@ func (r *PostgresPermissionQuery) List(ctx context.Context, q port.PermissionLis
 			group nullableGroupRef
 		)
 		if err := rows.Scan(&it.ID, &it.SolutionID, &it.Code, &it.Name, &it.Description, &it.Status, &it.Source,
-			r.typeMap.SQLScanner(&it.ScopeTypes), &it.CreatedAt, &it.UpdatedAt, &group.code, &group.name, &group.sortOrder); err != nil {
+			&it.CreatedAt, &it.UpdatedAt, &group.code, &group.name, &group.sortOrder); err != nil {
 			return nil, dto.Meta{}, domainerr.Wrap(constant.CodePermissionQueryFailed, err)
-		}
-		if it.ScopeTypes == nil {
-			it.ScopeTypes = []string{}
 		}
 		it.Group = group.ref()
 		items = append(items, it)

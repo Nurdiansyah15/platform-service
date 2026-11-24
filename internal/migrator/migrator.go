@@ -221,27 +221,9 @@ func (m *Migrator) Down(ctx context.Context, steps int) ([]Migration, error) {
 
 	var reverted []Migration
 	err := m.withConn(ctx, func(conn *sql.Conn) error {
-		rows, err := conn.QueryContext(ctx,
-			`SELECT version, name FROM `+HistoryTable+` ORDER BY id DESC LIMIT $1`, steps)
+		targets, err := lastApplied(ctx, conn, steps)
 		if err != nil {
-			return fmt.Errorf("migrator: baca riwayat: %w", err)
-		}
-		type rec struct {
-			version int64
-			name    string
-		}
-		var targets []rec
-		for rows.Next() {
-			var r rec
-			if err := rows.Scan(&r.version, &r.name); err != nil {
-				_ = rows.Close()
-				return fmt.Errorf("migrator: baca riwayat: %w", err)
-			}
-			targets = append(targets, r)
-		}
-		_ = rows.Close()
-		if err := rows.Err(); err != nil {
-			return fmt.Errorf("migrator: baca riwayat: %w", err)
+			return err
 		}
 
 		for _, t := range targets {
@@ -435,4 +417,33 @@ func quoteIdent(s string) string {
 		out = append(out, s[i])
 	}
 	return string(append(out, '"'))
+}
+
+// appliedRecord = satu baris riwayat migrasi (versi + nama).
+type appliedRecord struct {
+	version int64
+	name    string
+}
+
+// lastApplied membaca n migrasi terakhir menurut urutan diterapkan (terbaru dulu).
+func lastApplied(ctx context.Context, conn *sql.Conn, n int) ([]appliedRecord, error) {
+	rows, err := conn.QueryContext(ctx,
+		`SELECT version, name FROM `+HistoryTable+` ORDER BY id DESC LIMIT $1`, n)
+	if err != nil {
+		return nil, fmt.Errorf("migrator: baca riwayat: %w", err)
+	}
+	defer rows.Close()
+
+	var out []appliedRecord
+	for rows.Next() {
+		var r appliedRecord
+		if err := rows.Scan(&r.version, &r.name); err != nil {
+			return nil, fmt.Errorf("migrator: baca riwayat: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("migrator: baca riwayat: %w", err)
+	}
+	return out, nil
 }

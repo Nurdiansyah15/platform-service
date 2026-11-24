@@ -107,8 +107,13 @@ async function remove() {
                 <span class="block truncate text-xs text-muted">{{ h.email }}</span>
               </span>
               <span class="flex items-center gap-1 text-xs text-muted">
-                <UIcon :name="h.scope_type === 'company' ? 'i-lucide-building-2' : h.scope_type === 'branch' ? 'i-lucide-git-branch' : 'i-lucide-layers'" class="size-3.5" />
-                {{ h.scope_type === 'company' ? 'Seluruh company' : h.scope_type === 'branch' ? h.scope_name : `${h.scope_type_name}: ${h.scope_name}` }}
+                <template v-if="!h.scopes.length">
+                  <UIcon name="i-lucide-building-2" class="size-3.5" /> Seluruh company
+                </template>
+                <span v-for="sc in h.scopes" :key="sc.type" class="inline-flex items-center gap-1">
+                  <UIcon :name="sc.type === 'branch' ? 'i-lucide-git-branch' : 'i-lucide-layers'" class="size-3.5" />
+                  {{ sc.type === 'branch' ? 'Cabang' : sc.type_name }}: {{ sc.name }}
+                </span>
               </span>
             </NuxtLink>
           </li>

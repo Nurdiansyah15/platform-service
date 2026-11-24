@@ -120,6 +120,20 @@ definitions:
       value_type:
         type: string
     type: object
+  dto.AssignmentScope:
+    properties:
+      name:
+        description: Name — nama branch, label scope custom, atau value bila tanpa
+          label.
+        type: string
+      type:
+        type: string
+      type_name:
+        description: TypeName — Company / Branch / nama scope type dari katalog solution.
+        type: string
+      value:
+        type: string
+    type: object
   dto.AuthTokenResponse:
     properties:
       access_token:
@@ -544,12 +558,6 @@ definitions:
       name:
         maxLength: 255
         type: string
-      scopes:
-        description: Scopes — scope type tempat permission berlaku (opsional; kosong
-          = semua scope).
-        items:
-          type: string
-        type: array
     required:
     - code
     - name
@@ -584,29 +592,22 @@ definitions:
     type: object
   dto.CreateRoleAssignmentRequest:
     properties:
-      parent_id:
-        description: |-
-          ParentID — scope custom ber-parent branch: UUID branch induk (opsional). Membuat
-          pemegang role.assign di branch itu boleh mengelola assignment ini.
-        type: string
       role_id:
         type: string
-      scope_id:
+      scope_labels:
+        additionalProperties:
+          type: string
+        description: 'ScopeLabels — nama tampilan opsional untuk nilai scope custom,
+          mis. {"department": "Keuangan"}.'
+        type: object
+      scope_values:
+        additionalProperties:
+          type: string
         description: |-
-          ScopeID — company boleh kosong (= company itu sendiri); branch = UUID branch;
-          scope custom = id milik solution (string bebas, wajib).
-        maxLength: 150
-        type: string
-      scope_label:
-        description: ScopeLabel — nama tampilan scope custom (opsional; diabaikan
-          untuk company/branch).
-        maxLength: 255
-        type: string
-      scope_type:
-        description: ScopeType — company (default) | branch | scope type custom solution
-          role (GET /solutions/{id}/scope-types).
-        maxLength: 30
-        type: string
+          ScopeValues — nilai untuk setiap scope_type non-company yang dipakai permission role,
+          mis. {"branch": "<uuid branch>", "department": "42"}. Role yang hanya berisi permission
+          ber-scope company tidak butuh nilai. Kunci di luar scope role ditolak.
+        type: object
     required:
     - role_id
     type: object
@@ -787,10 +788,6 @@ definitions:
         type: string
       permission:
         type: string
-      scope_types:
-        items:
-          type: string
-        type: array
     type: object
   dto.EntitlementResponse:
     properties:
@@ -978,12 +975,6 @@ definitions:
       name:
         maxLength: 255
         type: string
-      scopes:
-        description: Scopes — scope type tempat permission berlaku (opsional; kosong
-          = semua scope).
-        items:
-          type: string
-        type: array
     required:
     - code
     - name
@@ -1046,12 +1037,6 @@ definitions:
         type: string
       name:
         type: string
-      scope_types:
-        description: ScopeTypes — scope type tempat permission berlaku; kosong = semua
-          scope.
-        items:
-          type: string
-        type: array
       solution_id:
         type: string
       source:
@@ -1108,12 +1093,14 @@ definitions:
     type: object
   dto.ReplaceRolePermissionsRequest:
     properties:
-      permission_codes:
+      permissions:
+        description: Permissions — seluruh permission role (replace-all). Kirim []
+          untuk mengosongkan.
         items:
-          type: string
+          $ref: '#/definitions/dto.RolePermissionInput'
         type: array
     required:
-    - permission_codes
+    - permissions
     type: object
   dto.ReportUsageAbsoluteRequest:
     properties:
@@ -1159,8 +1146,6 @@ definitions:
         type: string
       id:
         type: string
-      parent_id:
-        type: string
       role_code:
         type: string
       role_id:
@@ -1169,18 +1154,26 @@ definitions:
         type: boolean
       role_name:
         type: string
-      scope_id:
-        type: string
-      scope_label:
-        type: string
-      scope_name:
-        type: string
-      scope_type:
-        type: string
-      scope_type_name:
-        description: ScopeTypeName — nama tampilan scope type (Company / Branch /
-          nama dari katalog solution).
-        type: string
+      role_scope_types:
+        description: |-
+          RoleScopeTypes — scope_type unik permission role saat ini (company/branch/custom). Menentukan
+          level role.assign yang dibutuhkan untuk mencabut: ada selain branch → level company.
+        items:
+          type: string
+        type: array
+      scope_labels:
+        additionalProperties:
+          type: string
+        type: object
+      scope_values:
+        additionalProperties:
+          type: string
+        type: object
+      scopes:
+        description: Scopes — nilai scope untuk ditampilkan (urut type).
+        items:
+          $ref: '#/definitions/dto.AssignmentScope'
+        type: array
       solution_code:
         type: string
       solution_id:
@@ -1196,18 +1189,18 @@ definitions:
         type: string
       id:
         type: string
-      parent_id:
-        type: string
       role_code:
         type: string
       role_id:
         type: string
-      scope_id:
-        type: string
-      scope_label:
-        type: string
-      scope_type:
-        type: string
+      scope_labels:
+        additionalProperties:
+          type: string
+        type: object
+      scope_values:
+        additionalProperties:
+          type: string
+        type: object
       solution_id:
         type: string
       user_id:
@@ -1223,16 +1216,33 @@ definitions:
         type: string
       name:
         type: string
-      scope_id:
-        type: string
-      scope_name:
-        type: string
-      scope_type:
-        type: string
-      scope_type_name:
-        type: string
+      scope_labels:
+        additionalProperties:
+          type: string
+        type: object
+      scope_values:
+        additionalProperties:
+          type: string
+        type: object
+      scopes:
+        items:
+          $ref: '#/definitions/dto.AssignmentScope'
+        type: array
       user_id:
         type: string
+    type: object
+  dto.RolePermissionInput:
+    properties:
+      code:
+        maxLength: 150
+        type: string
+      scope_type:
+        description: ScopeType — company (default, seluruh company) | branch | scope
+          type custom solution.
+        maxLength: 30
+        type: string
+    required:
+    - code
     type: object
   dto.RolePermissionResponse:
     properties:
@@ -1246,10 +1256,9 @@ definitions:
         type: string
       name:
         type: string
-      scope_types:
-        items:
-          type: string
-        type: array
+      scope_type:
+        description: ScopeType — scope tempat permission berlaku untuk role ini.
+        type: string
       status:
         type: string
     type: object
@@ -1681,10 +1690,6 @@ definitions:
       name:
         maxLength: 255
         type: string
-      scopes:
-        items:
-          type: string
-        type: array
       status:
         description: Status — deprecated = "hapus" (tidak bisa ditambahkan ke role
           baru); active = aktifkan lagi.

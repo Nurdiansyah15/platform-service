@@ -12,7 +12,6 @@ import (
 	authzevent "platform-service/internal/domain/authz/event"
 	authzrepo "platform-service/internal/domain/authz/repository"
 	authzservice "platform-service/internal/domain/authz/service"
-	authzvo "platform-service/internal/domain/authz/valueobject"
 	domainerr "platform-service/internal/domain/errors"
 	"platform-service/internal/domain/organization/constant"
 	"platform-service/internal/domain/organization/entity"
@@ -199,8 +198,8 @@ func (uc *CompanyUseCase) grantCompanyAdmin(ctx context.Context, companyID, user
 	if err != nil {
 		return err
 	}
-	scope := authzvo.Scope{Type: authzvo.ScopeCompany, ID: companyID}
-	a := authzentity.NewRoleAssignment(companyID, userID, r.ID, authzentity.CheckScope{Scope: scope, CompanyID: companyID}, nil, now)
+	// company_admin hanya berisi permission ber-scope company → tanpa nilai scope.
+	a := authzentity.NewRoleAssignment(companyID, userID, r.ID, nil, nil, now)
 	if err := uc.deps.RoleAssignments.Create(ctx, a); err != nil {
 		return err
 	}
@@ -210,7 +209,7 @@ func (uc *CompanyUseCase) grantCompanyAdmin(ctx context.Context, companyID, user
 		SolutionID: &consoleID,
 		Payload: authzevent.RoleAssignmentPayload{
 			ID: a.ID, CompanyID: companyID, UserID: userID, RoleID: r.ID, RoleCode: r.Code.Value(),
-			SolutionID: consoleID, ScopeType: scope.Type.String(), ScopeID: scope.ID, CreatedAt: a.CreatedAt,
+			SolutionID: consoleID, ScopeValues: a.Scopes, CreatedAt: a.CreatedAt,
 		},
 	})
 }

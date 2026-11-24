@@ -127,19 +127,19 @@ func TestRole_ReplaceGlobalPermissions(t *testing.T) {
 	roleID := mustCreateRole(t, solutionRolesPath(solID), "hr_admin", adminHeader())
 	path := rolePermissionsPath(roleID)
 
-	assert.Equal(t, 401, testSrv.PUT(path, map[string]any{"permission_codes": []string{}}).Code)
-	assert.Equal(t, 403, testSrv.PUT(path, map[string]any{"permission_codes": []string{}}, userHeader()).Code)
-	assert.Equal(t, 404, testSrv.PUT(rolePermissionsPath(uuid.NewString()), map[string]any{"permission_codes": []string{}}, adminHeader()).Code)
+	assert.Equal(t, 401, testSrv.PUT(path, permsBody([]string{})).Code)
+	assert.Equal(t, 403, testSrv.PUT(path, permsBody([]string{}), userHeader()).Code)
+	assert.Equal(t, 404, testSrv.PUT(rolePermissionsPath(uuid.NewString()), permsBody([]string{}), adminHeader()).Code)
 
 	for name, codes := range map[string][]string{
 		"tidak dikenal": {"payroll.run"}, "duplikat": {"employee.read", "employee.read"}, "deprecated baru": {"legacy.export"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, 422, testSrv.PUT(path, map[string]any{"permission_codes": codes}, adminHeader()).Code)
+			assert.Equal(t, 422, testSrv.PUT(path, permsBody(codes), adminHeader()).Code)
 		})
 	}
 
-	w := testSrv.PUT(path, map[string]any{"permission_codes": []string{"employee.write", "employee.read"}}, adminHeader())
+	w := testSrv.PUT(path, permsBody([]string{"employee.write", "employee.read"}), adminHeader())
 	require.Equal(t, 200, w.Code, w.Body.String())
 	assert.Equal(t, []string{"employee.read", "employee.write"}, permissionCodesOf(t, w.Body.Bytes()))
 	assert.Equal(t, 1, countEventsBySolution(t, "role.permissions_changed", solID))
@@ -153,11 +153,11 @@ func TestRole_DeprecatedPermissionAlreadyAttachedIsKept(t *testing.T) {
 	solID := mustCreateSolution(t, testhelper.UniqueCode("rl"))
 	mustSync(t, solID, adminHeader(), catalog("v1", [2]string{"employee.read", "R"}, [2]string{"legacy.export", "L"}))
 	roleID := mustCreateRole(t, solutionRolesPath(solID), "auditor", adminHeader())
-	require.Equal(t, 200, testSrv.PUT(rolePermissionsPath(roleID), map[string]any{"permission_codes": []string{"employee.read", "legacy.export"}}, adminHeader()).Code)
+	require.Equal(t, 200, testSrv.PUT(rolePermissionsPath(roleID), permsBody([]string{"employee.read", "legacy.export"}), adminHeader()).Code)
 
 	// legacy.export kemudian di-deprecate oleh catalog sync — role lama tidak rusak.
 	mustSync(t, solID, adminHeader(), catalog("v2", [2]string{"employee.read", "R"}))
-	w := testSrv.PUT(rolePermissionsPath(roleID), map[string]any{"permission_codes": []string{"legacy.export"}}, adminHeader())
+	w := testSrv.PUT(rolePermissionsPath(roleID), permsBody([]string{"legacy.export"}), adminHeader())
 	require.Equal(t, 200, w.Code, w.Body.String())
 	assert.Equal(t, []string{"legacy.export"}, permissionCodesOf(t, w.Body.Bytes()))
 }
@@ -168,7 +168,7 @@ func TestRole_SystemRoleImmutable(t *testing.T) {
 	_, err := testSrv.DB.ExecContext(context.Background(), `UPDATE roles SET is_system = TRUE WHERE id = $1`, roleID)
 	require.NoError(t, err)
 
-	w := testSrv.PUT(rolePermissionsPath(roleID), map[string]any{"permission_codes": []string{"employee.read"}}, adminHeader())
+	w := testSrv.PUT(rolePermissionsPath(roleID), permsBody([]string{"employee.read"}), adminHeader())
 	assert.Equal(t, 403, w.Code, w.Body.String())
 }
 
@@ -254,11 +254,11 @@ func TestCompanyRole_ReplacePermissions(t *testing.T) {
 	roleID := mustCreateRole(t, companyRolesPath(companyID, solID), "supervisor", h)
 	globalRole := mustCreateRole(t, solutionRolesPath(solID), "global_role", adminHeader())
 
-	body := map[string]any{"permission_codes": []string{"employee.read"}}
+	body := permsBody([]string{"employee.read"})
 	assert.Equal(t, 404, testSrv.PUT(companyRolePermissionsPath(companyID, globalRole), body, h).Code, "role global lewat path company")
 	assert.Equal(t, 404, testSrv.PUT(rolePermissionsPath(roleID), body, adminHeader()).Code, "custom role lewat path global")
 
-	assert.Equal(t, 422, testSrv.PUT(companyRolePermissionsPath(companyID, roleID), map[string]any{"permission_codes": []string{"payroll.run"}}, h).Code)
+	assert.Equal(t, 422, testSrv.PUT(companyRolePermissionsPath(companyID, roleID), permsBody([]string{"payroll.run"}), h).Code)
 
 	w := testSrv.PUT(companyRolePermissionsPath(companyID, roleID), body, h)
 	require.Equal(t, 200, w.Code, w.Body.String())
@@ -377,14 +377,17 @@ func TestCompanyRole_Get_And_Holders(t *testing.T) {
 	w = testSrv.GET(companyRolePath(f.companyID, f.supervisor)+"/members", f.ownerH)
 	require.Equal(t, 200, w.Code, w.Body.String())
 	var holders []struct {
-		UserID    string `json:"user_id"`
-		ScopeType string `json:"scope_type"`
-		ScopeName string `json:"scope_name"`
+		UserID string `json:"user_id"`
+		Scopes []struct {
+			Type string `json:"type"`
+			Name string `json:"name"`
+		} `json:"scopes"`
 	}
 	testhelper.DecodeBody(t, w, &holders)
 	require.Len(t, holders, 1)
 	assert.Equal(t, f.staffID, holders[0].UserID)
-	assert.Equal(t, "Branch B1", holders[0].ScopeName)
+	require.Len(t, holders[0].Scopes, 1)
+	assert.Equal(t, "Branch B1", holders[0].Scopes[0].Name)
 }
 
 func TestCompanyRole_Get_Unauthenticated_Forbidden_NotFound(t *testing.T) {

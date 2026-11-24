@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -16,21 +17,22 @@ func assignPath(companyID, userID string) string {
 }
 
 // authzFixture: company (owner ber-token asli) subscribe solution berkatalog permission,
-// role global hr_admin (employee.write, employee.read), custom role supervisor
-// (attendance.edit), branch B1, dan member kedua (staff).
+// role global hr_admin (employee.write, employee.read @company), custom role supervisor
+// (attendance.edit @branch), branch B1, dan member kedua (staff).
 type authzFixture struct {
 	ownerH                              map[string]string
 	companyID, solutionID, solutionCode string
 	hrAdmin, supervisor                 string
 	b1                                  string
 	staffID, staffEmail                 string
+	ownerID                             string
 	svc                                 map[string]string
 }
 
 func newAuthzFixture(t *testing.T) authzFixture {
 	t.Helper()
 	var f authzFixture
-	f.ownerH, _, f.companyID = mustCompanyOwner(t)
+	f.ownerH, f.ownerID, f.companyID = mustCompanyOwner(t)
 	require.NoError(t, testSrv.DB.QueryRowContext(context.Background(),
 		`SELECT s.solution_id, sol.code FROM subscriptions s JOIN solutions sol ON sol.id = s.solution_id WHERE s.company_id = $1`,
 		f.companyID).Scan(&f.solutionID, &f.solutionCode))
@@ -38,9 +40,9 @@ func newAuthzFixture(t *testing.T) authzFixture {
 		[2]string{"employee.read", "R"}, [2]string{"employee.write", "W"}, [2]string{"attendance.edit", "A"}))
 
 	f.hrAdmin = mustCreateRole(t, solutionRolesPath(f.solutionID), "hr_admin", adminHeader())
-	require.Equal(t, 200, testSrv.PUT(rolePermissionsPath(f.hrAdmin), map[string]any{"permission_codes": []string{"employee.write", "employee.read"}}, adminHeader()).Code)
+	require.Equal(t, 200, testSrv.PUT(rolePermissionsPath(f.hrAdmin), permsBody([]string{"employee.write", "employee.read"}), adminHeader()).Code)
 	f.supervisor = mustCreateRole(t, companyRolesPath(f.companyID, f.solutionID), "supervisor", f.ownerH)
-	require.Equal(t, 200, testSrv.PUT(companyRolePermissionsPath(f.companyID, f.supervisor), map[string]any{"permission_codes": []string{"attendance.edit"}}, f.ownerH).Code)
+	require.Equal(t, 200, testSrv.PUT(companyRolePermissionsPath(f.companyID, f.supervisor), scopedPermsBody("branch", "attendance.edit"), f.ownerH).Code)
 
 	f.b1 = mustCreateBranch(t, f.ownerH, f.companyID, "B1")
 
@@ -54,11 +56,7 @@ func newAuthzFixture(t *testing.T) authzFixture {
 
 func (f authzFixture) assign(t *testing.T, roleID, scopeType, scopeID string) {
 	t.Helper()
-	body := map[string]any{"role_id": roleID}
-	if scopeType != "" {
-		body["scope_type"], body["scope_id"] = scopeType, scopeID
-	}
-	w := testSrv.POST(assignPath(f.companyID, f.staffID), body, f.ownerH)
+	w := testSrv.POST(assignPath(f.companyID, f.staffID), assignBody(roleID, scopeType, scopeID), f.ownerH)
 	require.Equal(t, 201, w.Code, "assign body=%s", w.Body.String())
 }
 
@@ -119,12 +117,15 @@ func TestRoleAssignment_Invalid(t *testing.T) {
 		userID string
 		body   map[string]any
 	}{
-		"bukan member":           {uuid.NewString(), map[string]any{"role_id": f.hrAdmin}},
-		"role tidak ada":         {f.staffID, map[string]any{"role_id": uuid.NewString()}},
-		"company company lain":   {f.staffID, map[string]any{"role_id": f.hrAdmin, "scope_type": "company", "scope_id": otherCompany}},
-		"branch company lain":    {f.staffID, map[string]any{"role_id": f.hrAdmin, "scope_type": "branch", "scope_id": otherBranch}},
-		"branch tanpa scope_id":  {f.staffID, map[string]any{"role_id": f.hrAdmin, "scope_type": "branch"}},
-		"scope_type tak dikenal": {f.staffID, map[string]any{"role_id": f.hrAdmin, "scope_type": "region", "scope_id": f.b1}},
+		"bukan member":                   {uuid.NewString(), map[string]any{"role_id": f.hrAdmin}},
+		"role tidak ada":                 {f.staffID, map[string]any{"role_id": uuid.NewString()}},
+		"nilai scope untuk role company": {f.staffID, assignBody(f.hrAdmin, "branch", f.b1)},
+		"company sebagai kunci scope":    {f.staffID, assignBody(f.hrAdmin, "company_x", otherCompany)},
+		"branch company lain":            {f.staffID, assignBody(f.supervisor, "branch", otherBranch)},
+		"branch bukan uuid":              {f.staffID, assignBody(f.supervisor, "branch", "not-a-uuid")},
+		"nilai branch tidak dikirim":     {f.staffID, map[string]any{"role_id": f.supervisor}},
+		"kunci scope tak dipakai role":   {f.staffID, map[string]any{"role_id": f.supervisor, "scope_values": map[string]string{"branch": f.b1, "region": "x"}}},
+		"label untuk scope tak dipakai":  {f.staffID, map[string]any{"role_id": f.hrAdmin, "scope_labels": map[string]string{"self": "x"}}},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -149,22 +150,22 @@ func TestRoleAssignment_Success_AndDuplicate(t *testing.T) {
 	w := testSrv.POST(assignPath(f.companyID, f.staffID), map[string]any{"role_id": f.hrAdmin}, f.ownerH)
 	require.Equal(t, 201, w.Code, w.Body.String())
 	var got struct {
-		ScopeType string `json:"scope_type"`
-		ScopeID   string `json:"scope_id"`
-		RoleCode  string `json:"role_code"`
+		ScopeValues map[string]string `json:"scope_values"`
+		RoleCode    string            `json:"role_code"`
 	}
 	testhelper.DecodeBody(t, w, &got)
-	assert.Equal(t, "company", got.ScopeType)
-	assert.Equal(t, f.companyID, got.ScopeID, "scope company default = company itu sendiri")
+	assert.Empty(t, got.ScopeValues, "role ber-scope company tanpa nilai scope")
 	assert.Equal(t, "hr_admin", got.RoleCode)
 	// +1 dari company_admin yang otomatis diberikan ke pembuat company.
 	assert.Equal(t, 2, countEvents(t, "role_assignment.created", f.companyID))
 
 	assert.Equal(t, 409, testSrv.POST(assignPath(f.companyID, f.staffID), map[string]any{"role_id": f.hrAdmin}, f.ownerH).Code)
 
-	// Role sama di scope lain boleh; custom role company sendiri boleh; lewat token service juga.
-	f.assign(t, f.hrAdmin, "branch", f.b1)
-	w = testSrv.POST(assignPath(f.companyID, f.staffID), map[string]any{"role_id": f.supervisor, "scope_type": "branch", "scope_id": f.b1}, f.svc)
+	// Role ber-scope branch: nilai berbeda = assignment lain; nilai sama = 409; lewat token service juga.
+	b2 := mustCreateBranch(t, f.ownerH, f.companyID, "B2")
+	f.assign(t, f.supervisor, "branch", f.b1)
+	assert.Equal(t, 409, testSrv.POST(assignPath(f.companyID, f.staffID), assignBody(f.supervisor, "branch", f.b1), f.ownerH).Code)
+	w = testSrv.POST(assignPath(f.companyID, f.staffID), assignBody(f.supervisor, "branch", b2), f.svc)
 	assert.Equal(t, 201, w.Code, w.Body.String())
 }
 
@@ -295,13 +296,18 @@ func TestAuthzCheck_DeletedRoleNoLongerGrants(t *testing.T) {
 // ── List / Revoke assignment ─────────────────────────────────────────────────
 
 type assignmentData struct {
-	ID           string `json:"id"`
-	RoleCode     string `json:"role_code"`
-	RoleIsGlobal bool   `json:"role_is_global"`
-	SolutionID   string `json:"solution_id"`
-	ScopeType    string `json:"scope_type"`
-	ScopeID      string `json:"scope_id"`
-	ScopeName    string `json:"scope_name"`
+	ID           string            `json:"id"`
+	RoleCode     string            `json:"role_code"`
+	RoleIsGlobal bool              `json:"role_is_global"`
+	SolutionID   string            `json:"solution_id"`
+	ScopeValues  map[string]string `json:"scope_values"`
+	Scopes       []struct {
+		Type     string `json:"type"`
+		TypeName string `json:"type_name"`
+		Value    string `json:"value"`
+		Name     string `json:"name"`
+	} `json:"scopes"`
+	RoleScopeTypes []string `json:"role_scope_types"`
 }
 
 func listAssignments(t *testing.T, path string, h map[string]string) []assignmentData {
@@ -340,10 +346,11 @@ func TestRoleAssignment_List_Success(t *testing.T) {
 		byRole[a.RoleCode] = a
 	}
 	assert.True(t, byRole["hr_admin"].RoleIsGlobal)
-	assert.Equal(t, "company", byRole["hr_admin"].ScopeType)
+	assert.Empty(t, byRole["hr_admin"].Scopes)
 	assert.False(t, byRole["supervisor"].RoleIsGlobal)
-	assert.Equal(t, f.b1, byRole["supervisor"].ScopeID)
-	assert.Equal(t, "Branch B1", byRole["supervisor"].ScopeName)
+	assert.Equal(t, map[string]string{"branch": f.b1}, byRole["supervisor"].ScopeValues)
+	require.Len(t, byRole["supervisor"].Scopes, 1)
+	assert.Equal(t, "Branch B1", byRole["supervisor"].Scopes[0].Name)
 
 	// Filter solution lain → kosong; token service solution lain hanya melihat solution-nya.
 	other := mustCreateSolution(t, testhelper.UniqueCode("oth"))
@@ -455,14 +462,15 @@ func TestEffectivePermissions_Success(t *testing.T) {
 	assert.Len(t, got, 3)
 }
 
-// ── Scope custom ─────────────────────────────────────────────────────────────
+// ── Scope custom (scope di role_permissions, nilai di assignment) ───────────
 
-// customScopeFixture memperluas authzFixture: katalog solution berisi scope type department
-// (parent branch) & project (parent company); role kadep (leave.approve) dan role payroll
-// (payroll.run yang hanya berlaku di company).
+// customScopeFixture memperluas authzFixture: katalog berisi scope type department (parent
+// branch) & self; role manager = items.read@company + profile.view@self; role kadep =
+// leave.approve@department; role kacab = leave.approve@branch; role mixed = leave.approve@department
+// + attendance.edit@branch.
 type customScopeFixture struct {
 	authzFixture
-	kadep, payroll, viewer string
+	manager, kadep, kacab, mixed string
 }
 
 func newCustomScopeFixture(t *testing.T) customScopeFixture {
@@ -472,23 +480,38 @@ func newCustomScopeFixture(t *testing.T) customScopeFixture {
 		"version": "v-custom",
 		"scope_types": []any{
 			map[string]any{"code": "department", "name": "Departemen", "parent": "branch"},
-			map[string]any{"code": "project", "name": "Proyek"},
+			map[string]any{"code": "self", "name": "Diri sendiri"},
 		},
 		"permissions": []any{
 			map[string]any{"code": "employee.read", "name": "R"},
 			map[string]any{"code": "employee.write", "name": "W"},
 			map[string]any{"code": "attendance.edit", "name": "A"},
 			map[string]any{"code": "leave.approve", "name": "Setujui cuti"},
-			map[string]any{"code": "payroll.run", "name": "Payroll", "scopes": []string{"company"}},
+			map[string]any{"code": "items.read", "name": "Lihat item"},
+			map[string]any{"code": "profile.view", "name": "Lihat profil"},
 		},
 	})
-	f.kadep = mustCreateRole(t, solutionRolesPath(f.solutionID), "kadep", adminHeader())
-	require.Equal(t, 200, testSrv.PUT(rolePermissionsPath(f.kadep), map[string]any{"permission_codes": []string{"leave.approve"}}, adminHeader()).Code)
-	f.payroll = mustCreateRole(t, solutionRolesPath(f.solutionID), "payroll", adminHeader())
-	require.Equal(t, 200, testSrv.PUT(rolePermissionsPath(f.payroll), map[string]any{"permission_codes": []string{"payroll.run"}}, adminHeader()).Code)
-	f.viewer = mustCreateRole(t, solutionRolesPath(f.solutionID), "kacab", adminHeader())
-	require.Equal(t, 200, testSrv.PUT(rolePermissionsPath(f.viewer), map[string]any{"permission_codes": []string{"leave.approve"}}, adminHeader()).Code)
+	mk := func(code string, perms ...map[string]any) string {
+		id := mustCreateRole(t, solutionRolesPath(f.solutionID), code, adminHeader())
+		w := testSrv.PUT(rolePermissionsPath(id), map[string]any{"permissions": perms}, adminHeader())
+		require.Equal(t, 200, w.Code, "role %s: %s", code, w.Body.String())
+		return id
+	}
+	p := func(code, scope string) map[string]any { return map[string]any{"code": code, "scope_type": scope} }
+	f.manager = mk("manager", p("items.read", ""), p("profile.view", "self"))
+	f.kadep = mk("kadep", p("leave.approve", "department"))
+	f.kacab = mk("kacab", p("leave.approve", "branch"))
+	f.mixed = mk("mixed", p("leave.approve", "department"), p("attendance.edit", "branch"))
 	return f
+}
+
+func (f customScopeFixture) assignValues(t *testing.T, roleID string, values, labels map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	body := map[string]any{"role_id": roleID, "scope_values": values}
+	if labels != nil {
+		body["scope_labels"] = labels
+	}
+	return testSrv.POST(assignPath(f.companyID, f.staffID), body, f.ownerH)
 }
 
 func (f customScopeFixture) checkScope(t *testing.T, permission, scopeType, scopeID, parentID string) checkResult {
@@ -501,131 +524,176 @@ func (f customScopeFixture) checkScope(t *testing.T, permission, scopeType, scop
 	return f.check(t, f.svc, body)
 }
 
-func TestRoleAssignment_CustomScope_Success(t *testing.T) {
+func TestRolePermissions_ScopeType(t *testing.T) {
 	f := newCustomScopeFixture(t)
-	w := testSrv.POST(assignPath(f.companyID, f.staffID), map[string]any{
-		"role_id": f.kadep, "scope_type": "department", "scope_id": "42", "parent_id": f.b1, "scope_label": " Keuangan ",
-	}, f.ownerH)
-	require.Equal(t, 201, w.Code, w.Body.String())
-	var got struct {
-		ScopeType  string  `json:"scope_type"`
-		ScopeID    string  `json:"scope_id"`
-		ScopeLabel *string `json:"scope_label"`
-		ParentID   *string `json:"parent_id"`
+	w := testSrv.GET(rolePermissionsPath(f.manager), f.ownerH)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got []struct {
+		Code      string `json:"code"`
+		ScopeType string `json:"scope_type"`
 	}
 	testhelper.DecodeBody(t, w, &got)
-	assert.Equal(t, "department", got.ScopeType)
-	assert.Equal(t, "42", got.ScopeID)
-	require.NotNil(t, got.ScopeLabel)
-	assert.Equal(t, "Keuangan", *got.ScopeLabel)
-	require.NotNil(t, got.ParentID)
-	assert.Equal(t, f.b1, *got.ParentID)
-
-	w = testSrv.GET(assignPath(f.companyID, f.staffID)+"?solution_id="+f.solutionID, f.ownerH)
-	require.Equal(t, 200, w.Code, w.Body.String())
-	var list []struct {
-		ScopeType     string `json:"scope_type"`
-		ScopeTypeName string `json:"scope_type_name"`
-		ScopeName     string `json:"scope_name"`
+	scopes := map[string]string{}
+	for _, p := range got {
+		scopes[p.Code] = p.ScopeType
 	}
-	testhelper.DecodeBody(t, w, &list)
-	require.Len(t, list, 1)
-	assert.Equal(t, "Departemen", list[0].ScopeTypeName)
-	assert.Equal(t, "Keuangan", list[0].ScopeName)
+	assert.Equal(t, map[string]string{"items.read": "company", "profile.view": "self"}, scopes)
 
-	// Label kosong → scope_name = scope_id; scope ber-parent company tanpa parent_id.
-	w = testSrv.POST(assignPath(f.companyID, f.staffID), map[string]any{
-		"role_id": f.kadep, "scope_type": "project", "scope_id": "PRJ-7",
-	}, f.svc)
-	assert.Equal(t, 201, w.Code, w.Body.String())
+	// scope_type tak dikenal / scope type deprecated → 422.
+	assert.Equal(t, 422, testSrv.PUT(rolePermissionsPath(f.manager), scopedPermsBody("region", "items.read"), adminHeader()).Code)
+	mustSync(t, f.solutionID, adminHeader(), map[string]any{
+		"version": "v-noself", "scope_types": []any{map[string]any{"code": "department", "name": "Departemen", "parent": "branch"}},
+		"permissions": []any{map[string]any{"code": "items.read", "name": "I"}, map[string]any{"code": "profile.view", "name": "P"},
+			map[string]any{"code": "leave.approve", "name": "L"}, map[string]any{"code": "attendance.edit", "name": "A"}},
+	})
+	assert.Equal(t, 422, testSrv.PUT(rolePermissionsPath(f.kadep), scopedPermsBody("self", "leave.approve"), adminHeader()).Code,
+		"scope type deprecated tidak bisa dipasang baru")
+	assert.Equal(t, 200, testSrv.PUT(rolePermissionsPath(f.manager), map[string]any{"permissions": []any{
+		map[string]any{"code": "items.read"}, map[string]any{"code": "profile.view", "scope_type": "self"},
+	}}, adminHeader()).Code, "yang sudah terpasang dengan scope deprecated boleh tetap")
 }
 
-func TestRoleAssignment_CustomScope_Invalid(t *testing.T) {
+func TestRoleAssignment_ScopeValues_Success(t *testing.T) {
+	f := newCustomScopeFixture(t)
+	w := f.assignValues(t, f.mixed, map[string]string{"department": " 42 ", "branch": f.b1}, map[string]string{"department": "Keuangan"})
+	require.Equal(t, 201, w.Code, w.Body.String())
+	var got struct {
+		ScopeValues map[string]string `json:"scope_values"`
+		ScopeLabels map[string]string `json:"scope_labels"`
+	}
+	testhelper.DecodeBody(t, w, &got)
+	assert.Equal(t, map[string]string{"department": "42", "branch": f.b1}, got.ScopeValues)
+	assert.Equal(t, map[string]string{"department": "Keuangan"}, got.ScopeLabels)
+
+	list := listAssignments(t, assignPath(f.companyID, f.staffID)+"?solution_id="+f.solutionID, f.ownerH)
+	require.Len(t, list, 1)
+	require.Len(t, list[0].Scopes, 2)
+	assert.Equal(t, "branch", list[0].Scopes[0].Type)
+	assert.Equal(t, "Branch B1", list[0].Scopes[0].Name)
+	assert.Equal(t, "Departemen", list[0].Scopes[1].TypeName)
+	assert.Equal(t, "Keuangan", list[0].Scopes[1].Name)
+	assert.ElementsMatch(t, []string{"branch", "department"}, list[0].RoleScopeTypes)
+
+	// Nilai berbeda = assignment lain; nilai sama = 409.
+	assert.Equal(t, 201, f.assignValues(t, f.mixed, map[string]string{"department": "43", "branch": f.b1}, nil).Code)
+	assert.Equal(t, 409, f.assignValues(t, f.mixed, map[string]string{"department": "42", "branch": f.b1}, nil).Code)
+}
+
+func TestRoleAssignment_ScopeValues_Invalid(t *testing.T) {
 	f := newCustomScopeFixture(t)
 	otherBranch := mustCreateBranch(t, adminHeader(), mustCreateCompany(t, adminHeader()), "X1")
-	tests := map[string]map[string]any{
-		"scope type tidak dikenal":          {"role_id": f.kadep, "scope_type": "region", "scope_id": "1"},
-		"scope custom tanpa scope_id":       {"role_id": f.kadep, "scope_type": "department"},
-		"parent untuk scope parent company": {"role_id": f.kadep, "scope_type": "project", "scope_id": "1", "parent_id": f.b1},
-		"parent branch company lain":        {"role_id": f.kadep, "scope_type": "department", "scope_id": "1", "parent_id": otherBranch},
-		"branch id bukan uuid":              {"role_id": f.kadep, "scope_type": "branch", "scope_id": "not-a-uuid"},
+	tests := map[string]map[string]string{
+		"tanpa nilai self":       nil,
+		"nilai kosong":           {"self": "  "},
+		"kunci tidak dipakai":    {"self": "u1", "department": "1"},
+		"branch company lain":    {"branch": otherBranch, "department": "1"},
+		"department tanpa nilai": {"branch": f.b1},
 	}
-	for name, body := range tests {
+	for name, values := range tests {
 		t.Run(name, func(t *testing.T) {
-			w := testSrv.POST(assignPath(f.companyID, f.staffID), body, f.ownerH)
+			role := f.manager
+			if name == "branch company lain" || name == "department tanpa nilai" {
+				role = f.mixed
+			}
+			w := f.assignValues(t, role, values, nil)
 			assert.Equal(t, 422, w.Code, w.Body.String())
 		})
 	}
 
-	// Scope type milik solution lain tidak bisa dipakai role solution ini.
-	otherSol := mustCreateSolution(t, testhelper.UniqueCode("os"))
-	mustSync(t, otherSol, adminHeader(), map[string]any{
-		"version": "v1", "permissions": []any{},
-		"scope_types": []any{map[string]any{"code": "warehouse", "name": "Gudang"}},
+	// Scope type deprecated tidak bisa dipakai assignment baru.
+	mustSync(t, f.solutionID, adminHeader(), map[string]any{
+		"version": "v-noself", "permissions": []any{map[string]any{"code": "items.read", "name": "I"},
+			map[string]any{"code": "profile.view", "name": "P"}, map[string]any{"code": "leave.approve", "name": "L"},
+			map[string]any{"code": "attendance.edit", "name": "A"}},
 	})
-	w := testSrv.POST(assignPath(f.companyID, f.staffID), map[string]any{"role_id": f.kadep, "scope_type": "warehouse", "scope_id": "W1"}, f.ownerH)
-	assert.Equal(t, 422, w.Code, w.Body.String())
+	assert.Equal(t, 422, f.assignValues(t, f.manager, map[string]string{"self": "u1"}, nil).Code)
 }
 
-func TestRoleAssignment_CustomScope_DeprecatedScopeType(t *testing.T) {
+// Kasus user: role manager berisi permission tanpa scope (company) + satu permission scope self.
+// Permission company tetap berlaku di seluruh company; hanya profile.view yang terbatas ke self.
+func TestAuthzCheck_RoleWithMixedScopes(t *testing.T) {
 	f := newCustomScopeFixture(t)
-	f.assignBody(t, map[string]any{"role_id": f.kadep, "scope_type": "project", "scope_id": "P1"})
-	mustSync(t, f.solutionID, adminHeader(), catalog("v-noscope", [2]string{"leave.approve", "Setujui cuti"}))
+	require.Equal(t, 201, f.assignValues(t, f.manager, map[string]string{"self": "u-1"}, nil).Code)
 
-	w := testSrv.POST(assignPath(f.companyID, f.staffID), map[string]any{"role_id": f.kadep, "scope_type": "project", "scope_id": "P2"}, f.ownerH)
-	assert.Equal(t, 422, w.Code, "assignment baru ke scope type deprecated ditolak")
-	assert.True(t, f.checkScope(t, "leave.approve", "project", "P1", "").Allowed, "assignment lama tetap dievaluasi")
+	assert.True(t, f.checkScope(t, "items.read", "company", f.companyID, "").Allowed, "permission company berlaku di company")
+	assert.True(t, f.checkScope(t, "items.read", "branch", f.b1, "").Allowed, "... dan di semua branch")
+	assert.True(t, f.checkScope(t, "items.read", "self", "u-99", "").Allowed, "... dan di semua scope custom")
+	assert.True(t, f.checkScope(t, "profile.view", "self", "u-1", "").Allowed)
+	assert.False(t, f.checkScope(t, "profile.view", "self", "u-2", "").Allowed, "nilai self lain")
+	assert.False(t, f.checkScope(t, "profile.view", "company", f.companyID, "").Allowed, "self tidak naik ke company")
+
+	w := testSrv.GET(effectivePath(f.companyID, f.staffID), f.svc)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var eff []effectivePermission
+	testhelper.DecodeBody(t, w, &eff)
+	byPerm := map[string]effectivePermission{}
+	for _, p := range eff {
+		byPerm[p.Permission] = p
+	}
+	assert.Equal(t, "company", byPerm["items.read"].Grants[0].ScopeType)
+	assert.Equal(t, "self", byPerm["profile.view"].Grants[0].ScopeType)
+	assert.Equal(t, "u-1", byPerm["profile.view"].Grants[0].ScopeID)
 }
 
-func (f customScopeFixture) assignBody(t *testing.T, body map[string]any) {
-	t.Helper()
-	w := testSrv.POST(assignPath(f.companyID, f.staffID), body, f.ownerH)
-	require.Equal(t, 201, w.Code, "assign body=%s", w.Body.String())
-}
-
-func TestAuthzCheck_CustomScope(t *testing.T) {
+func TestAuthzCheck_CustomScopeHierarchy(t *testing.T) {
 	f := newCustomScopeFixture(t)
 	b2 := mustCreateBranch(t, f.ownerH, f.companyID, "B2")
-	f.assignBody(t, map[string]any{"role_id": f.kadep, "scope_type": "department", "scope_id": "D1"})
-	f.assignBody(t, map[string]any{"role_id": f.viewer, "scope_type": "branch", "scope_id": f.b1})
+	require.Equal(t, 201, f.assignValues(t, f.kadep, map[string]string{"department": "D1"}, nil).Code)
+	require.Equal(t, 201, f.assignValues(t, f.kacab, map[string]string{"branch": f.b1}, nil).Code)
 
 	got := f.checkScope(t, "leave.approve", "department", "D1", "")
 	assert.True(t, got.Allowed)
 	assert.Equal(t, []string{"kadep"}, got.GrantedBy)
-	assert.Equal(t, "department", got.ScopeType)
-
-	assert.False(t, f.checkScope(t, "leave.approve", "department", "D2", "").Allowed, "id lain")
-	assert.False(t, f.checkScope(t, "leave.approve", "project", "D1", "").Allowed, "type lain")
+	assert.False(t, f.checkScope(t, "leave.approve", "department", "D2", "").Allowed, "department lain")
 	assert.Equal(t, []string{"kacab"}, f.checkScope(t, "leave.approve", "department", "D2", f.b1).GrantedBy,
 		"grant branch menutupi department ber-parent branch itu")
 	assert.False(t, f.checkScope(t, "leave.approve", "department", "D2", b2).Allowed, "branch lain")
-	assert.False(t, f.checkScope(t, "leave.approve", "company", f.companyID, "").Allowed, "custom tidak naik ke company")
-
-	// Company grant menutupi semua scope custom.
-	f.assign(t, f.payroll, "", "")
-	f.assign(t, f.hrAdmin, "", "")
-	assert.True(t, f.checkScope(t, "employee.read", "project", "P9", "").Allowed)
-
-	// Permission yang dibatasi scope company: cek di scope lain ditolak.
-	assert.True(t, f.checkScope(t, "payroll.run", "company", f.companyID, "").Allowed)
-	assert.False(t, f.checkScope(t, "payroll.run", "branch", f.b1, "").Allowed)
-	assert.False(t, f.checkScope(t, "payroll.run", "department", "D1", "").Allowed)
+	assert.True(t, f.checkScope(t, "leave.approve", "branch", f.b1, "").Allowed)
+	assert.False(t, f.checkScope(t, "leave.approve", "branch", b2, "").Allowed)
+	assert.False(t, f.checkScope(t, "leave.approve", "company", f.companyID, "").Allowed)
 
 	// Scope type tak dikenal / parent untuk scope ber-parent company → 422.
 	w := testSrv.POST("/api/v1/authz/check", map[string]any{"company_id": f.companyID, "user_id": f.staffID,
 		"permission": "leave.approve", "scope_type": "region", "scope_id": "1"}, f.svc)
 	assert.Equal(t, 422, w.Code)
 	w = testSrv.POST("/api/v1/authz/check", map[string]any{"company_id": f.companyID, "user_id": f.staffID,
-		"permission": "leave.approve", "scope_type": "project", "scope_id": "1", "parent_id": f.b1}, f.svc)
+		"permission": "profile.view", "scope_type": "self", "scope_id": "1", "parent_id": f.b1}, f.svc)
 	assert.Equal(t, 422, w.Code)
 }
 
-func TestAuthzCheck_PermissionScopeRestriction_GrantIgnored(t *testing.T) {
+func TestAuthzCheck_RoleChangedAfterAssignment(t *testing.T) {
 	f := newCustomScopeFixture(t)
-	// payroll.run hanya berlaku di company → assignment branch tidak memberi apa pun.
-	f.assignBody(t, map[string]any{"role_id": f.payroll, "scope_type": "branch", "scope_id": f.b1})
-	assert.False(t, f.checkScope(t, "payroll.run", "branch", f.b1, "").Allowed)
-	assert.False(t, f.checkScope(t, "payroll.run", "company", f.companyID, "").Allowed)
+	require.Equal(t, 201, f.assignValues(t, f.kacab, map[string]string{"branch": f.b1}, nil).Code)
+	// Role diubah: permission dipindah ke scope self → assignment lama tidak punya nilai self.
+	require.Equal(t, 200, testSrv.PUT(rolePermissionsPath(f.kacab), scopedPermsBody("self", "leave.approve"), adminHeader()).Code)
+	assert.False(t, f.checkScope(t, "leave.approve", "branch", f.b1, "").Allowed)
+	assert.False(t, f.checkScope(t, "leave.approve", "self", f.b1, "").Allowed)
+}
+
+func TestRoleAssignment_BranchAdminScope(t *testing.T) {
+	f := newCustomScopeFixture(t)
+	consoleID := mustSolutionID(t, testConsoleSolution)
+	// Staff memegang role.assign hanya di cabang B1.
+	w := testSrv.POST("/api/v1/companies/"+f.companyID+"/solutions/"+consoleID+"/roles", map[string]any{"code": "assigner", "name": "A"}, f.ownerH)
+	require.Equal(t, 201, w.Code, w.Body.String())
+	var role struct {
+		ID string `json:"id"`
+	}
+	testhelper.DecodeBody(t, w, &role)
+	require.Equal(t, 200, testSrv.PUT(companyRolePermissionsPath(f.companyID, role.ID), scopedPermsBody("branch", "role.assign"), f.ownerH).Code)
+	f.assign(t, role.ID, "branch", f.b1)
+	staffTok := mustLogin(t, f.staffEmail, testConsoleSolution)
+	staffH := testhelper.BearerHeader(staffTok.AccessToken)
+
+	ownerID := f.ownerID
+	b2 := mustCreateBranch(t, f.ownerH, f.companyID, "B2")
+	post := func(body map[string]any) int {
+		return testSrv.POST(assignPath(f.companyID, ownerID), body, staffH).Code
+	}
+	assert.Equal(t, 201, post(assignBody(f.kacab, "branch", f.b1)), "role ber-scope branch di cabangnya")
+	assert.Equal(t, 403, post(assignBody(f.kacab, "branch", b2)), "cabang lain")
+	assert.Equal(t, 403, post(map[string]any{"role_id": f.hrAdmin}), "role ber-scope company butuh level company")
+	assert.Equal(t, 403, post(map[string]any{"role_id": f.kadep, "scope_values": map[string]string{"department": "D1"}}), "scope custom butuh level company")
 }
 
 func TestEffectivePermissions_IncludesNameAndGroup(t *testing.T) {
@@ -635,7 +703,7 @@ func TestEffectivePermissions_IncludesNameAndGroup(t *testing.T) {
 		"groups":  []any{map[string]any{"code": "employee", "name": "Karyawan"}},
 		"permissions": []any{
 			map[string]any{"code": "employee.read", "name": "Lihat karyawan", "group": "employee"},
-			map[string]any{"code": "employee.write", "name": "Ubah karyawan", "group": "employee", "scopes": []string{"company"}},
+			map[string]any{"code": "employee.write", "name": "Ubah karyawan", "group": "employee"},
 			map[string]any{"code": "attendance.edit", "name": "Ubah absensi"},
 		},
 	})
@@ -649,12 +717,11 @@ func TestEffectivePermissions_IncludesNameAndGroup(t *testing.T) {
 		Group      *struct {
 			Name string `json:"name"`
 		} `json:"group"`
-		ScopeTypes []string `json:"scope_types"`
 	}
 	testhelper.DecodeBody(t, w, &got)
 	require.Len(t, got, 2)
 	assert.Equal(t, "Lihat karyawan", got[0].Name)
 	require.NotNil(t, got[0].Group)
 	assert.Equal(t, "Karyawan", got[0].Group.Name)
-	assert.Equal(t, []string{"company"}, got[1].ScopeTypes)
+	assert.Equal(t, "Ubah karyawan", got[1].Name)
 }

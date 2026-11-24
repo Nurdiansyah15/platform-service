@@ -32,7 +32,7 @@ func mapPermissionDomainError(err error) error {
 		constant.CodeCatalogVersionInvalid,
 		constant.CodeGroupCodeInvalid, constant.CodeGroupNameInvalid, constant.CodeGroupDuplicate, constant.CodeGroupUnknown,
 		constant.CodeScopeTypeCodeInvalid, constant.CodeScopeTypeReserved, constant.CodeScopeTypeNameInvalid,
-		constant.CodeScopeTypeParentInvalid, constant.CodeScopeTypeDuplicate, constant.CodeScopeTypeUnknown,
+		constant.CodeScopeTypeParentInvalid, constant.CodeScopeTypeDuplicate,
 		constant.CodePermissionStatusInvalid:
 		return apperror.Unprocessable(string(de.Code), nil, err)
 	default:
@@ -59,11 +59,7 @@ func isNotFound(err error) bool {
 func toPermissionResponse(p *entity.Permission, groups []*entity.Group) *dto.PermissionResponse {
 	resp := &dto.PermissionResponse{
 		ID: p.ID, SolutionID: p.SolutionID, Code: p.Code.Value(), Name: p.Name, Description: p.Description,
-		Status: p.Status.String(), Source: p.Source.String(), ScopeTypes: p.ScopeTypes,
-		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
-	}
-	if resp.ScopeTypes == nil {
-		resp.ScopeTypes = []string{}
+		Status: p.Status.String(), Source: p.Source.String(), CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 	if p.GroupID != nil {
 		for _, g := range groups {

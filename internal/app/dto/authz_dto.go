@@ -9,30 +9,34 @@ type CompanyUserParam struct {
 
 type CreateRoleAssignmentRequest struct {
 	RoleID string `json:"role_id" binding:"required,uuid"`
-	// ScopeType — company (default) | branch | scope type custom solution role (GET /solutions/{id}/scope-types).
-	ScopeType string `json:"scope_type" binding:"omitempty,max=30"`
-	// ScopeID — company boleh kosong (= company itu sendiri); branch = UUID branch;
-	// scope custom = id milik solution (string bebas, wajib).
-	ScopeID string `json:"scope_id" binding:"omitempty,max=150"`
-	// ParentID — scope custom ber-parent branch: UUID branch induk (opsional). Membuat
-	// pemegang role.assign di branch itu boleh mengelola assignment ini.
-	ParentID string `json:"parent_id" binding:"omitempty,uuid"`
-	// ScopeLabel — nama tampilan scope custom (opsional; diabaikan untuk company/branch).
-	ScopeLabel *string `json:"scope_label" binding:"omitempty,max=255"`
+	// ScopeValues — nilai untuk setiap scope_type non-company yang dipakai permission role,
+	// mis. {"branch": "<uuid branch>", "department": "42"}. Role yang hanya berisi permission
+	// ber-scope company tidak butuh nilai. Kunci di luar scope role ditolak.
+	ScopeValues map[string]string `json:"scope_values"`
+	// ScopeLabels — nama tampilan opsional untuk nilai scope custom, mis. {"department": "Keuangan"}.
+	ScopeLabels map[string]string `json:"scope_labels"`
+}
+
+// AssignmentScope — satu nilai scope assignment beserta nama tampilannya.
+type AssignmentScope struct {
+	Type string `json:"type"`
+	// TypeName — Company / Branch / nama scope type dari katalog solution.
+	TypeName string `json:"type_name"`
+	Value    string `json:"value"`
+	// Name — nama branch, label scope custom, atau value bila tanpa label.
+	Name string `json:"name"`
 }
 
 type RoleAssignmentResponse struct {
-	ID         string    `json:"id"`
-	CompanyID  string    `json:"company_id"`
-	UserID     string    `json:"user_id"`
-	RoleID     string    `json:"role_id"`
-	RoleCode   string    `json:"role_code"`
-	SolutionID string    `json:"solution_id"`
-	ScopeType  string    `json:"scope_type"`
-	ScopeID    string    `json:"scope_id"`
-	ScopeLabel *string   `json:"scope_label"`
-	ParentID   *string   `json:"parent_id"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID          string            `json:"id"`
+	CompanyID   string            `json:"company_id"`
+	UserID      string            `json:"user_id"`
+	RoleID      string            `json:"role_id"`
+	RoleCode    string            `json:"role_code"`
+	SolutionID  string            `json:"solution_id"`
+	ScopeValues map[string]string `json:"scope_values"`
+	ScopeLabels map[string]string `json:"scope_labels"`
+	CreatedAt   time.Time         `json:"created_at"`
 }
 
 // AuthzCheckRequest — token service wajib mengisi company_id & user_id; token user
@@ -88,23 +92,23 @@ type SolutionFilterQuery struct {
 
 // RoleAssignmentDetailResponse — assignment beserta info role & scope untuk ditampilkan.
 type RoleAssignmentDetailResponse struct {
-	ID           string `json:"id"`
-	CompanyID    string `json:"company_id"`
-	UserID       string `json:"user_id"`
-	RoleID       string `json:"role_id"`
-	RoleCode     string `json:"role_code"`
-	RoleName     string `json:"role_name"`
-	RoleIsGlobal bool   `json:"role_is_global"`
-	SolutionID   string `json:"solution_id"`
-	SolutionCode string `json:"solution_code"`
-	ScopeType    string `json:"scope_type"`
-	// ScopeTypeName — nama tampilan scope type (Company / Branch / nama dari katalog solution).
-	ScopeTypeName string    `json:"scope_type_name"`
-	ScopeID       string    `json:"scope_id"`
-	ScopeName     string    `json:"scope_name"`
-	ScopeLabel    *string   `json:"scope_label"`
-	ParentID      *string   `json:"parent_id"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID           string            `json:"id"`
+	CompanyID    string            `json:"company_id"`
+	UserID       string            `json:"user_id"`
+	RoleID       string            `json:"role_id"`
+	RoleCode     string            `json:"role_code"`
+	RoleName     string            `json:"role_name"`
+	RoleIsGlobal bool              `json:"role_is_global"`
+	SolutionID   string            `json:"solution_id"`
+	SolutionCode string            `json:"solution_code"`
+	ScopeValues  map[string]string `json:"scope_values"`
+	ScopeLabels  map[string]string `json:"scope_labels"`
+	// Scopes — nilai scope untuk ditampilkan (urut type).
+	Scopes []AssignmentScope `json:"scopes"`
+	// RoleScopeTypes — scope_type unik permission role saat ini (company/branch/custom). Menentukan
+	// level role.assign yang dibutuhkan untuk mencabut: ada selain branch → level company.
+	RoleScopeTypes []string  `json:"role_scope_types"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type EffectiveGrantResponse struct {
@@ -117,8 +121,7 @@ type EffectiveGrantResponse struct {
 type EffectivePermissionResponse struct {
 	Permission string `json:"permission"`
 	// Name & Group — info tampilan dari katalog (Name = code bila tidak ditemukan).
-	Name       string                   `json:"name"`
-	Group      *PermissionGroupRef      `json:"group"`
-	ScopeTypes []string                 `json:"scope_types"`
-	Grants     []EffectiveGrantResponse `json:"grants"`
+	Name   string                   `json:"name"`
+	Group  *PermissionGroupRef      `json:"group"`
+	Grants []EffectiveGrantResponse `json:"grants"`
 }

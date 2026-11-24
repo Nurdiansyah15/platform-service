@@ -16,8 +16,10 @@ type RoleRepository interface {
 }
 
 type RolePermissionRepository interface {
-	// PermissionIDs mengembalikan ID permission yang terpasang pada role.
-	PermissionIDs(ctx context.Context, roleID string) (map[string]bool, error)
+	// Current mengembalikan permission ID → scope_type yang terpasang pada role.
+	Current(ctx context.Context, roleID string) (map[string]string, error)
+	// ScopeTypes mengembalikan scope_type unik yang dipakai permission role (terurut).
+	ScopeTypes(ctx context.Context, roleID string) ([]string, error)
 	// ReplaceAll mengganti seluruh permission role (panggil di dalam transaksi).
-	ReplaceAll(ctx context.Context, roleID, solutionID string, permissionIDs []string) error
+	ReplaceAll(ctx context.Context, roleID, solutionID string, grants []entity.PermissionGrant) error
 }

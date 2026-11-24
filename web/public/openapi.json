@@ -8179,6 +8179,25 @@
                 }
             }
         },
+        "dto.AssignmentScope": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "description": "Name — nama branch, label scope custom, atau value bila tanpa label.",
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "type_name": {
+                    "description": "TypeName — Company / Branch / nama scope type dari katalog solution.",
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.AuthTokenResponse": {
             "type": "object",
             "properties": {
@@ -8776,13 +8795,6 @@
                 "name": {
                     "type": "string",
                     "maxLength": 255
-                },
-                "scopes": {
-                    "description": "Scopes — scope type tempat permission berlaku (opsional; kosong = semua scope).",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 }
             }
         },
@@ -8830,27 +8842,22 @@
                 "role_id"
             ],
             "properties": {
-                "parent_id": {
-                    "description": "ParentID — scope custom ber-parent branch: UUID branch induk (opsional). Membuat\npemegang role.assign di branch itu boleh mengelola assignment ini.",
-                    "type": "string"
-                },
                 "role_id": {
                     "type": "string"
                 },
-                "scope_id": {
-                    "description": "ScopeID — company boleh kosong (= company itu sendiri); branch = UUID branch;\nscope custom = id milik solution (string bebas, wajib).",
-                    "type": "string",
-                    "maxLength": 150
+                "scope_labels": {
+                    "description": "ScopeLabels — nama tampilan opsional untuk nilai scope custom, mis. {\"department\": \"Keuangan\"}.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 },
-                "scope_label": {
-                    "description": "ScopeLabel — nama tampilan scope custom (opsional; diabaikan untuk company/branch).",
-                    "type": "string",
-                    "maxLength": 255
-                },
-                "scope_type": {
-                    "description": "ScopeType — company (default) | branch | scope type custom solution role (GET /solutions/{id}/scope-types).",
-                    "type": "string",
-                    "maxLength": 30
+                "scope_values": {
+                    "description": "ScopeValues — nilai untuk setiap scope_type non-company yang dipakai permission role,\nmis. {\"branch\": \"\u003cuuid branch\u003e\", \"department\": \"42\"}. Role yang hanya berisi permission\nber-scope company tidak butuh nilai. Kunci di luar scope role ditolak.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -9094,12 +9101,6 @@
                 },
                 "permission": {
                     "type": "string"
-                },
-                "scope_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 }
             }
         },
@@ -9384,13 +9385,6 @@
                 "name": {
                     "type": "string",
                     "maxLength": 255
-                },
-                "scopes": {
-                    "description": "Scopes — scope type tempat permission berlaku (opsional; kosong = semua scope).",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 }
             }
         },
@@ -9481,13 +9475,6 @@
                 "name": {
                     "type": "string"
                 },
-                "scope_types": {
-                    "description": "ScopeTypes — scope type tempat permission berlaku; kosong = semua scope.",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "solution_id": {
                     "type": "string"
                 },
@@ -9571,13 +9558,14 @@
         "dto.ReplaceRolePermissionsRequest": {
             "type": "object",
             "required": [
-                "permission_codes"
+                "permissions"
             ],
             "properties": {
-                "permission_codes": {
+                "permissions": {
+                    "description": "Permissions — seluruh permission role (replace-all). Kirim [] untuk mengosongkan.",
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/dto.RolePermissionInput"
                     }
                 }
             }
@@ -9642,9 +9630,6 @@
                 "id": {
                     "type": "string"
                 },
-                "parent_id": {
-                    "type": "string"
-                },
                 "role_code": {
                     "type": "string"
                 },
@@ -9657,21 +9642,31 @@
                 "role_name": {
                     "type": "string"
                 },
-                "scope_id": {
-                    "type": "string"
+                "role_scope_types": {
+                    "description": "RoleScopeTypes — scope_type unik permission role saat ini (company/branch/custom). Menentukan\nlevel role.assign yang dibutuhkan untuk mencabut: ada selain branch → level company.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
-                "scope_label": {
-                    "type": "string"
+                "scope_labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 },
-                "scope_name": {
-                    "type": "string"
+                "scope_values": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 },
-                "scope_type": {
-                    "type": "string"
-                },
-                "scope_type_name": {
-                    "description": "ScopeTypeName — nama tampilan scope type (Company / Branch / nama dari katalog solution).",
-                    "type": "string"
+                "scopes": {
+                    "description": "Scopes — nilai scope untuk ditampilkan (urut type).",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.AssignmentScope"
+                    }
                 },
                 "solution_code": {
                     "type": "string"
@@ -9696,23 +9691,23 @@
                 "id": {
                     "type": "string"
                 },
-                "parent_id": {
-                    "type": "string"
-                },
                 "role_code": {
                     "type": "string"
                 },
                 "role_id": {
                     "type": "string"
                 },
-                "scope_id": {
-                    "type": "string"
+                "scope_labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 },
-                "scope_label": {
-                    "type": "string"
-                },
-                "scope_type": {
-                    "type": "string"
+                "scope_values": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 },
                 "solution_id": {
                     "type": "string"
@@ -9737,20 +9732,43 @@
                 "name": {
                     "type": "string"
                 },
-                "scope_id": {
-                    "type": "string"
+                "scope_labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 },
-                "scope_name": {
-                    "type": "string"
+                "scope_values": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 },
-                "scope_type": {
-                    "type": "string"
-                },
-                "scope_type_name": {
-                    "type": "string"
+                "scopes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.AssignmentScope"
+                    }
                 },
                 "user_id": {
                     "type": "string"
+                }
+            }
+        },
+        "dto.RolePermissionInput": {
+            "type": "object",
+            "required": [
+                "code"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "maxLength": 150
+                },
+                "scope_type": {
+                    "description": "ScopeType — company (default, seluruh company) | branch | scope type custom solution.",
+                    "type": "string",
+                    "maxLength": 30
                 }
             }
         },
@@ -9772,11 +9790,9 @@
                 "name": {
                     "type": "string"
                 },
-                "scope_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                "scope_type": {
+                    "description": "ScopeType — scope tempat permission berlaku untuk role ini.",
+                    "type": "string"
                 },
                 "status": {
                     "type": "string"
@@ -10397,12 +10413,6 @@
                 "name": {
                     "type": "string",
                     "maxLength": 255
-                },
-                "scopes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 },
                 "status": {
                     "description": "Status — deprecated = \"hapus\" (tidak bisa ditambahkan ke role baru); active = aktifkan lagi.",

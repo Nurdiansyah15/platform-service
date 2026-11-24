@@ -265,6 +265,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Roles:           roleRepo,
 		RolePermissions: rolePermissionRepo,
 		Permissions:     permissionRepo,
+		ScopeTypes:      scopeTypeRepo,
 		Solutions:       solutionRepo,
 		Companies:       companyRepo,
 		Members:         memberRepo,
@@ -288,6 +289,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 
 		Permissions:      permissionRepo,
 		PermissionGroups: permissionGroupRepo,
+		RolePermissions:  rolePermissionRepo,
 	})
 	entitlementResolver := entservice.NewResolver(subscriptionRepo, snapshotReader)
 	entitlementUC := entitlement.NewEntitlementUseCase(entitlement.EntitlementDeps{

@@ -84,19 +84,20 @@ func NewPostgresRolePermissionRepository(db *sql.DB) *PostgresRolePermissionRepo
 	return &PostgresRolePermissionRepository{db: db}
 }
 
-func (r *PostgresRolePermissionRepository) PermissionIDs(ctx context.Context, roleID string) (map[string]bool, error) {
-	rows, err := execFromContext(ctx, r.db).QueryContext(ctx, `SELECT permission_id FROM role_permissions WHERE role_id = $1`, roleID)
+func (r *PostgresRolePermissionRepository) Current(ctx context.Context, roleID string) (map[string]string, error) {
+	rows, err := execFromContext(ctx, r.db).QueryContext(ctx,
+		`SELECT permission_id, scope_type FROM role_permissions WHERE role_id = $1`, roleID)
 	if err != nil {
 		return nil, domainerr.Wrap(constant.CodeRoleQueryFailed, err)
 	}
 	defer rows.Close()
-	out := map[string]bool{}
+	out := map[string]string{}
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var id, scope string
+		if err := rows.Scan(&id, &scope); err != nil {
 			return nil, domainerr.Wrap(constant.CodeRoleQueryFailed, err)
 		}
-		out[id] = true
+		out[id] = scope
 	}
 	if err := rows.Err(); err != nil {
 		return nil, domainerr.Wrap(constant.CodeRoleQueryFailed, err)
@@ -104,20 +105,49 @@ func (r *PostgresRolePermissionRepository) PermissionIDs(ctx context.Context, ro
 	return out, nil
 }
 
-func (r *PostgresRolePermissionRepository) ReplaceAll(ctx context.Context, roleID, solutionID string, permissionIDs []string) error {
+func (r *PostgresRolePermissionRepository) ScopeTypes(ctx context.Context, roleID string) ([]string, error) {
+	rows, err := execFromContext(ctx, r.db).QueryContext(ctx,
+		`SELECT DISTINCT scope_type FROM role_permissions WHERE role_id = $1 ORDER BY scope_type`, roleID)
+	if err != nil {
+		return nil, domainerr.Wrap(constant.CodeRoleQueryFailed, err)
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var scope string
+		if err := rows.Scan(&scope); err != nil {
+			return nil, domainerr.Wrap(constant.CodeRoleQueryFailed, err)
+		}
+		out = append(out, scope)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, domainerr.Wrap(constant.CodeRoleQueryFailed, err)
+	}
+	return out, nil
+}
+
+func (r *PostgresRolePermissionRepository) ReplaceAll(ctx context.Context, roleID, solutionID string, grants []entity.PermissionGrant) error {
 	exec := execFromContext(ctx, r.db)
 	if _, err := exec.ExecContext(ctx, `DELETE FROM role_permissions WHERE role_id = $1`, roleID); err != nil {
 		return domainerr.Wrap(constant.CodeRolePersistenceFailed, err)
 	}
-	if len(permissionIDs) == 0 {
+	if len(grants) == 0 {
 		return nil
 	}
+	ids := make([]string, len(grants))
+	scopes := make([]string, len(grants))
+	for i, g := range grants {
+		ids[i], scopes[i] = g.PermissionID, g.ScopeType
+	}
 	_, err := exec.ExecContext(ctx, `
-		INSERT INTO role_permissions (role_id, permission_id, solution_id)
-		SELECT $1, p, $2 FROM UNNEST($3::uuid[]) AS p`, roleID, solutionID, permissionIDs)
+		INSERT INTO role_permissions (role_id, permission_id, solution_id, scope_type)
+		SELECT $1, p.id, $2, p.scope FROM UNNEST($3::uuid[], $4::text[]) AS p(id, scope)`, roleID, solutionID, ids, scopes)
 	if err != nil {
 		if isForeignKeyViolation(err) {
 			return domainerr.New(constant.CodeRolePermissionUnknown)
+		}
+		if isCheckViolation(err) {
+			return domainerr.New(constant.CodeRolePermissionScopeInvalid)
 		}
 		return domainerr.Wrap(constant.CodeRolePersistenceFailed, err)
 	}

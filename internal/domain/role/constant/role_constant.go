@@ -12,8 +12,10 @@ const (
 	CodeRolePermissionUnknown    domainerr.Code = "DOMAIN_ROLE_PERMISSION_UNKNOWN"
 	CodeRolePermissionDuplicate  domainerr.Code = "DOMAIN_ROLE_PERMISSION_DUPLICATE"
 	CodeRolePermissionDeprecated domainerr.Code = "DOMAIN_ROLE_PERMISSION_DEPRECATED"
-	CodeRolePersistenceFailed    domainerr.Code = "DOMAIN_ROLE_PERSISTENCE_FAILED"
-	CodeRoleQueryFailed          domainerr.Code = "DOMAIN_ROLE_QUERY_FAILED"
+	// CodeRolePermissionScopeInvalid — scope_type permission role tidak dikenal / deprecated.
+	CodeRolePermissionScopeInvalid domainerr.Code = "DOMAIN_ROLE_PERMISSION_SCOPE_INVALID"
+	CodeRolePersistenceFailed      domainerr.Code = "DOMAIN_ROLE_PERSISTENCE_FAILED"
+	CodeRoleQueryFailed            domainerr.Code = "DOMAIN_ROLE_QUERY_FAILED"
 )
 
 const (

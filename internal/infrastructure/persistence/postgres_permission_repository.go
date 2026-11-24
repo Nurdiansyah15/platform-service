@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/jackc/pgx/v5/pgtype"
-
 	domainerr "platform-service/internal/domain/errors"
 	"platform-service/internal/domain/permission/constant"
 	"platform-service/internal/domain/permission/entity"
@@ -15,34 +13,28 @@ import (
 
 // PostgresPermissionRepository implements repository.PermissionRepository.
 type PostgresPermissionRepository struct {
-	db      *sql.DB
-	typeMap *pgtype.Map
+	db *sql.DB
 }
 
 func NewPostgresPermissionRepository(db *sql.DB) *PostgresPermissionRepository {
-	return &PostgresPermissionRepository{db: db, typeMap: pgtype.NewMap()}
+	return &PostgresPermissionRepository{db: db}
 }
 
-const permissionColumns = `id, solution_id, code, name, description, status, source, group_id, scope_types, created_at, updated_at`
+const permissionColumns = `id, solution_id, code, name, description, status, source, group_id, created_at, updated_at`
 
 func (r *PostgresPermissionRepository) Save(ctx context.Context, p *entity.Permission) error {
 	const q = `
-		INSERT INTO permissions (id, solution_id, code, name, description, status, source, group_id, scope_types, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO permissions (` + permissionColumns + `)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (id) DO UPDATE SET
 			name = EXCLUDED.name,
 			description = EXCLUDED.description,
 			status = EXCLUDED.status,
-			group_id = EXCLUDED.group_id,
-			scope_types = EXCLUDED.scope_types
+			group_id = EXCLUDED.group_id
 		RETURNING created_at, updated_at`
 
-	scopes := p.ScopeTypes
-	if scopes == nil {
-		scopes = []string{}
-	}
 	err := execFromContext(ctx, r.db).QueryRowContext(ctx, q,
-		p.ID, p.SolutionID, p.Code.Value(), p.Name, p.Description, p.Status.String(), p.Source.String(), p.GroupID, scopes,
+		p.ID, p.SolutionID, p.Code.Value(), p.Name, p.Description, p.Status.String(), p.Source.String(), p.GroupID,
 		p.CreatedAt, p.UpdatedAt,
 	).Scan(&p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
@@ -67,7 +59,7 @@ func (r *PostgresPermissionRepository) ListBySolution(ctx context.Context, solut
 
 	var out []*entity.Permission
 	for rows.Next() {
-		p, err := r.scan(rows)
+		p, err := scanPermission(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -80,8 +72,8 @@ func (r *PostgresPermissionRepository) ListBySolution(ctx context.Context, solut
 }
 
 func (r *PostgresPermissionRepository) FindByID(ctx context.Context, id string) (*entity.Permission, error) {
-	row := execFromContext(ctx, r.db).QueryRowContext(ctx, `SELECT `+permissionColumns+` FROM permissions WHERE id = $1`, id)
-	p, err := r.scan(row)
+	p, err := scanPermission(execFromContext(ctx, r.db).QueryRowContext(ctx,
+		`SELECT `+permissionColumns+` FROM permissions WHERE id = $1`, id))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domainerr.New(constant.CodePermissionNotFound)
@@ -91,13 +83,13 @@ func (r *PostgresPermissionRepository) FindByID(ctx context.Context, id string) 
 	return p, nil
 }
 
-func (r *PostgresPermissionRepository) scan(row interface{ Scan(dest ...any) error }) (*entity.Permission, error) {
+func scanPermission(row interface{ Scan(dest ...any) error }) (*entity.Permission, error) {
 	var (
 		p                    entity.Permission
 		code, status, source string
 	)
 	if err := row.Scan(&p.ID, &p.SolutionID, &code, &p.Name, &p.Description, &status, &source, &p.GroupID,
-		r.typeMap.SQLScanner(&p.ScopeTypes), &p.CreatedAt, &p.UpdatedAt); err != nil {
+		&p.CreatedAt, &p.UpdatedAt); err != nil {
 		return nil, domainerr.Wrap(constant.CodePermissionQueryFailed, err)
 	}
 	var err error
@@ -106,8 +98,5 @@ func (r *PostgresPermissionRepository) scan(row interface{ Scan(dest ...any) err
 	}
 	p.Status = valueobject.PermissionStatus(status)
 	p.Source = valueobject.PermissionSource(source)
-	if p.ScopeTypes == nil {
-		p.ScopeTypes = []string{}
-	}
 	return &p, nil
 }

@@ -67,7 +67,7 @@ async function onSubmit(e: FormSubmitEvent<typeof state>) {
       if (e.data.template && props.permissionsPath) {
         const perms = (await api.get<RolePermissionResponse[]>(`/api/v1/roles/${e.data.template}/permissions`)).data
         if (perms.length) {
-          await api.put(props.permissionsPath(saved.id), { permission_codes: perms.map(p => p.code) })
+          await api.put(props.permissionsPath(saved.id), { permissions: perms.map(p => ({ code: p.code, scope_type: p.scope_type })) })
         }
       }
     }

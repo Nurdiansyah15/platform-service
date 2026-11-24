@@ -70,7 +70,7 @@ async function addMember() {
     }
     if (makeAdmin.value) {
       const roleId = await companyAdminRoleId()
-      if (roleId) await api.post(`/api/v1/companies/${cid}/users/${added.user_id}/role-assignments`, { role_id: roleId, scope_type: 'company' })
+      if (roleId) await api.post(`/api/v1/companies/${cid}/users/${added.user_id}/role-assignments`, { role_id: roleId })
     }
     toast.add({ title: `${added.name} ditambahkan`, description: makeAdmin.value ? 'Sebagai admin company.' : undefined, color: 'success' })
     showAdd.value = false

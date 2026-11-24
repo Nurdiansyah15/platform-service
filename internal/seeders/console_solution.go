@@ -97,11 +97,11 @@ func (s ConsoleSolutionSeeder) Run(ctx context.Context, db *sql.DB) error {
 
 	if !prevVersion.Valid {
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO user_role_assignments (company_id, user_id, role_id, scope_type, scope_id)
-			SELECT m.company_id, m.user_id, $1, 'company', m.company_id
+			INSERT INTO user_role_assignments (company_id, user_id, role_id)
+			SELECT m.company_id, m.user_id, $1
 			FROM company_members m
 			WHERE m.status = 'active'
-			ON CONFLICT (user_id, role_id, scope_type, scope_id) DO NOTHING`, roleID); err != nil {
+			ON CONFLICT (user_id, role_id, company_id, scope_values) DO NOTHING`, roleID); err != nil {
 			return fmt.Errorf("backfill company_admin: %w", err)
 		}
 	}
@@ -132,8 +132,8 @@ func ensureCompanyAdminRole(ctx context.Context, tx *sql.Tx, solutionID string, 
 		return "", err
 	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO role_permissions (role_id, permission_id, solution_id)
-		SELECT $1, p.id, p.solution_id FROM permissions p
+		INSERT INTO role_permissions (role_id, permission_id, solution_id, scope_type)
+		SELECT $1, p.id, p.solution_id, 'company' FROM permissions p
 		WHERE p.solution_id = $2 AND p.code = ANY($3)`, roleID, solutionID, codes); err != nil {
 		return "", fmt.Errorf("permission company_admin: %w", err)
 	}

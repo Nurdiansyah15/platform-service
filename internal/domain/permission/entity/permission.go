@@ -1,7 +1,6 @@
 package entity
 
 import (
-	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -23,11 +22,9 @@ type Permission struct {
 	// Source — sync (dikelola sync katalog, read-only di platform) atau manual.
 	Source valueobject.PermissionSource
 	// GroupID — permission group (nil = tanpa grup; UI mengelompokkan by prefix code).
-	GroupID *string
-	// ScopeTypes — scope type tempat permission berlaku (terurut). Kosong = semua scope.
-	ScopeTypes []string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	GroupID   *string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // Definition adalah satu permission dalam katalog yang dikirim solution.
@@ -39,8 +36,6 @@ type Definition struct {
 	// setelah group tersinkron.
 	GroupCode string
 	GroupID   *string
-	// Scopes — scope type tempat permission berlaku (unik, terurut). Kosong = semua scope.
-	Scopes []string
 }
 
 func NewDefinition(code, name string, description *string) (Definition, error) {
@@ -55,9 +50,10 @@ func NewDefinition(code, name string, description *string) (Definition, error) {
 	return Definition{Code: c, Name: n, Description: trimOptional(description)}, nil
 }
 
-// WithCatalogRefs memvalidasi format referensi group & scope. Keberadaan group / scope type
-// dicek terhadap katalog lewat service.ValidateCatalogRefs.
-func (d Definition) WithCatalogRefs(groupCode *string, scopes []string) (Definition, error) {
+// WithGroup memvalidasi format code group yang dirujuk ("" / nil = tanpa grup). Keberadaan
+// group dicek terhadap katalog lewat service.ValidateCatalogRefs / ResolveManualRefs.
+func (d Definition) WithGroup(groupCode *string) (Definition, error) {
+	d.GroupCode = ""
 	if g := trimOptional(groupCode); g != nil {
 		gc, err := valueobject.NewGroupCode(*g)
 		if err != nil {
@@ -65,22 +61,6 @@ func (d Definition) WithCatalogRefs(groupCode *string, scopes []string) (Definit
 		}
 		d.GroupCode = gc.Value()
 	}
-	seen := map[string]bool{}
-	out := make([]string, 0, len(scopes))
-	for _, raw := range scopes {
-		s := strings.TrimSpace(raw)
-		if !valueobject.IsBuiltinScopeType(s) {
-			if _, err := valueobject.NewScopeTypeCode(s); err != nil {
-				return Definition{}, err
-			}
-		}
-		if !seen[s] {
-			seen[s] = true
-			out = append(out, s)
-		}
-	}
-	slices.Sort(out)
-	d.Scopes = out
 	return d, nil
 }
 
@@ -90,7 +70,7 @@ func NewPermission(solutionID string, d Definition, now time.Time) *Permission {
 	return &Permission{
 		ID: uuid.NewString(), SolutionID: solutionID, Code: d.Code, Name: d.Name, Description: d.Description,
 		Status: valueobject.StatusActive, Source: valueobject.SourceSync, GroupID: d.GroupID,
-		ScopeTypes: scopesOrEmpty(d.Scopes), CreatedAt: now, UpdatedAt: now,
+		CreatedAt: now, UpdatedAt: now,
 	}
 }
 
@@ -114,12 +94,10 @@ func (p *Permission) EnsureManual() error {
 // Edit mengubah atribut permission manual (code & status tidak berubah). Mengembalikan
 // apakah ada perubahan.
 func (p *Permission) Edit(d Definition, now time.Time) bool {
-	if p.Name == d.Name && equalOptional(p.Description, d.Description) &&
-		equalOptional(p.GroupID, d.GroupID) && slices.Equal(scopesOrEmpty(p.ScopeTypes), scopesOrEmpty(d.Scopes)) {
+	if p.Name == d.Name && equalOptional(p.Description, d.Description) && equalOptional(p.GroupID, d.GroupID) {
 		return false
 	}
-	p.Name, p.Description = d.Name, d.Description
-	p.GroupID, p.ScopeTypes = d.GroupID, scopesOrEmpty(d.Scopes)
+	p.Name, p.Description, p.GroupID = d.Name, d.Description, d.GroupID
 	p.UpdatedAt = now.UTC()
 	return true
 }
@@ -143,10 +121,8 @@ func (p *Permission) Apply(d Definition, now time.Time) (changed, reactivated bo
 		p.Status = valueobject.StatusActive
 		changed, reactivated = true, true
 	}
-	if p.Name != d.Name || !equalOptional(p.Description, d.Description) ||
-		!equalOptional(p.GroupID, d.GroupID) || !slices.Equal(scopesOrEmpty(p.ScopeTypes), scopesOrEmpty(d.Scopes)) {
-		p.Name, p.Description = d.Name, d.Description
-		p.GroupID, p.ScopeTypes = d.GroupID, scopesOrEmpty(d.Scopes)
+	if p.Name != d.Name || !equalOptional(p.Description, d.Description) || !equalOptional(p.GroupID, d.GroupID) {
+		p.Name, p.Description, p.GroupID = d.Name, d.Description, d.GroupID
 		changed = true
 	}
 	if changed {
@@ -163,18 +139,6 @@ func (p *Permission) Deprecate(now time.Time) bool {
 	p.Status = valueobject.StatusDeprecated
 	p.UpdatedAt = now.UTC()
 	return true
-}
-
-// AppliesTo — permission berlaku di scope type tersebut (ScopeTypes kosong = semua scope).
-func (p *Permission) AppliesTo(scopeType string) bool {
-	return len(p.ScopeTypes) == 0 || slices.Contains(p.ScopeTypes, scopeType)
-}
-
-func scopesOrEmpty(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
 }
 
 func trimOptional(v *string) *string {

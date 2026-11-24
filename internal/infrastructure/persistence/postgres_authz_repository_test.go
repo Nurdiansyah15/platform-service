@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"platform-service/internal/domain/authz/constant"
 	"platform-service/internal/domain/authz/entity"
-	"platform-service/internal/domain/authz/valueobject"
 	companyentity "platform-service/internal/domain/organization/entity"
 	roleentity "platform-service/internal/domain/role/entity"
 	"platform-service/internal/infrastructure/persistence"
@@ -33,18 +33,25 @@ func TestPostgresRoleAssignmentRepository(t *testing.T) {
 		require.NoError(t, persistence.NewPostgresRoleRepository(testDB).Save(ctx, role))
 
 		repo := persistence.NewPostgresRoleAssignmentRepository(testDB)
-		scope := valueobject.Scope{Type: valueobject.ScopeCompany, ID: tn.ID}
-		require.NoError(t, repo.Create(ctx, entity.NewRoleAssignment(tn.ID, member.ID, role.ID, entity.CheckScope{Scope: scope, CompanyID: tn.ID}, nil, time.Now())))
+		scope := map[string]string{"branch": "b-1"}
+		require.NoError(t, repo.Create(ctx, entity.NewRoleAssignment(tn.ID, member.ID, role.ID, scope, nil, time.Now())))
 
 		_, err = tx.ExecContext(ctx, `SAVEPOINT dup`)
 		require.NoError(t, err)
-		testhelper.AssertDomainError(t, repo.Create(ctx, entity.NewRoleAssignment(tn.ID, member.ID, role.ID, entity.CheckScope{Scope: scope, CompanyID: tn.ID}, nil, time.Now())),
+		testhelper.AssertDomainError(t, repo.Create(ctx, entity.NewRoleAssignment(tn.ID, member.ID, role.ID, scope, nil, time.Now())),
 			constant.CodeAssignmentDuplicate)
 		_, err = tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT dup`)
 		require.NoError(t, err)
 
 		// FK (company_id, user_id) → company_members: bukan member ditolak DB.
-		testhelper.AssertDomainError(t, repo.Create(ctx, entity.NewRoleAssignment(tn.ID, uuid.NewString(), role.ID, entity.CheckScope{Scope: scope, CompanyID: tn.ID}, nil, time.Now())),
+		// Role sama dengan nilai scope berbeda = assignment lain.
+		require.NoError(t, repo.Create(ctx, entity.NewRoleAssignment(tn.ID, member.ID, role.ID, map[string]string{"branch": "b-2"}, nil, time.Now())))
+		require.NoError(t, repo.DeleteByScope(ctx, "branch", "b-1"))
+		var n int
+		require.NoError(t, tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM user_role_assignments WHERE role_id = $1`, role.ID).Scan(&n))
+		assert.Equal(t, 1, n, "hanya assignment ber-nilai branch b-1 yang terhapus")
+
+		testhelper.AssertDomainError(t, repo.Create(ctx, entity.NewRoleAssignment(tn.ID, uuid.NewString(), role.ID, scope, nil, time.Now())),
 			constant.CodeAssignmentNotMember)
 	})
 }

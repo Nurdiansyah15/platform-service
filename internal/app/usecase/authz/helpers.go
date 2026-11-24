@@ -27,6 +27,7 @@ func mapAuthzDomainError(err error) error {
 	case constant.CodeAssignmentDuplicate:
 		return apperror.Conflict(string(de.Code), err)
 	case constant.CodeAssignmentNotMember, constant.CodeAssignmentRoleUnavailable, constant.CodeScopeTypeInvalid,
+		constant.CodeAssignmentScopeMissing, constant.CodeAssignmentScopeUnexpected,
 		constant.CodeScopeInvalid, constant.CodeCheckTargetRequired, constant.CodeCheckSolutionUnavailable,
 		constant.CodeSolutionRequired:
 		return apperror.Unprocessable(string(de.Code), nil, err)

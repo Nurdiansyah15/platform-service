@@ -72,12 +72,12 @@ func (uc *PermissionUseCase) Sync(ctx context.Context, actor *principal.Principa
 		if err != nil {
 			return nil, mapPermissionDomainError(err)
 		}
-		if d, err = d.WithCatalogRefs(p.Group, p.Scopes); err != nil {
+		if d, err = d.WithGroup(p.Group); err != nil {
 			return nil, mapPermissionDomainError(err)
 		}
 		catalog = append(catalog, d)
 	}
-	if err := service.ValidateCatalogRefs(catalog, groups, scopeTypes); err != nil {
+	if err := service.ValidateCatalogRefs(catalog, groups); err != nil {
 		return nil, mapPermissionDomainError(err)
 	}
 
@@ -272,14 +272,14 @@ func (uc *PermissionUseCase) Create(ctx context.Context, solutionID string, req 
 	if err != nil {
 		return nil, mapPermissionDomainError(err)
 	}
-	if d, err = d.WithCatalogRefs(req.Group, req.Scopes); err != nil {
+	if d, err = d.WithGroup(req.Group); err != nil {
 		return nil, mapPermissionDomainError(err)
 	}
-	groups, scopeTypes, err := uc.catalogRefs(ctx, solutionID)
+	groups, err := uc.deps.Groups.ListBySolution(ctx, solutionID)
 	if err != nil {
 		return nil, mapPermissionDomainError(err)
 	}
-	if d, err = service.ResolveManualRefs(d, groups, scopeTypes); err != nil {
+	if d, err = service.ResolveManualRefs(d, groups); err != nil {
 		return nil, mapPermissionDomainError(err)
 	}
 	p := entity.NewManualPermission(solutionID, d, uc.now())
@@ -314,7 +314,7 @@ func (uc *PermissionUseCase) Get(ctx context.Context, actor *principal.Principal
 	return toPermissionResponse(p, groups), nil
 }
 
-// Update mengubah permission manual (nama, deskripsi, grup, scope, status). Permission hasil
+// Update mengubah permission manual (nama, deskripsi, grup, status). Permission hasil
 // sync read-only (409) karena dikelola kode solution.
 //
 // Required — auth: user (platform admin) | scope: -
@@ -326,7 +326,7 @@ func (uc *PermissionUseCase) Update(ctx context.Context, permissionID string, re
 	if err := p.EnsureManual(); err != nil {
 		return nil, mapPermissionDomainError(err)
 	}
-	groups, scopeTypes, err := uc.catalogRefs(ctx, p.SolutionID)
+	groups, err := uc.deps.Groups.ListBySolution(ctx, p.SolutionID)
 	if err != nil {
 		return nil, mapPermissionDomainError(err)
 	}
@@ -346,14 +346,10 @@ func (uc *PermissionUseCase) Update(ctx context.Context, permissionID string, re
 	if req.Group != nil {
 		group = req.Group
 	}
-	scopes := p.ScopeTypes
-	if req.Scopes != nil {
-		scopes = *req.Scopes
-	}
-	if d, err = d.WithCatalogRefs(group, scopes); err != nil {
+	if d, err = d.WithGroup(group); err != nil {
 		return nil, mapPermissionDomainError(err)
 	}
-	if d, err = service.ResolveManualRefs(d, groups, scopeTypes); err != nil {
+	if d, err = service.ResolveManualRefs(d, groups); err != nil {
 		return nil, mapPermissionDomainError(err)
 	}
 
@@ -372,18 +368,6 @@ func (uc *PermissionUseCase) Update(ctx context.Context, permissionID string, re
 		}
 	}
 	return toPermissionResponse(p, groups), nil
-}
-
-func (uc *PermissionUseCase) catalogRefs(ctx context.Context, solutionID string) ([]*entity.Group, []*entity.ScopeType, error) {
-	groups, err := uc.deps.Groups.ListBySolution(ctx, solutionID)
-	if err != nil {
-		return nil, nil, err
-	}
-	scopeTypes, err := uc.deps.ScopeTypes.ListBySolution(ctx, solutionID)
-	if err != nil {
-		return nil, nil, err
-	}
-	return groups, scopeTypes, nil
 }
 
 // CreateGroup membuat permission group manual. Code yang sudah dipakai (manual atau hasil

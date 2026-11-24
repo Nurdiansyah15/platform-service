@@ -7,7 +7,6 @@ import (
 	domainerr "platform-service/internal/domain/errors"
 	"platform-service/internal/domain/permission/constant"
 	"platform-service/internal/domain/permission/entity"
-	"platform-service/internal/domain/permission/valueobject"
 )
 
 // SyncPlan adalah hasil perencanaan sync satu jenis entri katalog (permission, group, scope type).
@@ -157,55 +156,35 @@ func PlanScopeTypeSync(solutionID string, existing []*entity.ScopeType, catalog 
 		constant.CodeScopeTypeDuplicate, now)
 }
 
-// ValidateCatalogRefs memastikan setiap permission hanya merujuk group dan scope type yang
-// ada di katalog yang sama (scope built-in company/branch selalu boleh).
-func ValidateCatalogRefs(perms []entity.Definition, groups []entity.GroupDefinition, scopeTypes []entity.ScopeTypeDefinition) error {
+// ValidateCatalogRefs memastikan setiap permission hanya merujuk group yang ada di katalog
+// yang sama.
+func ValidateCatalogRefs(perms []entity.Definition, groups []entity.GroupDefinition) error {
 	groupSet := make(map[string]bool, len(groups))
 	for _, g := range groups {
 		groupSet[g.Code.Value()] = true
-	}
-	scopeSet := make(map[string]bool, len(scopeTypes))
-	for _, s := range scopeTypes {
-		scopeSet[s.Code.Value()] = true
 	}
 	for _, p := range perms {
 		if p.GroupCode != "" && !groupSet[p.GroupCode] {
 			return domainerr.New(constant.CodeGroupUnknown)
 		}
-		for _, s := range p.Scopes {
-			if !valueobject.IsBuiltinScopeType(s) && !scopeSet[s] {
-				return domainerr.New(constant.CodeScopeTypeUnknown)
-			}
-		}
 	}
 	return nil
 }
 
-// ResolveManualRefs memvalidasi referensi group & scope permission manual terhadap katalog
-// solution yang tersimpan dan mengisi GroupID. Group / scope type deprecated tetap boleh
-// dirujuk (agar permission yang sudah merujuknya tetap bisa diedit).
-func ResolveManualRefs(d entity.Definition, groups []*entity.Group, scopeTypes []*entity.ScopeType) (entity.Definition, error) {
+// ResolveManualRefs memvalidasi group permission manual terhadap group solution yang
+// tersimpan dan mengisi GroupID. Group deprecated tetap boleh dirujuk (agar permission yang
+// sudah merujuknya tetap bisa diedit).
+func ResolveManualRefs(d entity.Definition, groups []*entity.Group) (entity.Definition, error) {
 	d.GroupID = nil
-	if d.GroupCode != "" {
-		for _, g := range groups {
-			if g.Code.Value() == d.GroupCode {
-				id := g.ID
-				d.GroupID = &id
-				break
-			}
-		}
-		if d.GroupID == nil {
-			return entity.Definition{}, domainerr.New(constant.CodeGroupUnknown)
+	if d.GroupCode == "" {
+		return d, nil
+	}
+	for _, g := range groups {
+		if g.Code.Value() == d.GroupCode {
+			id := g.ID
+			d.GroupID = &id
+			return d, nil
 		}
 	}
-	known := make(map[string]bool, len(scopeTypes))
-	for _, s := range scopeTypes {
-		known[s.Code.Value()] = true
-	}
-	for _, s := range d.Scopes {
-		if !valueobject.IsBuiltinScopeType(s) && !known[s] {
-			return entity.Definition{}, domainerr.New(constant.CodeScopeTypeUnknown)
-		}
-	}
-	return d, nil
+	return entity.Definition{}, domainerr.New(constant.CodeGroupUnknown)
 }

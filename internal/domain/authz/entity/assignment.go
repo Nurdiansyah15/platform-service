@@ -8,18 +8,18 @@ import (
 	"platform-service/internal/domain/authz/valueobject"
 )
 
-// RoleAssignment — role diberikan ke user dalam company pada scope tertentu.
+// RoleAssignment — role diberikan ke user dalam company. Scopes berisi nilai untuk setiap
+// scope_type non-company yang dipakai permission role (mis. {"branch": "<uuid>",
+// "department": "42"}); permission ber-scope company tidak butuh nilai. Labels = nama
+// tampilan opsional nilai scope custom.
 type RoleAssignment struct {
 	ID        string
 	CompanyID string
 	UserID    string
 	RoleID    string
-	Scope     valueobject.Scope
-	// ScopeLabel — nama tampilan scope custom (data milik solution; platform tidak tahu namanya).
-	ScopeLabel *string
-	// ScopeParentID — branch induk untuk scope custom ber-parent branch (opsional).
-	ScopeParentID *string
-	CreatedAt     time.Time
+	Scopes    map[string]string
+	Labels    map[string]string
+	CreatedAt time.Time
 
 	// Role diisi saat assignment dimuat dari storage (FindByID); kosong untuk assignment baru.
 	Role AssignedRole
@@ -31,44 +31,31 @@ type AssignedRole struct {
 	Code       string
 }
 
-// NewRoleAssignment membuat assignment pada scope yang sudah divalidasi. Label & parent hanya
-// disimpan untuk scope custom.
-func NewRoleAssignment(companyID, userID, roleID string, scope CheckScope, label *string, now time.Time) *RoleAssignment {
-	a := &RoleAssignment{
-		ID: uuid.NewString(), CompanyID: companyID, UserID: userID, RoleID: roleID, Scope: scope.Scope, CreatedAt: now.UTC(),
+func NewRoleAssignment(companyID, userID, roleID string, scopes, labels map[string]string, now time.Time) *RoleAssignment {
+	if scopes == nil {
+		scopes = map[string]string{}
 	}
-	if !scope.Scope.Type.IsBuiltin() {
-		a.ScopeLabel = label
-		if scope.ParentBranchID != "" {
-			p := scope.ParentBranchID
-			a.ScopeParentID = &p
-		}
+	if labels == nil {
+		labels = map[string]string{}
 	}
-	return a
+	return &RoleAssignment{
+		ID: uuid.NewString(), CompanyID: companyID, UserID: userID, RoleID: roleID,
+		Scopes: scopes, Labels: labels, CreatedAt: now.UTC(),
+	}
 }
 
-// CheckScope merekonstruksi scope check dari assignment tersimpan.
-func (a *RoleAssignment) CheckScope() CheckScope {
-	c := CheckScope{Scope: a.Scope, CompanyID: a.CompanyID}
-	if a.ScopeParentID != nil {
-		c.ParentBranchID = *a.ScopeParentID
-	}
-	return c
-}
-
-// Grant adalah satu permission yang dimiliki user lewat satu assignment.
+// Grant adalah satu permission yang dimiliki user lewat satu assignment, pada scope
+// role_permissions.scope_type dengan nilai dari assignment (company = company assignment).
 type Grant struct {
 	RoleCode       string
 	PermissionCode string
-	// PermissionScopes — scope type tempat permission berlaku (kosong = semua scope).
-	PermissionScopes []string
-	Scope            valueobject.Scope
+	Scope          valueobject.Scope
 }
 
-// CheckScope adalah scope yang ditanyakan saat authz check (atau scope assignment yang
-// sudah divalidasi). CompanyID = company pemilik scope, agar assignment level company
-// berlaku untuk semua scope di bawahnya. ParentBranchID diisi untuk scope custom ber-parent
-// branch bila branch induknya diketahui, agar assignment di branch itu ikut berlaku.
+// CheckScope adalah scope yang ditanyakan saat authz check. CompanyID = company pemilik
+// scope, agar grant level company berlaku untuk semua scope di bawahnya. ParentBranchID diisi
+// untuk scope custom ber-parent branch bila branch induknya diketahui, agar grant di branch
+// itu ikut berlaku.
 type CheckScope struct {
 	Scope          valueobject.Scope
 	CompanyID      string

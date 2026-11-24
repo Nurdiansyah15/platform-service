@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"platform-service/internal/app/dto"
 	"platform-service/internal/app/port"
 	domainerr "platform-service/internal/domain/errors"
@@ -16,12 +14,11 @@ import (
 
 // PostgresRoleQuery implements port.RoleQueryReadModel.
 type PostgresRoleQuery struct {
-	db      *sql.DB
-	typeMap *pgtype.Map
+	db *sql.DB
 }
 
 func NewPostgresRoleQuery(db *sql.DB) *PostgresRoleQuery {
-	return &PostgresRoleQuery{db: db, typeMap: pgtype.NewMap()}
+	return &PostgresRoleQuery{db: db}
 }
 
 var roleSortable = map[string]string{"code": "code", "name": "name", "created_at": "created_at"}
@@ -88,7 +85,7 @@ func (r *PostgresRoleQuery) ListRoles(ctx context.Context, q port.RoleListReadQu
 
 func (r *PostgresRoleQuery) ListRolePermissions(ctx context.Context, roleID string) ([]port.RolePermissionReadItem, error) {
 	rows, err := execFromContext(ctx, r.db).QueryContext(ctx, `
-		SELECT p.id, p.code, p.name, p.description, p.status, p.scope_types, g.code, g.name, g.sort_order
+		SELECT p.id, p.code, p.name, p.description, p.status, rp.scope_type, g.code, g.name, g.sort_order
 		FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
 		LEFT JOIN permission_groups g ON g.id = p.group_id
 		WHERE rp.role_id = $1 ORDER BY p.code`, roleID)
@@ -102,12 +99,9 @@ func (r *PostgresRoleQuery) ListRolePermissions(ctx context.Context, roleID stri
 			it    port.RolePermissionReadItem
 			group nullableGroupRef
 		)
-		if err := rows.Scan(&it.ID, &it.Code, &it.Name, &it.Description, &it.Status, r.typeMap.SQLScanner(&it.ScopeTypes),
+		if err := rows.Scan(&it.ID, &it.Code, &it.Name, &it.Description, &it.Status, &it.ScopeType,
 			&group.code, &group.name, &group.sortOrder); err != nil {
 			return nil, domainerr.Wrap(constant.CodeRoleQueryFailed, err)
-		}
-		if it.ScopeTypes == nil {
-			it.ScopeTypes = []string{}
 		}
 		it.Group = group.ref()
 		items = append(items, it)
@@ -134,12 +128,10 @@ func (r *PostgresRoleQuery) Stats(ctx context.Context, roleID string, companyID 
 
 func (r *PostgresRoleQuery) ListHolders(ctx context.Context, roleID, companyID string) ([]dto.RoleHolderResponse, error) {
 	rows, err := execFromContext(ctx, r.db).QueryContext(ctx, `
-		SELECT ura.id, u.id, u.name, u.email, ura.scope_type, `+scopeTypeNameSQL+`, ura.scope_id, `+scopeNameSQL+`,
-			ura.created_at
+		SELECT ura.id, u.id, u.name, u.email, ura.scope_values, ura.scope_labels, `+assignmentScopesSQL+`, ura.created_at
 		FROM user_role_assignments ura
 		JOIN users u ON u.id = ura.user_id
 		JOIN roles r ON r.id = ura.role_id
-		`+scopeJoinsSQL+`
 		WHERE ura.role_id = $1 AND ura.company_id = $2
 		ORDER BY u.name, u.email, ura.created_at`, roleID, companyID)
 	if err != nil {
@@ -148,8 +140,15 @@ func (r *PostgresRoleQuery) ListHolders(ctx context.Context, roleID, companyID s
 	defer rows.Close()
 	items := []dto.RoleHolderResponse{}
 	for rows.Next() {
-		var it dto.RoleHolderResponse
-		if err := rows.Scan(&it.AssignmentID, &it.UserID, &it.Name, &it.Email, &it.ScopeType, &it.ScopeTypeName, &it.ScopeID, &it.ScopeName, &it.CreatedAt); err != nil {
+		var (
+			it                     dto.RoleHolderResponse
+			values, labels, scopes []byte
+		)
+		if err := rows.Scan(&it.AssignmentID, &it.UserID, &it.Name, &it.Email, &values, &labels, &scopes, &it.CreatedAt); err != nil {
+			return nil, domainerr.Wrap(constant.CodeRoleQueryFailed, err)
+		}
+		var err error
+		if it.ScopeValues, it.ScopeLabels, it.Scopes, err = scanAssignmentScopes(values, labels, scopes); err != nil {
 			return nil, domainerr.Wrap(constant.CodeRoleQueryFailed, err)
 		}
 		items = append(items, it)

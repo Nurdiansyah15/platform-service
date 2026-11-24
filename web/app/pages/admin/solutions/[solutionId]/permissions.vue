@@ -183,14 +183,6 @@ const columns: TableColumn<PermissionResponse>[] = [
       : h('span', { class: 'text-muted' }, '—'),
   },
   {
-    id: 'scopes',
-    header: 'Berlaku di',
-    cell: ({ row }) => row.original.scope_types.length
-      ? h('div', { class: 'flex flex-wrap gap-1' }, row.original.scope_types.map(s =>
-          h(UBadge, { label: scopeTypes.nameOf(s), color: 'neutral', variant: 'soft', size: 'sm' })))
-      : h('span', { class: 'text-muted' }, 'Semua scope'),
-  },
-  {
     accessorKey: 'source',
     header: 'Sumber',
     cell: ({ row }) => h(UBadge, row.original.source === 'manual'
@@ -289,7 +281,6 @@ const columns: TableColumn<PermissionResponse>[] = [
       :solution-id="ctx.solutionId.value"
       :permission="editing"
       :groups="groups"
-      :scope-types="scopeTypes.items.value"
       @saved="onSaved"
     />
     <ScopeTypeFormModal

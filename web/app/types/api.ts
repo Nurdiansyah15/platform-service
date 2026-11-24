@@ -371,12 +371,18 @@ export interface RoleHolder {
   user_id: string
   name: string
   email: string
-  /** company | branch | code scope type custom solution. */
-  scope_type: string
-  scope_type_name: string
-  scope_id: string
-  scope_name: string
+  scope_values: Record<string, string>
+  scope_labels: Record<string, string>
+  scopes: AssignmentScope[]
   created_at: string
+}
+
+/** Satu nilai scope assignment beserta nama tampilannya. */
+export interface AssignmentScope {
+  type: string
+  type_name: string
+  value: string
+  name: string
 }
 
 export interface CreateRoleRequest {
@@ -398,7 +404,8 @@ export interface RolePermissionResponse {
   description: string | null
   status: string
   group: PermissionGroupRef | null
-  scope_types: string[]
+  /** Scope tempat permission berlaku untuk role ini: company | branch | scope type custom. */
+  scope_type: string
 }
 
 export interface PermissionResponse {
@@ -412,8 +419,6 @@ export interface PermissionResponse {
   source: 'sync' | 'manual'
   /** null = tanpa grup (UI mengelompokkan by prefix code). */
   group: PermissionGroupRef | null
-  /** Scope type tempat permission berlaku; kosong = semua scope. */
-  scope_types: string[]
   created_at: string
   updated_at: string
 }
@@ -431,7 +436,6 @@ export interface CreatePermissionRequest {
   name: string
   description?: string | null
   group?: string | null
-  scopes?: string[]
 }
 
 /** Hanya permission manual. description / group '' = dikosongkan; status deprecated = hapus. */
@@ -439,7 +443,6 @@ export interface UpdatePermissionRequest {
   name?: string
   description?: string
   group?: string
-  scopes?: string[]
   status?: 'active' | 'deprecated'
 }
 
@@ -500,14 +503,14 @@ export interface UpdateScopeTypeRequest {
 }
 
 export interface ReplaceRolePermissionsRequest {
-  permission_codes: string[]
+  permissions: { code: string; scope_type?: string }[]
 }
 
 export interface SyncPermissionsRequest {
   version: string
   scope_types?: { code: string; name: string; description?: string | null; parent?: 'company' | 'branch' }[]
   groups?: { code: string; name: string; description?: string | null }[]
-  permissions: { code: string; name: string; description?: string | null; group?: string | null; scopes?: string[] }[]
+  permissions: { code: string; name: string; description?: string | null; group?: string | null }[]
 }
 
 export interface SyncCounts {
@@ -533,13 +536,10 @@ export interface SyncPermissionsResponse {
 // ── Authorization ───────────────────────────────────────────────────────────
 export interface CreateRoleAssignmentRequest {
   role_id: string
-  /** company (default) | branch | code scope type custom solution role. */
-  scope_type?: string
-  scope_id?: string
-  /** Scope custom ber-parent branch: UUID branch induk (opsional). */
-  parent_id?: string
-  /** Nama tampilan scope custom (opsional). */
-  scope_label?: string | null
+  /** Nilai untuk setiap scope_type non-company yang dipakai permission role. */
+  scope_values?: Record<string, string>
+  /** Nama tampilan opsional untuk nilai scope custom. */
+  scope_labels?: Record<string, string>
 }
 
 export interface RoleAssignmentResponse {
@@ -549,10 +549,8 @@ export interface RoleAssignmentResponse {
   role_id: string
   role_code: string
   solution_id: string
-  scope_type: string
-  scope_id: string
-  scope_label: string | null
-  parent_id: string | null
+  scope_values: Record<string, string>
+  scope_labels: Record<string, string>
   created_at: string
 }
 
@@ -567,12 +565,11 @@ export interface RoleAssignmentDetail {
   role_is_global: boolean
   solution_id: string
   solution_code: string
-  scope_type: string
-  scope_type_name: string
-  scope_id: string
-  scope_name: string
-  scope_label: string | null
-  parent_id: string | null
+  scope_values: Record<string, string>
+  scope_labels: Record<string, string>
+  scopes: AssignmentScope[]
+  /** scope_type unik permission role saat ini — dasar level role.assign untuk mencabut. */
+  role_scope_types: string[]
   created_at: string
 }
 
@@ -580,7 +577,6 @@ export interface EffectivePermission {
   permission: string
   name: string
   group: PermissionGroupRef | null
-  scope_types: string[]
   grants: { role_code: string; scope_type: string; scope_id: string }[]
 }
 

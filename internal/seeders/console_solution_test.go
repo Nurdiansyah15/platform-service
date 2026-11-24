@@ -74,7 +74,7 @@ func TestConsoleSolutionSeeder_BackfillOnlyOnFirstInstall(t *testing.T) {
 		require.NoError(t, testDB.QueryRowContext(ctx, `
 			SELECT COUNT(*) FROM user_role_assignments a
 			JOIN roles r ON r.id = a.role_id JOIN solutions s ON s.id = r.solution_id
-			WHERE s.code = $1 AND r.code = 'company_admin' AND a.user_id = $2 AND a.scope_id = $3`,
+			WHERE s.code = $1 AND r.code = 'company_admin' AND a.user_id = $2 AND a.company_id = $3 AND a.scope_values = '{}'`,
 			code, userID, companyID).Scan(&n))
 		return n
 	}

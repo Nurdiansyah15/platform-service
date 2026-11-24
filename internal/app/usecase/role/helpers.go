@@ -33,7 +33,7 @@ func mapRoleDomainError(err error) error {
 	case constant.CodeRoleCodeDuplicate:
 		return apperror.Conflict(string(de.Code), err)
 	case constant.CodeRoleCodeInvalid, constant.CodeRoleNameInvalid, constant.CodeRolePermissionUnknown,
-		constant.CodeRolePermissionDuplicate, constant.CodeRolePermissionDeprecated:
+		constant.CodeRolePermissionDuplicate, constant.CodeRolePermissionDeprecated, constant.CodeRolePermissionScopeInvalid:
 		return apperror.Unprocessable(string(de.Code), nil, err)
 	default:
 		return apperror.Internal(string(de.Code), err)
@@ -76,14 +76,21 @@ func toRoleResponse(r *entity.Role) dto.RoleResponse {
 	}
 }
 
-func roleEvent(eventType string, r *entity.Role, permissionCodes []string) port.OutboxEvent {
+func roleEvent(eventType string, r *entity.Role, grants []entity.PermissionGrant) port.OutboxEvent {
+	var perms []event.PermissionScope
+	if grants != nil {
+		perms = make([]event.PermissionScope, 0, len(grants))
+		for _, g := range grants {
+			perms = append(perms, event.PermissionScope{Code: g.Code, ScopeType: g.ScopeType})
+		}
+	}
 	return port.OutboxEvent{
 		EventType:  eventType,
 		CompanyID:  r.CompanyID,
 		SolutionID: &r.SolutionID,
 		Payload: event.RolePayload{
 			ID: r.ID, SolutionID: r.SolutionID, CompanyID: r.CompanyID, Code: r.Code.Value(), Name: r.Name,
-			IsSystem: r.IsSystem, PermissionCodes: permissionCodes, UpdatedAt: r.UpdatedAt,
+			IsSystem: r.IsSystem, Permissions: perms, UpdatedAt: r.UpdatedAt,
 		},
 	}
 }

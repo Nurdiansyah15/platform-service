@@ -25,25 +25,53 @@ func perm(t *testing.T, code string, deprecated bool) *permentity.Permission {
 	return p
 }
 
+func in(pairs ...string) []entity.PermissionInput {
+	out := []entity.PermissionInput{}
+	for i := 0; i+1 < len(pairs); i += 2 {
+		out = append(out, entity.PermissionInput{Code: pairs[i], ScopeType: pairs[i+1]})
+	}
+	return out
+}
+
+func scopeType(t *testing.T, code string, deprecated bool) *permentity.ScopeType {
+	t.Helper()
+	d, err := permentity.NewScopeTypeDefinition(code, code, nil, "", 0)
+	require.NoError(t, err)
+	st := permentity.NewScopeType("s", d, time.Now())
+	if deprecated {
+		st.Deprecate(time.Now())
+	}
+	return st
+}
+
 func TestResolvePermissions(t *testing.T) {
 	read, write, legacy := perm(t, "employee.read", false), perm(t, "employee.write", false), perm(t, "legacy.export", true)
 	catalog := []*permentity.Permission{read, write, legacy}
+	scopes := []*permentity.ScopeType{scopeType(t, "self", false), scopeType(t, "old_unit", true)}
 
-	got, err := service.ResolvePermissions([]string{"employee.read", "employee.write"}, catalog, nil)
+	got, err := service.ResolvePermissions(in("employee.read", "", "employee.write", "self"), catalog, scopes, nil)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, "company", got[0].ScopeType, "kosong = company")
+	assert.Equal(t, "self", got[1].ScopeType)
+	assert.Equal(t, write.ID, got[1].PermissionID)
+
+	_, err = service.ResolvePermissions(in("employee.read", "", "employee.read", "branch"), catalog, scopes, nil)
+	testhelper.AssertDomainError(t, err, constant.CodeRolePermissionDuplicate)
+	_, err = service.ResolvePermissions(in("tidak.ada", ""), catalog, scopes, nil)
+	testhelper.AssertDomainError(t, err, constant.CodeRolePermissionUnknown)
+	_, err = service.ResolvePermissions(in("legacy.export", ""), catalog, scopes, nil)
+	testhelper.AssertDomainError(t, err, constant.CodeRolePermissionDeprecated)
+	_, err = service.ResolvePermissions(in("employee.read", "region"), catalog, scopes, nil)
+	testhelper.AssertDomainError(t, err, constant.CodeRolePermissionScopeInvalid)
+	_, err = service.ResolvePermissions(in("employee.read", "old_unit"), catalog, scopes, nil)
+	testhelper.AssertDomainError(t, err, constant.CodeRolePermissionScopeInvalid)
+
+	// Yang sudah terpasang boleh tetap: permission deprecated & scope type deprecated (scope sama).
+	got, err = service.ResolvePermissions(in("legacy.export", "", "employee.read", "old_unit"), catalog, scopes,
+		map[string]string{legacy.ID: "company", read.ID: "old_unit"})
 	require.NoError(t, err)
 	assert.Len(t, got, 2)
-
-	_, err = service.ResolvePermissions([]string{"employee.read", "employee.read"}, catalog, nil)
-	testhelper.AssertDomainError(t, err, constant.CodeRolePermissionDuplicate)
-	_, err = service.ResolvePermissions([]string{"tidak.ada"}, catalog, nil)
-	testhelper.AssertDomainError(t, err, constant.CodeRolePermissionUnknown)
-	_, err = service.ResolvePermissions([]string{"legacy.export"}, catalog, nil)
-	testhelper.AssertDomainError(t, err, constant.CodeRolePermissionDeprecated)
-
-	// Deprecated yang sudah terpasang boleh tetap.
-	got, err = service.ResolvePermissions([]string{"legacy.export"}, catalog, map[string]bool{legacy.ID: true})
-	require.NoError(t, err)
-	assert.Len(t, got, 1)
 }
 
 func TestRole(t *testing.T) {

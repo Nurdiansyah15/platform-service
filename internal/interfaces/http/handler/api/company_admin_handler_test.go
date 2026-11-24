@@ -53,8 +53,15 @@ func mustCreateCompanyUser(t *testing.T, headers map[string]string, companyID, e
 	return got.UserID
 }
 
-// mustConsoleRole membuat custom role solution console milik company berisi permission platform.
+// mustConsoleRole membuat custom role solution console milik company berisi permission platform
+// ber-scope company.
 func (f adminFixture) mustConsoleRole(t *testing.T, code string, perms ...string) string {
+	t.Helper()
+	return f.mustScopedConsoleRole(t, code, "company", perms...)
+}
+
+// mustScopedConsoleRole — seperti mustConsoleRole dengan scope_type tertentu untuk semua permission.
+func (f adminFixture) mustScopedConsoleRole(t *testing.T, code, scope string, perms ...string) string {
 	t.Helper()
 	w := testSrv.POST("/api/v1/companies/"+f.companyID+"/solutions/"+f.consoleSolutionID+"/roles",
 		map[string]any{"code": code, "name": code}, f.ownerH)
@@ -64,15 +71,14 @@ func (f adminFixture) mustConsoleRole(t *testing.T, code string, perms ...string
 	}
 	testhelper.DecodeBody(t, w, &role)
 	w = testSrv.PUT("/api/v1/companies/"+f.companyID+"/roles/"+role.ID+"/permissions",
-		map[string]any{"permission_codes": perms}, f.ownerH)
+		scopedPermsBody(scope, perms...), f.ownerH)
 	require.Equal(t, 200, w.Code, "set console role permissions: %s", w.Body.String())
 	return role.ID
 }
 
 func (f adminFixture) assignStaff(t *testing.T, roleID, scopeType, scopeID string) {
 	t.Helper()
-	w := testSrv.POST(assignPath(f.companyID, f.staffID),
-		map[string]any{"role_id": roleID, "scope_type": scopeType, "scope_id": scopeID}, f.ownerH)
+	w := testSrv.POST(assignPath(f.companyID, f.staffID), assignBody(roleID, scopeType, scopeID), f.ownerH)
 	require.Equal(t, 201, w.Code, "assign staff: %s", w.Body.String())
 }
 
@@ -196,7 +202,7 @@ func TestCompanyAdmin_BranchScopedPermission(t *testing.T) {
 	f := newAdminFixture(t)
 	b1 := mustCreateBranch(t, f.ownerH, f.companyID, testhelper.UniqueCode("B1"))
 	b2 := mustCreateBranch(t, f.ownerH, f.companyID, testhelper.UniqueCode("B2"))
-	kacab := f.mustConsoleRole(t, "kepala_cabang", "branch.manage")
+	kacab := f.mustScopedConsoleRole(t, "kepala_cabang", "branch", "branch.manage")
 	f.assignStaff(t, kacab, "branch", b1)
 
 	assert.Equal(t, 200, testSrv.PATCH("/api/v1/branches/"+b1, map[string]any{"name": "Cabang Satu"}, f.staffH).Code, "branch sendiri")

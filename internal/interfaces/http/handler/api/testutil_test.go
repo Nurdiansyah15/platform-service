@@ -304,3 +304,24 @@ func orgCodes(items []orgUnitData) []string {
 	}
 	return out
 }
+
+// permsBody — body PUT permission role; setiap code ber-scope company.
+func permsBody(codes []string) map[string]any { return scopedPermsBody("company", codes...) }
+
+// scopedPermsBody — body PUT permission role dengan scope_type yang sama untuk semua code.
+func scopedPermsBody(scope string, codes ...string) map[string]any {
+	items := make([]map[string]any, 0, len(codes))
+	for _, c := range codes {
+		items = append(items, map[string]any{"code": c, "scope_type": scope})
+	}
+	return map[string]any{"permissions": items}
+}
+
+// assignBody — body assign role; scopeType kosong / company = tanpa nilai scope.
+func assignBody(roleID, scopeType, scopeID string) map[string]any {
+	body := map[string]any{"role_id": roleID}
+	if scopeType != "" && scopeType != "company" {
+		body["scope_values"] = map[string]string{scopeType: scopeID}
+	}
+	return body
+}

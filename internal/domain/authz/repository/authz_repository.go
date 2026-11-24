@@ -7,12 +7,12 @@ import (
 )
 
 type RoleAssignmentRepository interface {
-	// Create menyimpan assignment. Kombinasi user+role+scope sudah ada → CodeAssignmentDuplicate.
+	// Create menyimpan assignment. Kombinasi user+role+company+scope_values sudah ada → CodeAssignmentDuplicate.
 	Create(ctx context.Context, a *entity.RoleAssignment) error
 	// FindByID memuat assignment beserta ringkasan role-nya. Tidak ada → CodeAssignmentNotFound.
 	FindByID(ctx context.Context, id string) (*entity.RoleAssignment, error)
 	Delete(ctx context.Context, id string) error
-	// DeleteByScope menghapus semua assignment pada scope tertentu (mis. branch dihapus).
+	// DeleteByScope menghapus semua assignment yang nilai scope_type-nya = scopeID (mis. branch dihapus).
 	DeleteByScope(ctx context.Context, scopeType, scopeID string) error
 	// DeleteByRole menghapus semua assignment role tertentu (role dihapus).
 	DeleteByRole(ctx context.Context, roleID string) error

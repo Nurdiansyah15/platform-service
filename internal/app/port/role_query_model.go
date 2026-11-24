@@ -44,7 +44,8 @@ type RolePermissionReadItem struct {
 	Description *string
 	Status      string
 	Group       *dto.PermissionGroupRef
-	ScopeTypes  []string
+	// ScopeType — scope tempat permission berlaku untuk role ini.
+	ScopeType string
 }
 
 type RoleQueryReadModel interface {

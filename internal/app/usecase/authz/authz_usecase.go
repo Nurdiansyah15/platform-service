@@ -38,6 +38,8 @@ type AuthzDeps struct {
 	Subscriptions subrepo.SubscriptionRepository
 	Solutions     solutionrepo.SolutionRepository
 	Query         port.RoleAssignmentQueryReadModel
+	// RolePermissions — scope_type yang dipakai role (nilai scope wajib saat assign).
+	RolePermissions rolerepo.RolePermissionRepository
 	// Permissions & PermissionGroups — info tampilan (nama, grup) untuk effective permissions.
 	Permissions      permrepo.PermissionRepository
 	PermissionGroups permrepo.PermissionGroupRepository
@@ -55,9 +57,10 @@ func NewAuthzUseCase(deps AuthzDeps) *AuthzUseCase {
 	return &AuthzUseCase{deps: deps, access: orgservice.NewAccessPolicy(deps.Members, deps.Subscriptions), now: time.Now}
 }
 
-// AssignRole memberi role ke user dalam company pada scope tertentu (spec §2.6):
-// user member active, company subscribe solution role, custom role milik company,
-// scope_id valid untuk company.
+// AssignRole memberi role ke user dalam company (spec §2.6): user member active, custom role
+// milik company, dan scope_values berisi tepat satu nilai valid untuk setiap scope_type
+// non-company yang dipakai permission role (branch milik company; scope custom terdaftar &
+// aktif). Role yang sama dengan nilai berbeda = assignment lain.
 //
 // Required — auth: user (platform admin / member dengan permission role.assign di scope tsb) atau service milik solution role | scope: roles:write
 func (uc *AuthzUseCase) AssignRole(ctx context.Context, actor *principal.Principal, companyID, userID string, req dto.CreateRoleAssignmentRequest) (*dto.RoleAssignmentResponse, error) {
@@ -90,22 +93,19 @@ func (uc *AuthzUseCase) AssignRole(ctx context.Context, actor *principal.Princip
 	// 	return nil, mapAuthzDomainError(domainerr.New(constant.CodeAssignmentNotSubscribed))
 	// }
 
-	scopeType, err := valueobject.NewScopeType(req.ScopeType)
+	roleScopes, err := uc.deps.RolePermissions.ScopeTypes(ctx, r.ID)
 	if err != nil {
 		return nil, mapAuthzDomainError(err)
 	}
-	scope, err := uc.deps.Scopes.Resolve(ctx, authzservice.ScopeInput{
-		SolutionID: r.SolutionID, CompanyID: companyID, Type: scopeType, ID: req.ScopeID, ParentID: req.ParentID,
-		ForAssignment: true,
-	})
+	values, labels, err := uc.resolveScopeValues(ctx, r.SolutionID, companyID, roleScopes, req.ScopeValues, req.ScopeLabels)
 	if err != nil {
 		return nil, mapAuthzDomainError(err)
 	}
-	if err := uc.ensureCanAssign(ctx, actor, companyID, r.SolutionID, scope); err != nil {
+	if err := uc.ensureCanAssign(ctx, actor, companyID, r.SolutionID, assignScope(companyID, roleScopes, values)); err != nil {
 		return nil, err
 	}
 
-	a := entity.NewRoleAssignment(companyID, userID, r.ID, scope, trimLabel(req.ScopeLabel), uc.now())
+	a := entity.NewRoleAssignment(companyID, userID, r.ID, values, labels, uc.now())
 	err = uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
 		if err := uc.deps.Assignments.Create(ctx, a); err != nil {
 			return err
@@ -116,8 +116,7 @@ func (uc *AuthzUseCase) AssignRole(ctx context.Context, actor *principal.Princip
 			SolutionID: &r.SolutionID,
 			Payload: event.RoleAssignmentPayload{
 				ID: a.ID, CompanyID: companyID, UserID: userID, RoleID: r.ID, RoleCode: r.Code.Value(),
-				SolutionID: r.SolutionID, ScopeType: a.Scope.Type.String(), ScopeID: a.Scope.ID,
-				ScopeLabel: a.ScopeLabel, ParentID: a.ScopeParentID, CreatedAt: a.CreatedAt,
+				SolutionID: r.SolutionID, ScopeValues: a.Scopes, ScopeLabels: a.Labels, CreatedAt: a.CreatedAt,
 			},
 		})
 	})
@@ -126,8 +125,7 @@ func (uc *AuthzUseCase) AssignRole(ctx context.Context, actor *principal.Princip
 	}
 	return &dto.RoleAssignmentResponse{
 		ID: a.ID, CompanyID: companyID, UserID: userID, RoleID: r.ID, RoleCode: r.Code.Value(), SolutionID: r.SolutionID,
-		ScopeType: a.Scope.Type.String(), ScopeID: a.Scope.ID, ScopeLabel: a.ScopeLabel, ParentID: a.ScopeParentID,
-		CreatedAt: a.CreatedAt,
+		ScopeValues: a.Scopes, ScopeLabels: a.Labels, CreatedAt: a.CreatedAt,
 	}, nil
 }
 
@@ -169,7 +167,11 @@ func (uc *AuthzUseCase) RevokeAssignment(ctx context.Context, actor *principal.P
 	if actor.IsService() && actor.SolutionID != a.Role.SolutionID {
 		return notFound
 	}
-	if err := uc.ensureCanAssign(ctx, actor, a.CompanyID, a.Role.SolutionID, a.CheckScope()); err != nil {
+	roleScopes, err := uc.deps.RolePermissions.ScopeTypes(ctx, a.RoleID)
+	if err != nil {
+		return mapAuthzDomainError(err)
+	}
+	if err := uc.ensureCanAssign(ctx, actor, a.CompanyID, a.Role.SolutionID, assignScope(a.CompanyID, roleScopes, a.Scopes)); err != nil {
 		return err
 	}
 
@@ -184,8 +186,7 @@ func (uc *AuthzUseCase) RevokeAssignment(ctx context.Context, actor *principal.P
 			SolutionID: &a.Role.SolutionID,
 			Payload: event.RoleAssignmentPayload{
 				ID: a.ID, CompanyID: a.CompanyID, UserID: a.UserID, RoleID: a.RoleID, RoleCode: a.Role.Code,
-				SolutionID: a.Role.SolutionID, ScopeType: a.Scope.Type.String(), ScopeID: a.Scope.ID,
-				ScopeLabel: a.ScopeLabel, ParentID: a.ScopeParentID, CreatedAt: a.CreatedAt,
+				SolutionID: a.Role.SolutionID, ScopeValues: a.Scopes, ScopeLabels: a.Labels, CreatedAt: a.CreatedAt,
 			},
 			OccurredAt: now,
 		})
@@ -228,9 +229,9 @@ func (uc *AuthzUseCase) EffectivePermissions(ctx context.Context, actor *princip
 	for _, g := range grants {
 		p, ok := byPermission[g.PermissionCode]
 		if !ok {
-			p = &dto.EffectivePermissionResponse{Permission: g.PermissionCode, Name: g.PermissionCode, ScopeTypes: []string{}}
+			p = &dto.EffectivePermissionResponse{Permission: g.PermissionCode, Name: g.PermissionCode}
 			if info, found := catalog[g.PermissionCode]; found {
-				p.Name, p.Group, p.ScopeTypes = info.Name, info.Group, info.ScopeTypes
+				p.Name, p.Group = info.Name, info.Group
 			}
 			byPermission[g.PermissionCode] = p
 		}
@@ -365,9 +366,8 @@ func (uc *AuthzUseCase) isActiveMember(ctx context.Context, companyID, userID st
 
 // permissionInfo — info tampilan permission dari katalog solution.
 type permissionInfo struct {
-	Name       string
-	Group      *dto.PermissionGroupRef
-	ScopeTypes []string
+	Name  string
+	Group *dto.PermissionGroupRef
 }
 
 func (uc *AuthzUseCase) permissionCatalog(ctx context.Context, solutionID string) (map[string]permissionInfo, error) {
@@ -385,7 +385,7 @@ func (uc *AuthzUseCase) permissionCatalog(ctx context.Context, solutionID string
 	}
 	out := make(map[string]permissionInfo, len(perms))
 	for _, p := range perms {
-		info := permissionInfo{Name: p.Name, ScopeTypes: p.ScopeTypes}
+		info := permissionInfo{Name: p.Name}
 		if p.GroupID != nil {
 			info.Group = groupByID[*p.GroupID]
 		}
@@ -394,14 +394,72 @@ func (uc *AuthzUseCase) permissionCatalog(ctx context.Context, solutionID string
 	return out, nil
 }
 
-// trimLabel — label kosong dianggap tidak diisi.
-func trimLabel(v *string) *string {
-	if v == nil {
-		return nil
+// resolveScopeValues memvalidasi nilai scope assignment terhadap scope_type yang dipakai role:
+// setiap scope_type non-company wajib punya nilai valid, kunci lain ditolak. Label hanya
+// disimpan untuk scope custom.
+func (uc *AuthzUseCase) resolveScopeValues(ctx context.Context, solutionID, companyID string, roleScopes []string,
+	rawValues, rawLabels map[string]string) (map[string]string, map[string]string, error) {
+	required := map[string]bool{}
+	for _, t := range roleScopes {
+		if t != valueobject.ScopeCompany.String() {
+			required[t] = true
+		}
 	}
-	t := strings.TrimSpace(*v)
-	if t == "" {
-		return nil
+	for k := range rawValues {
+		if !required[k] {
+			return nil, nil, domainerr.New(constant.CodeAssignmentScopeUnexpected)
+		}
 	}
-	return &t
+	for k := range rawLabels {
+		if !required[k] {
+			return nil, nil, domainerr.New(constant.CodeAssignmentScopeUnexpected)
+		}
+	}
+
+	values := make(map[string]string, len(required))
+	labels := map[string]string{}
+	for t := range required {
+		v := strings.TrimSpace(rawValues[t])
+		if v == "" {
+			return nil, nil, domainerr.New(constant.CodeAssignmentScopeMissing)
+		}
+		st, err := valueobject.NewScopeType(t)
+		if err != nil {
+			return nil, nil, err
+		}
+		resolved, err := uc.deps.Scopes.Resolve(ctx, authzservice.ScopeInput{
+			SolutionID: solutionID, CompanyID: companyID, Type: st, ID: v, ForAssignment: true,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		values[t] = resolved.Scope.ID
+		if l := strings.TrimSpace(rawLabels[t]); l != "" && !st.IsBuiltin() {
+			if len([]rune(l)) > constant.ScopeLabelMaxLength {
+				return nil, nil, domainerr.New(constant.CodeScopeInvalid)
+			}
+			labels[t] = l
+		}
+	}
+	return values, labels, nil
+}
+
+// assignScope — scope tempat pemberi role wajib memegang role.assign: level company bila role
+// memberi permission ber-scope company atau scope custom; level branch bila seluruh
+// permission role ber-scope branch (cabang dari nilai assignment).
+func assignScope(companyID string, roleScopes []string, values map[string]string) entity.CheckScope {
+	for _, t := range roleScopes {
+		if t != valueobject.ScopeBranch.String() {
+			return authzservice.CompanyScope(companyID)
+		}
+	}
+	for k := range values {
+		if k != valueobject.ScopeBranch.String() {
+			return authzservice.CompanyScope(companyID)
+		}
+	}
+	if b := values[valueobject.ScopeBranch.String()]; b != "" {
+		return authzservice.BranchScope(companyID, b)
+	}
+	return authzservice.CompanyScope(companyID)
 }

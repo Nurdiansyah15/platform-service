@@ -22,7 +22,6 @@ const (
 	CodeScopeTypeNameInvalid   domainerr.Code = "DOMAIN_PERMISSION_SCOPE_TYPE_NAME_INVALID"
 	CodeScopeTypeParentInvalid domainerr.Code = "DOMAIN_PERMISSION_SCOPE_TYPE_PARENT_INVALID"
 	CodeScopeTypeDuplicate     domainerr.Code = "DOMAIN_PERMISSION_SCOPE_TYPE_DUPLICATE"
-	CodeScopeTypeUnknown       domainerr.Code = "DOMAIN_PERMISSION_SCOPE_TYPE_UNKNOWN"
 	CodeScopeTypeNotFound      domainerr.Code = "DOMAIN_PERMISSION_SCOPE_TYPE_NOT_FOUND"
 
 	// Permission manual (dibuat platform admin) vs permission hasil sync.

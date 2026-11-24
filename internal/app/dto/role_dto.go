@@ -26,7 +26,15 @@ type CompanyRoleParam struct {
 
 // ReplaceRolePermissionsRequest — replace-all: daftar ini menjadi seluruh permission role.
 type ReplaceRolePermissionsRequest struct {
-	PermissionCodes []string `json:"permission_codes" binding:"required,dive,required,max=150"`
+	// Permissions — seluruh permission role (replace-all). Kirim [] untuk mengosongkan.
+	Permissions []RolePermissionInput `json:"permissions" binding:"required,dive"`
+}
+
+// RolePermissionInput — permission pada role beserta scope tempat ia berlaku.
+type RolePermissionInput struct {
+	Code string `json:"code" binding:"required,max=150"`
+	// ScopeType — company (default, seluruh company) | branch | scope type custom solution.
+	ScopeType string `json:"scope_type" binding:"omitempty,max=30"`
 }
 
 type RoleResponse struct {
@@ -55,15 +63,14 @@ type UpdateRoleRequest struct {
 
 // RoleHolderResponse — satu assignment role pada user di company.
 type RoleHolderResponse struct {
-	AssignmentID  string    `json:"assignment_id"`
-	UserID        string    `json:"user_id"`
-	Name          string    `json:"name"`
-	Email         string    `json:"email"`
-	ScopeType     string    `json:"scope_type"`
-	ScopeTypeName string    `json:"scope_type_name"`
-	ScopeID       string    `json:"scope_id"`
-	ScopeName     string    `json:"scope_name"`
-	CreatedAt     time.Time `json:"created_at"`
+	AssignmentID string            `json:"assignment_id"`
+	UserID       string            `json:"user_id"`
+	Name         string            `json:"name"`
+	Email        string            `json:"email"`
+	ScopeValues  map[string]string `json:"scope_values"`
+	ScopeLabels  map[string]string `json:"scope_labels"`
+	Scopes       []AssignmentScope `json:"scopes"`
+	CreatedAt    time.Time         `json:"created_at"`
 }
 
 type RolePermissionResponse struct {
@@ -73,5 +80,6 @@ type RolePermissionResponse struct {
 	Description *string             `json:"description"`
 	Status      string              `json:"status"`
 	Group       *PermissionGroupRef `json:"group"`
-	ScopeTypes  []string            `json:"scope_types"`
+	// ScopeType — scope tempat permission berlaku untuk role ini.
+	ScopeType string `json:"scope_type"`
 }

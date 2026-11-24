@@ -31,11 +31,13 @@ type RoleDeps struct {
 	Roles           rolerepo.RoleRepository
 	RolePermissions rolerepo.RolePermissionRepository
 	Permissions     permrepo.PermissionRepository
-	Solutions       solutionrepo.SolutionRepository
-	Companies       orgrepo.CompanyRepository
-	Members         orgrepo.CompanyMemberRepository
-	Subscriptions   subrepo.SubscriptionRepository
-	Query           port.RoleQueryReadModel
+	// ScopeTypes — scope type custom solution (validasi scope_type permission role).
+	ScopeTypes    permrepo.ScopeTypeRepository
+	Solutions     solutionrepo.SolutionRepository
+	Companies     orgrepo.CompanyRepository
+	Members       orgrepo.CompanyMemberRepository
+	Subscriptions subrepo.SubscriptionRepository
+	Query         port.RoleQueryReadModel
 	// Assignments — assignment role ikut dihapus saat role dihapus.
 	Assignments authzrepo.RoleAssignmentRepository
 	// Admin menegakkan permission platform role.manage untuk token user.
@@ -138,7 +140,7 @@ func (uc *RoleUseCase) ReplaceGlobalPermissions(ctx context.Context, roleID stri
 	if !r.IsGlobal() {
 		return nil, mapRoleDomainError(domainerr.New(constant.CodeRoleNotFound))
 	}
-	return uc.replacePermissions(ctx, r, req.PermissionCodes)
+	return uc.replacePermissions(ctx, r, req.Permissions)
 }
 
 // ── Role custom company ───────────────────────────────────────────────────────
@@ -242,7 +244,7 @@ func (uc *RoleUseCase) ReplaceCompanyRolePermissions(ctx context.Context, actor 
 	if err := uc.ensureRoleManage(ctx, actor, companyID, r.SolutionID); err != nil {
 		return nil, err
 	}
-	return uc.replacePermissions(ctx, r, req.PermissionCodes)
+	return uc.replacePermissions(ctx, r, req.Permissions)
 }
 
 // ── Helper ───────────────────────────────────────────────────────────────────
@@ -392,33 +394,35 @@ func (uc *RoleUseCase) create(ctx context.Context, p entity.NewRoleParams) (*dto
 	return &resp, nil
 }
 
-func (uc *RoleUseCase) replacePermissions(ctx context.Context, r *entity.Role, codes []string) ([]dto.RolePermissionResponse, error) {
+func (uc *RoleUseCase) replacePermissions(ctx context.Context, r *entity.Role, items []dto.RolePermissionInput) ([]dto.RolePermissionResponse, error) {
 	if err := r.EnsureEditable(); err != nil {
 		return nil, mapRoleDomainError(err)
+	}
+	in := make([]entity.PermissionInput, 0, len(items))
+	for _, it := range items {
+		in = append(in, entity.PermissionInput{Code: it.Code, ScopeType: it.ScopeType})
 	}
 	err := uc.deps.Tx.WithTx(ctx, func(ctx context.Context) error {
 		catalog, err := uc.deps.Permissions.ListBySolution(ctx, r.SolutionID)
 		if err != nil {
 			return err
 		}
-		current, err := uc.deps.RolePermissions.PermissionIDs(ctx, r.ID)
+		scopeTypes, err := uc.deps.ScopeTypes.ListBySolution(ctx, r.SolutionID)
 		if err != nil {
 			return err
 		}
-		resolved, err := roleservice.ResolvePermissions(codes, catalog, current)
+		current, err := uc.deps.RolePermissions.Current(ctx, r.ID)
 		if err != nil {
 			return err
 		}
-		ids := make([]string, 0, len(resolved))
-		resolvedCodes := make([]string, 0, len(resolved))
-		for _, p := range resolved {
-			ids = append(ids, p.ID)
-			resolvedCodes = append(resolvedCodes, p.Code.Value())
-		}
-		if err := uc.deps.RolePermissions.ReplaceAll(ctx, r.ID, r.SolutionID, ids); err != nil {
+		grants, err := roleservice.ResolvePermissions(in, catalog, scopeTypes, current)
+		if err != nil {
 			return err
 		}
-		return uc.deps.Outbox.Append(ctx, roleEvent(event.TypeRolePermissionsChanged, r, resolvedCodes))
+		if err := uc.deps.RolePermissions.ReplaceAll(ctx, r.ID, r.SolutionID, grants); err != nil {
+			return err
+		}
+		return uc.deps.Outbox.Append(ctx, roleEvent(event.TypeRolePermissionsChanged, r, grants))
 	})
 	if err != nil {
 		return nil, mapRoleDomainError(err)
@@ -451,7 +455,7 @@ func (uc *RoleUseCase) permissions(ctx context.Context, roleID string) ([]dto.Ro
 	for _, it := range items {
 		out = append(out, dto.RolePermissionResponse{
 			ID: it.ID, Code: it.Code, Name: it.Name, Description: it.Description, Status: it.Status,
-			Group: it.Group, ScopeTypes: it.ScopeTypes,
+			Group: it.Group, ScopeType: it.ScopeType,
 		})
 	}
 	return out, nil

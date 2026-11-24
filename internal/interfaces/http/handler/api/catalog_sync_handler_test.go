@@ -215,8 +215,7 @@ func scopeTypesPath(solutionID string) string {
 }
 
 // richCatalog: scope type department (parent branch), group leave & payroll, permission
-// leave.approve (grup leave, scope company+department), payroll.run (grup payroll,
-// company saja), misc.read (tanpa grup & scope).
+// leave.approve (grup leave), payroll.run (grup payroll), misc.read (tanpa grup).
 func richCatalog(version string) map[string]any {
 	return map[string]any{
 		"version": version,
@@ -228,8 +227,8 @@ func richCatalog(version string) map[string]any {
 			map[string]any{"code": "payroll", "name": "Payroll", "description": "Penggajian"},
 		},
 		"permissions": []any{
-			map[string]any{"code": "leave.approve", "name": "Setujui cuti", "group": "leave", "scopes": []string{"department", "company"}},
-			map[string]any{"code": "payroll.run", "name": "Jalankan payroll", "group": "payroll", "scopes": []string{"company"}},
+			map[string]any{"code": "leave.approve", "name": "Setujui cuti", "group": "leave"},
+			map[string]any{"code": "payroll.run", "name": "Jalankan payroll", "group": "payroll"},
 			map[string]any{"code": "misc.read", "name": "Lihat lain-lain"},
 		},
 	}
@@ -258,7 +257,6 @@ func TestCatalogSync_WithGroupsAndScopes_Success(t *testing.T) {
 			Name      string `json:"name"`
 			SortOrder int    `json:"sort_order"`
 		} `json:"group"`
-		ScopeTypes []string `json:"scope_types"`
 	}
 	testhelper.DecodeBody(t, w, &list)
 	byCode := map[string]int{}
@@ -268,13 +266,11 @@ func TestCatalogSync_WithGroupsAndScopes_Success(t *testing.T) {
 	leave := list[byCode["leave.approve"]]
 	require.NotNil(t, leave.Group)
 	assert.Equal(t, "Cuti", leave.Group.Name)
-	assert.Equal(t, []string{"company", "department"}, leave.ScopeTypes, "unik & terurut")
 	payroll := list[byCode["payroll.run"]]
 	require.NotNil(t, payroll.Group)
 	assert.Equal(t, 1, payroll.Group.SortOrder)
 	misc := list[byCode["misc.read"]]
 	assert.Nil(t, misc.Group)
-	assert.Equal(t, []string{}, misc.ScopeTypes)
 
 	// Filter group.
 	w = testSrv.GET(permissionsPath(solID)+"?group=-", userHeader())
@@ -309,7 +305,6 @@ func TestCatalogSync_WithGroupsAndScopes_InvalidPayload(t *testing.T) {
 	}
 	tests := map[string]map[string]any{
 		"group tidak dikenal": {"version": "v1", "permissions": perm(map[string]any{"group": "nope"})},
-		"scope tidak dikenal": {"version": "v1", "permissions": perm(map[string]any{"scopes": []string{"project"}})},
 		"scope type reserved": {"version": "v1", "permissions": perm(nil),
 			"scope_types": []any{map[string]any{"code": "branch", "name": "Cabang"}}},
 		"scope type ganda": {"version": "v1", "permissions": perm(nil),
@@ -421,8 +416,7 @@ type permissionBody struct {
 	Group  *struct {
 		Code string `json:"code"`
 	} `json:"group"`
-	ScopeTypes  []string `json:"scope_types"`
-	Description *string  `json:"description"`
+	Description *string `json:"description"`
 }
 
 func mustCreatePermission(t *testing.T, solutionID string, body map[string]any) permissionBody {
@@ -457,7 +451,6 @@ func TestPermission_Create_InvalidPayload(t *testing.T) {
 		"tanpa name":          {"code": "a.read"},
 		"code tidak valid":    {"code": "A Read", "name": "A"},
 		"group tidak dikenal": {"code": "a.read", "name": "A", "group": "nope"},
-		"scope tidak dikenal": {"code": "a.read", "name": "A", "scopes": []string{"project"}},
 	}
 	for name, body := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -479,13 +472,12 @@ func TestPermission_Create_Success(t *testing.T) {
 	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
 	mustSync(t, solID, adminHeader(), richCatalog("v1"))
 	got := mustCreatePermission(t, solID, map[string]any{
-		"code": "report.export", "name": "Export laporan", "description": "CSV", "group": "leave", "scopes": []string{"department"},
+		"code": "report.export", "name": "Export laporan", "description": "CSV", "group": "leave",
 	})
 	assert.Equal(t, "manual", got.Source)
 	assert.Equal(t, "active", got.Status)
 	require.NotNil(t, got.Group)
 	assert.Equal(t, "leave", got.Group.Code)
-	assert.Equal(t, []string{"department"}, got.ScopeTypes)
 
 	// Muncul di list & filter source; bisa dipasang di role.
 	w := testSrv.GET(permissionsPath(solID)+"?source=manual", userHeader())
@@ -496,7 +488,7 @@ func TestPermission_Create_Success(t *testing.T) {
 	assert.Equal(t, "report.export", list[0].Code)
 
 	roleID := mustCreateRole(t, solutionRolesPath(solID), "exporter", adminHeader())
-	assert.Equal(t, 200, testSrv.PUT(rolePermissionsPath(roleID), map[string]any{"permission_codes": []string{"report.export"}}, adminHeader()).Code)
+	assert.Equal(t, 200, testSrv.PUT(rolePermissionsPath(roleID), permsBody([]string{"report.export"}), adminHeader()).Code)
 }
 
 func TestPermission_Get(t *testing.T) {
@@ -551,14 +543,13 @@ func TestPermission_Update_Success(t *testing.T) {
 	mustSync(t, solID, adminHeader(), richCatalog("v1"))
 	p := mustCreatePermission(t, solID, map[string]any{"code": "x.read", "name": "X", "description": "d", "group": "leave"})
 
-	w := testSrv.PATCH(permissionPath(p.ID), map[string]any{"name": "Lihat X", "description": "", "group": "", "scopes": []string{"company"}}, adminHeader())
+	w := testSrv.PATCH(permissionPath(p.ID), map[string]any{"name": "Lihat X", "description": "", "group": ""}, adminHeader())
 	require.Equal(t, 200, w.Code, w.Body.String())
 	var got permissionBody
 	testhelper.DecodeBody(t, w, &got)
 	assert.Equal(t, "Lihat X", got.Name)
 	assert.Nil(t, got.Description)
 	assert.Nil(t, got.Group)
-	assert.Equal(t, []string{"company"}, got.ScopeTypes)
 	assert.Equal(t, "x.read", got.Code)
 
 	// "Hapus" = deprecated: tidak bisa ditambahkan ke role; aktifkan lagi bisa.
@@ -567,7 +558,7 @@ func TestPermission_Update_Success(t *testing.T) {
 	testhelper.DecodeBody(t, w, &got)
 	assert.Equal(t, "deprecated", got.Status)
 	roleID := mustCreateRole(t, solutionRolesPath(solID), "xr", adminHeader())
-	assert.Equal(t, 422, testSrv.PUT(rolePermissionsPath(roleID), map[string]any{"permission_codes": []string{"x.read"}}, adminHeader()).Code)
+	assert.Equal(t, 422, testSrv.PUT(rolePermissionsPath(roleID), permsBody([]string{"x.read"}), adminHeader()).Code)
 
 	w = testSrv.PATCH(permissionPath(p.ID), map[string]any{"status": "active"}, adminHeader())
 	require.Equal(t, 200, w.Code)
@@ -810,12 +801,14 @@ func TestScopeType_Create_Success(t *testing.T) {
 	assert.Equal(t, "company", st.Parent, "default parent company")
 	assert.Equal(t, "active", st.Status)
 
-	// Dipakai assignment & permission manual; tidak di-deprecate oleh sync berikutnya.
-	w := testSrv.POST(assignPath(f.companyID, f.staffID), map[string]any{"role_id": f.hrAdmin, "scope_type": "project", "scope_id": "P1"}, f.ownerH)
+	// Dipakai permission role & assignment; tidak di-deprecate oleh sync berikutnya.
+	pm := mustCreateRole(t, solutionRolesPath(f.solutionID), "pm", adminHeader())
+	require.Equal(t, 200, testSrv.PUT(rolePermissionsPath(pm), scopedPermsBody("project", "employee.read"), adminHeader()).Code)
+	w := testSrv.POST(assignPath(f.companyID, f.staffID), assignBody(pm, "project", "P1"), f.ownerH)
 	require.Equal(t, 201, w.Code, w.Body.String())
-	mustCreatePermission(t, f.solutionID, map[string]any{"code": "project.close", "name": "Tutup proyek", "scopes": []string{"project"}})
 	mustSync(t, f.solutionID, adminHeader(), catalog("v-after-manual", [2]string{"employee.read", "R"}, [2]string{"employee.write", "W"}, [2]string{"attendance.edit", "A"}))
 	assert.True(t, f.serviceCheck(t, "employee.read", "project", "P1").Allowed)
+	assert.False(t, f.serviceCheck(t, "employee.read", "project", "P2").Allowed)
 
 	// Sync yang memuat code-nya ditolak.
 	w = testSrv.PUT(syncPath(f.solutionID), map[string]any{
@@ -878,6 +871,8 @@ func TestScopeType_Update_SyncManaged_Conflict(t *testing.T) {
 func TestScopeType_Update_Success(t *testing.T) {
 	f := newAuthzFixture(t)
 	st := mustCreateScopeType(t, f.solutionID, map[string]any{"code": "project", "name": "Proyek", "description": "d"})
+	pm := mustCreateRole(t, solutionRolesPath(f.solutionID), "pm", adminHeader())
+	require.Equal(t, 200, testSrv.PUT(rolePermissionsPath(pm), scopedPermsBody("project", "employee.read"), adminHeader()).Code)
 
 	w := testSrv.PATCH(scopeTypePath(st.ID), map[string]any{"name": "Proyek klien", "description": "", "parent": "branch", "sort_order": 7}, adminHeader())
 	require.Equal(t, 200, w.Code, w.Body.String())
@@ -891,10 +886,10 @@ func TestScopeType_Update_Success(t *testing.T) {
 	// Deprecated: assignment baru ditolak; aktifkan lagi bisa.
 	w = testSrv.PATCH(scopeTypePath(st.ID), map[string]any{"status": "deprecated"}, adminHeader())
 	require.Equal(t, 200, w.Code)
-	w = testSrv.POST(assignPath(f.companyID, f.staffID), map[string]any{"role_id": f.hrAdmin, "scope_type": "project", "scope_id": "P1"}, f.ownerH)
+	w = testSrv.POST(assignPath(f.companyID, f.staffID), assignBody(pm, "project", "P1"), f.ownerH)
 	assert.Equal(t, 422, w.Code, w.Body.String())
 	w = testSrv.PATCH(scopeTypePath(st.ID), map[string]any{"status": "active"}, adminHeader())
 	require.Equal(t, 200, w.Code)
-	w = testSrv.POST(assignPath(f.companyID, f.staffID), map[string]any{"role_id": f.hrAdmin, "scope_type": "project", "scope_id": "P1"}, f.ownerH)
+	w = testSrv.POST(assignPath(f.companyID, f.staffID), assignBody(pm, "project", "P1"), f.ownerH)
 	assert.Equal(t, 201, w.Code, w.Body.String())
 }

@@ -10,6 +10,10 @@ const (
 	CodeAssignmentNotSubscribed   domainerr.Code = "DOMAIN_AUTHZ_ASSIGNMENT_NOT_SUBSCRIBED"
 	CodeScopeTypeInvalid          domainerr.Code = "DOMAIN_AUTHZ_SCOPE_TYPE_INVALID"
 	CodeScopeInvalid              domainerr.Code = "DOMAIN_AUTHZ_SCOPE_INVALID"
+	// CodeAssignmentScopeMissing — nilai untuk scope_type yang dipakai role tidak dikirim.
+	CodeAssignmentScopeMissing domainerr.Code = "DOMAIN_AUTHZ_ASSIGNMENT_SCOPE_MISSING"
+	// CodeAssignmentScopeUnexpected — scope_values/scope_labels memuat scope_type yang tidak dipakai role.
+	CodeAssignmentScopeUnexpected domainerr.Code = "DOMAIN_AUTHZ_ASSIGNMENT_SCOPE_UNEXPECTED"
 	CodeCheckTargetRequired       domainerr.Code = "DOMAIN_AUTHZ_CHECK_TARGET_REQUIRED"
 	CodeCheckSolutionUnavailable  domainerr.Code = "DOMAIN_AUTHZ_CHECK_SOLUTION_UNAVAILABLE"
 	// CodeSolutionRequired — token user wajib memilih solution_id (token service memakai solution client).
@@ -24,8 +28,11 @@ const (
 // MaxBatchChecks — batas jumlah cek per POST /authz/check-batch.
 const MaxBatchChecks = 100
 
-// ScopeIDMaxLength — panjang maksimum scope_id (scope custom memakai id milik solution).
+// ScopeIDMaxLength — panjang maksimum nilai scope (scope custom memakai id milik solution).
 const ScopeIDMaxLength = 150
+
+// ScopeLabelMaxLength — panjang maksimum label tampilan nilai scope custom.
+const ScopeLabelMaxLength = 255
 
 // Permission platform: administrasi company. Permission ini milik katalog solution console
 // (CONSOLE_SOLUTION_CODE) sehingga memakai mesin RBAC yang sama (role, assignment, scope

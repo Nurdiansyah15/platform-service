@@ -25,11 +25,6 @@ func customCheck(t vo.ScopeType, id, company, parentBranch string) entity.CheckS
 	return entity.CheckScope{Scope: vo.Scope{Type: t, ID: id}, CompanyID: company, ParentBranchID: parentBranch}
 }
 
-func scoped(g entity.Grant, scopes ...string) entity.Grant {
-	g.PermissionScopes = scopes
-	return g
-}
-
 func TestEvaluate(t *testing.T) {
 	grants := []entity.Grant{
 		grant("hr_admin", "employee.write", vo.ScopeCompany, "C1"),
@@ -73,9 +68,6 @@ func TestEvaluate_CustomScope(t *testing.T) {
 		grant("hr_admin", "leave.approve", vo.ScopeCompany, "C1"),
 		grant("kacab", "leave.view", vo.ScopeBranch, "B1"),
 		grant("kadep", "leave.edit", dept, "D1"),
-		scoped(grant("payroll", "payroll.run", vo.ScopeCompany, "C1"), "company"),
-		scoped(grant("payroll_cabang", "payroll.run", vo.ScopeBranch, "B1"), "company"),
-		scoped(grant("approver", "overtime.approve", vo.ScopeCompany, "C1"), "company", "department"),
 	}
 
 	tests := []struct {
@@ -94,10 +86,6 @@ func TestEvaluate_CustomScope(t *testing.T) {
 		{"custom grant, id lain", "leave.edit", customCheck(dept, "D2", "C1", ""), false, nil},
 		{"custom grant, type lain id sama", "leave.edit", customCheck(project, "D1", "C1", ""), false, nil},
 		{"custom grant tidak menutupi company", "leave.edit", check(vo.ScopeCompany, "C1", ""), false, nil},
-		{"permission dibatasi company, cek company", "payroll.run", check(vo.ScopeCompany, "C1", ""), true, []string{"payroll"}},
-		{"permission dibatasi company, cek branch ditolak", "payroll.run", check(vo.ScopeBranch, "B1", "C1"), false, nil},
-		{"permission dibatasi, cek di scope yang diizinkan", "overtime.approve", customCheck(dept, "D1", "C1", ""), true, []string{"approver"}},
-		{"permission dibatasi, cek di scope lain", "overtime.approve", customCheck(project, "P1", "C1", ""), false, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

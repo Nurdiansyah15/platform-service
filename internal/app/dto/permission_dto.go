@@ -18,8 +18,6 @@ type PermissionDefinition struct {
 	Description *string `json:"description"`
 	// Group — code group di `groups` (opsional).
 	Group *string `json:"group" binding:"omitempty,max=100"`
-	// Scopes — scope type tempat permission berlaku (opsional; kosong = semua scope).
-	Scopes []string `json:"scopes" binding:"omitempty,dive,max=30"`
 }
 
 type PermissionGroupDefinition struct {
@@ -86,11 +84,9 @@ type PermissionResponse struct {
 	// Source — sync (dikelola sync katalog, read-only di platform) | manual (dibuat platform admin).
 	Source string `json:"source"`
 	// Group — nil bila permission tanpa grup.
-	Group *PermissionGroupRef `json:"group"`
-	// ScopeTypes — scope type tempat permission berlaku; kosong = semua scope.
-	ScopeTypes []string  `json:"scope_types"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	Group     *PermissionGroupRef `json:"group"`
+	CreatedAt time.Time           `json:"created_at"`
+	UpdatedAt time.Time           `json:"updated_at"`
 }
 
 type PermissionGroupResponse struct {
@@ -184,17 +180,14 @@ type CreatePermissionRequest struct {
 	Description *string `json:"description" binding:"omitempty,max=1000"`
 	// Group — code permission group solution (opsional).
 	Group *string `json:"group" binding:"omitempty,max=100"`
-	// Scopes — scope type tempat permission berlaku (opsional; kosong = semua scope).
-	Scopes []string `json:"scopes" binding:"omitempty,dive,max=30"`
 }
 
 // UpdatePermissionRequest — hanya permission manual. Field nil tidak diubah; description /
-// group "" = dikosongkan; scopes [] = berlaku di semua scope. Code tidak bisa diubah.
+// group "" = dikosongkan. Code tidak bisa diubah.
 type UpdatePermissionRequest struct {
-	Name        *string   `json:"name" binding:"omitempty,max=255"`
-	Description *string   `json:"description" binding:"omitempty,max=1000"`
-	Group       *string   `json:"group" binding:"omitempty,max=100"`
-	Scopes      *[]string `json:"scopes" binding:"omitempty,dive,max=30"`
+	Name        *string `json:"name" binding:"omitempty,max=255"`
+	Description *string `json:"description" binding:"omitempty,max=1000"`
+	Group       *string `json:"group" binding:"omitempty,max=100"`
 	// Status — deprecated = "hapus" (tidak bisa ditambahkan ke role baru); active = aktifkan lagi.
 	Status *string `json:"status" binding:"omitempty,oneof=active deprecated"`
 }

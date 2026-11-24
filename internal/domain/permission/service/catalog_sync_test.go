@@ -123,46 +123,30 @@ func TestScopeTypeDefinition_Invalid(t *testing.T) {
 }
 
 func TestValidateCatalogRefs(t *testing.T) {
-	withRefs := func(code string, group *string, scopes ...string) entity.Definition {
-		d, err := def(t, code, code).WithCatalogRefs(group, scopes)
+	withGroup := func(code string, group *string) entity.Definition {
+		d, err := def(t, code, code).WithGroup(group)
 		require.NoError(t, err)
 		return d
 	}
-	leave := "leave"
-	unknown := "unknown"
+	leave, unknown := "leave", "unknown"
 	groups := []entity.GroupDefinition{groupDef(t, "leave", "Cuti", 0)}
-	scopes := []entity.ScopeTypeDefinition{scopeDef(t, "department", "", 0)}
 
-	assert.NoError(t, service.ValidateCatalogRefs([]entity.Definition{
-		withRefs("leave.approve", &leave, "company", "department", "company"),
-		withRefs("misc.read", nil),
-	}, groups, scopes))
-
-	err := service.ValidateCatalogRefs([]entity.Definition{withRefs("x.read", &unknown)}, groups, scopes)
+	assert.NoError(t, service.ValidateCatalogRefs([]entity.Definition{withGroup("leave.approve", &leave), withGroup("misc.read", nil)}, groups))
+	err := service.ValidateCatalogRefs([]entity.Definition{withGroup("x.read", &unknown)}, groups)
 	testhelper.AssertDomainError(t, err, constant.CodeGroupUnknown)
-
-	err = service.ValidateCatalogRefs([]entity.Definition{withRefs("x.read", nil, "project")}, groups, scopes)
-	testhelper.AssertDomainError(t, err, constant.CodeScopeTypeUnknown)
-
-	d := withRefs("leave.approve", &leave, "department", "company", "department")
-	assert.Equal(t, []string{"company", "department"}, d.Scopes, "unik & terurut")
 }
 
-func TestPlanCatalogSync_GroupAndScopesChange(t *testing.T) {
+func TestPlanCatalogSync_GroupChange(t *testing.T) {
 	now := time.Now()
 	p := entity.NewPermission("s", def(t, "leave.approve", "Approve"), now)
 	gid := "g1"
-	d, err := def(t, "leave.approve", "Approve").WithCatalogRefs(nil, []string{"company"})
-	require.NoError(t, err)
+	d := def(t, "leave.approve", "Approve")
 	d.GroupID = &gid
 
 	plan, err := service.PlanCatalogSync("s", []*entity.Permission{p}, []entity.Definition{d}, now)
 	require.NoError(t, err)
 	assert.Equal(t, 1, plan.Updated)
 	assert.Equal(t, &gid, p.GroupID)
-	assert.Equal(t, []string{"company"}, p.ScopeTypes)
-	assert.True(t, p.AppliesTo("company"))
-	assert.False(t, p.AppliesTo("branch"))
 }
 
 func TestPlanCatalogSync_ManualUntouched(t *testing.T) {
@@ -182,23 +166,18 @@ func TestPlanCatalogSync_ManualUntouched(t *testing.T) {
 func TestResolveManualRefs(t *testing.T) {
 	now := time.Now()
 	g := entity.NewGroup("s", groupDef(t, "leave", "Cuti", 0), now)
-	st := entity.NewScopeType("s", scopeDef(t, "department", "", 0), now)
 	leave, unknown := "leave", "nope"
 
-	d, err := def(t, "x.read", "X").WithCatalogRefs(&leave, []string{"department", "company"})
+	d, err := def(t, "x.read", "X").WithGroup(&leave)
 	require.NoError(t, err)
-	d, err = service.ResolveManualRefs(d, []*entity.Group{g}, []*entity.ScopeType{st})
+	d, err = service.ResolveManualRefs(d, []*entity.Group{g})
 	require.NoError(t, err)
 	require.NotNil(t, d.GroupID)
 	assert.Equal(t, g.ID, *d.GroupID)
 
-	d, _ = def(t, "x.read", "X").WithCatalogRefs(&unknown, nil)
-	_, err = service.ResolveManualRefs(d, []*entity.Group{g}, nil)
+	d, _ = def(t, "x.read", "X").WithGroup(&unknown)
+	_, err = service.ResolveManualRefs(d, []*entity.Group{g})
 	testhelper.AssertDomainError(t, err, constant.CodeGroupUnknown)
-
-	d, _ = def(t, "x.read", "X").WithCatalogRefs(nil, []string{"project"})
-	_, err = service.ResolveManualRefs(d, nil, []*entity.ScopeType{st})
-	testhelper.AssertDomainError(t, err, constant.CodeScopeTypeUnknown)
 }
 
 func TestPlanGroupSync_ManualUntouched(t *testing.T) {

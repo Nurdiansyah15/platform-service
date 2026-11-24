@@ -62,12 +62,16 @@ func TestPostgresRoleRepositories(t *testing.T) {
 		}
 		pa, pb := mkPerm(solA, "a.read"), mkPerm(solB, "b.read")
 
-		require.NoError(t, rolePerms.ReplaceAll(ctx, global.ID, solA, []string{pa.ID}))
-		ids, err := rolePerms.PermissionIDs(ctx, global.ID)
+		require.NoError(t, rolePerms.ReplaceAll(ctx, global.ID, solA, []entity.PermissionGrant{{PermissionID: pa.ID, Code: "a.read", ScopeType: "self"}}))
+		current, err := rolePerms.Current(ctx, global.ID)
 		require.NoError(t, err)
-		assert.Equal(t, map[string]bool{pa.ID: true}, ids)
+		assert.Equal(t, map[string]string{pa.ID: "self"}, current)
+		scopes, err := rolePerms.ScopeTypes(ctx, global.ID)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"self"}, scopes)
 
 		// Composite FK menolak permission solution lain.
-		testhelper.AssertDomainError(t, rolePerms.ReplaceAll(ctx, global.ID, solA, []string{pb.ID}), constant.CodeRolePermissionUnknown)
+		testhelper.AssertDomainError(t, rolePerms.ReplaceAll(ctx, global.ID, solA,
+			[]entity.PermissionGrant{{PermissionID: pb.ID, Code: "b.read", ScopeType: "company"}}), constant.CodeRolePermissionUnknown)
 	})
 }
