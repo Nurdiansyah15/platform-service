@@ -3,7 +3,8 @@ import type { FormError, FormSubmitEvent } from '@nuxt/ui'
 import type { PermissionGroupResponse } from '~/types/api'
 
 // Modal buat / ubah permission group manual (platform admin). Group hasil sync tidak lewat sini.
-const props = defineProps<{ solutionId: string; group?: PermissionGroupResponse | null }>()
+// Induk: grup aktif lain (bukan diri sendiri / turunannya) yang masih menyisakan tingkat.
+const props = defineProps<{ solutionId: string; group?: PermissionGroupResponse | null; groups: PermissionGroupResponse[] }>()
 const open = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ saved: [group: PermissionGroupResponse] }>()
 
@@ -11,7 +12,9 @@ const api = useApi()
 const { toastError, fieldErrors } = useApiError()
 const formRef = useTemplateRef('formRef')
 
-const state = reactive({ code: '', name: '', description: '', sort_order: undefined as number | undefined })
+const state = reactive({
+  code: '', name: '', description: '', sort_order: undefined as number | undefined, parent: undefined as string | undefined,
+})
 const codeTouched = ref(false)
 const saving = ref(false)
 const isEdit = computed(() => !!props.group)
@@ -24,7 +27,19 @@ watch(open, (v) => {
     name: props.group?.name ?? '',
     description: props.group?.description ?? '',
     sort_order: props.group?.sort_order,
+    parent: props.group?.parent ?? undefined,
   })
+})
+
+const parentItems = computed(() => {
+  const blocked = props.group ? groupDescendantIds(props.groups, props.group.id) : new Set<string>()
+  return [
+    { label: 'Tanpa induk (grup utama)', value: undefined as string | undefined },
+    ...orderGroupTree(props.groups)
+      .filter(({ group: g, depth }) => !blocked.has(g.id) && depth < GROUP_MAX_DEPTH - 1
+        && (g.status === 'active' || g.code === props.group?.parent))
+      .map(({ group: g, path }) => ({ label: path, value: g.code as string | undefined })),
+  ]
 })
 watch(() => state.name, (name) => {
   if (!isEdit.value && !codeTouched.value) state.code = codify(name)
@@ -48,10 +63,11 @@ async function onSubmit(e: FormSubmitEvent<typeof state>) {
     const sortOrder = typeof e.data.sort_order === 'number' ? e.data.sort_order : undefined
     const saved = props.group
       ? (await api.patch<PermissionGroupResponse>(`/api/v1/permission-groups/${props.group.id}`, {
-          name: e.data.name.trim(), description: e.data.description.trim(), sort_order: sortOrder,
+          name: e.data.name.trim(), description: e.data.description.trim(), sort_order: sortOrder, parent: e.data.parent ?? '',
         })).data
       : (await api.post<PermissionGroupResponse>(`/api/v1/solutions/${props.solutionId}/permission-groups`, {
           code: e.data.code, name: e.data.name.trim(), description: e.data.description.trim() || null, sort_order: sortOrder,
+          parent: e.data.parent,
         })).data
     open.value = false
     emit('saved', saved)
@@ -75,10 +91,13 @@ async function onSubmit(e: FormSubmitEvent<typeof state>) {
         <UFormField label="Kode" name="code" :required="!isEdit" :help="isEdit ? 'Kode tidak bisa diubah.' : 'Tidak bisa diubah setelah dibuat.'">
           <UInput v-model="state.code" :disabled="isEdit" placeholder="report" class="w-full font-mono" @update:model-value="codeTouched = true" />
         </UFormField>
+        <UFormField label="Induk" name="parent" :help="`Grup bisa bertingkat maksimal ${GROUP_MAX_DEPTH} level, mis. modul › menu › submenu.`">
+          <USelect v-model="state.parent" :items="parentItems" placeholder="Tanpa induk (grup utama)" class="w-full" />
+        </UFormField>
         <UFormField label="Deskripsi" name="description">
           <UTextarea v-model="state.description" :rows="2" placeholder="Opsional" class="w-full" />
         </UFormField>
-        <UFormField label="Urutan" name="sort_order" :help="isEdit ? 'Angka kecil tampil lebih dulu.' : 'Kosongkan agar tampil setelah grup terakhir.'">
+        <UFormField label="Urutan" name="sort_order" :help="isEdit ? 'Angka kecil tampil lebih dulu (di antara grup seinduk).' : 'Kosongkan agar tampil setelah grup terakhir.'">
           <UInputNumber v-model="state.sort_order" :min="0" class="w-40" />
         </UFormField>
         <div class="flex justify-end gap-2 pt-2">

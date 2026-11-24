@@ -15,8 +15,10 @@ import (
 // Group — pengelompokan permission untuk tampilan (mis. "Cuti", "Payroll"). Didefinisikan
 // solution lewat sync katalog; tidak pernah dihapus, yang hilang dari katalog jadi deprecated.
 type Group struct {
-	ID          string
-	SolutionID  string
+	ID         string
+	SolutionID string
+	// ParentID — group induk (nil = root). Hierarki divalidasi service.ValidateGroupTree.
+	ParentID    *string
 	Code        valueobject.GroupCode
 	Name        string
 	Description *string
@@ -28,12 +30,15 @@ type Group struct {
 	UpdatedAt time.Time
 }
 
-// GroupDefinition — satu group dalam katalog. SortOrder = posisi di katalog.
+// GroupDefinition — satu group dalam katalog. SortOrder = posisi di katalog (di antara
+// saudaranya). ParentCode = code group induk ("" = root), di-resolve ke ParentID oleh
+// pemanggil / PlanGroupSync.
 type GroupDefinition struct {
 	Code        valueobject.GroupCode
 	Name        string
 	Description *string
 	SortOrder   int
+	ParentCode  string
 }
 
 func NewGroupDefinition(code, name string, description *string, sortOrder int) (GroupDefinition, error) {
@@ -46,6 +51,22 @@ func NewGroupDefinition(code, name string, description *string, sortOrder int) (
 		return GroupDefinition{}, domainerr.New(constant.CodeGroupNameInvalid)
 	}
 	return GroupDefinition{Code: c, Name: n, Description: trimOptional(description), SortOrder: sortOrder}, nil
+}
+
+// WithParent mengisi code group induk (nil / kosong = root). Code induk = code sendiri ditolak.
+func (d GroupDefinition) WithParent(parentCode *string) (GroupDefinition, error) {
+	d.ParentCode = ""
+	if p := trimOptional(parentCode); p != nil {
+		pc, err := valueobject.NewGroupCode(*p)
+		if err != nil {
+			return GroupDefinition{}, err
+		}
+		if pc == d.Code {
+			return GroupDefinition{}, domainerr.New(constant.CodeGroupParentInvalid)
+		}
+		d.ParentCode = pc.Value()
+	}
+	return d, nil
 }
 
 func NewGroup(solutionID string, d GroupDefinition, now time.Time) *Group {
@@ -82,6 +103,16 @@ func (g *Group) Edit(d GroupDefinition, now time.Time) bool {
 		return false
 	}
 	g.Name, g.Description, g.SortOrder = d.Name, d.Description, d.SortOrder
+	g.UpdatedAt = now.UTC()
+	return true
+}
+
+// SetParent memindahkan group ke induk lain (nil = root). Mengembalikan apakah berubah.
+func (g *Group) SetParent(parentID *string, now time.Time) bool {
+	if equalOptional(g.ParentID, parentID) {
+		return false
+	}
+	g.ParentID = parentID
 	g.UpdatedAt = now.UTC()
 	return true
 }

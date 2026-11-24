@@ -217,8 +217,8 @@ async function revoke(a: RoleAssignmentDetail) {
 }
 
 // ── Permission efektif dikelompokkan per grup katalog (fallback prefix code) ──
-const permissionGroups = computed(() =>
-  groupPermissions(permissions.value.map(p => ({ ...p, code: p.permission, name: p.name || p.permission }))))
+const permissionGroups = computed(() => flattenPermissionGroups(
+  groupPermissions(permissions.value.map(p => ({ ...p, code: p.permission, name: p.name || p.permission })))))
 
 function assignmentScopeText(a: RoleAssignmentDetail) {
   if (!a.scopes.length) return 'seluruh company'

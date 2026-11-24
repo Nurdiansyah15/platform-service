@@ -24,6 +24,8 @@ type PermissionGroupDefinition struct {
 	Code        string  `json:"code" binding:"required,max=100"`
 	Name        string  `json:"name" binding:"required,max=255"`
 	Description *string `json:"description"`
+	// Parent — code group induk di `groups` yang sama (opsional; maksimal 3 tingkat).
+	Parent *string `json:"parent" binding:"omitempty,max=100"`
 }
 
 type ScopeTypeDefinition struct {
@@ -72,6 +74,15 @@ type PermissionGroupRef struct {
 	Code      string `json:"code"`
 	Name      string `json:"name"`
 	SortOrder int    `json:"sort_order"`
+	// Parents — leluhur group dari root sampai induk langsung (kosong = group root).
+	Parents []PermissionGroupAncestor `json:"parents"`
+}
+
+// PermissionGroupAncestor — satu leluhur group (lihat PermissionGroupRef.Parents).
+type PermissionGroupAncestor struct {
+	Code      string `json:"code"`
+	Name      string `json:"name"`
+	SortOrder int    `json:"sort_order"`
 }
 
 type PermissionResponse struct {
@@ -90,7 +101,10 @@ type PermissionResponse struct {
 }
 
 type PermissionGroupResponse struct {
-	ID          string  `json:"id"`
+	ID string `json:"id"`
+	// ParentID & Parent — group induk (nil = root).
+	ParentID    *string `json:"parent_id"`
+	Parent      *string `json:"parent"`
 	Code        string  `json:"code"`
 	Name        string  `json:"name"`
 	Description *string `json:"description"`
@@ -111,6 +125,8 @@ type CreatePermissionGroupRequest struct {
 	Description *string `json:"description" binding:"omitempty,max=1000"`
 	// SortOrder — urutan tampil (opsional; default setelah group terakhir).
 	SortOrder *int `json:"sort_order" binding:"omitempty,min=0,max=100000"`
+	// Parent — code group induk yang aktif di solution yang sama (opsional; maksimal 3 tingkat).
+	Parent *string `json:"parent" binding:"omitempty,max=100"`
 }
 
 // UpdatePermissionGroupRequest — hanya group manual. Field nil tidak diubah; description ""
@@ -119,6 +135,8 @@ type UpdatePermissionGroupRequest struct {
 	Name        *string `json:"name" binding:"omitempty,max=255"`
 	Description *string `json:"description" binding:"omitempty,max=1000"`
 	SortOrder   *int    `json:"sort_order" binding:"omitempty,min=0,max=100000"`
+	// Parent — code group induk; "" = pindah ke root.
+	Parent *string `json:"parent" binding:"omitempty,max=100"`
 	// Status — deprecated = hapus (tidak bisa dipilih untuk permission baru); active = aktifkan lagi.
 	Status *string `json:"status" binding:"omitempty,oneof=active deprecated"`
 }

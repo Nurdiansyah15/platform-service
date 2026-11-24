@@ -391,10 +391,15 @@ export interface CreateRoleRequest {
   description?: string | null
 }
 
-export interface PermissionGroupRef {
+export interface PermissionGroupAncestor {
   code: string
   name: string
   sort_order: number
+}
+
+export interface PermissionGroupRef extends PermissionGroupAncestor {
+  /** Leluhur grup dari root sampai induk langsung (kosong = grup root). */
+  parents: PermissionGroupAncestor[]
 }
 
 export interface RolePermissionResponse {
@@ -448,6 +453,9 @@ export interface UpdatePermissionRequest {
 
 export interface PermissionGroupResponse {
   id: string
+  /** Grup induk (null = root). Maksimal 3 tingkat. */
+  parent_id: string | null
+  parent: string | null
   code: string
   name: string
   description: string | null
@@ -461,6 +469,8 @@ export interface CreatePermissionGroupRequest {
   name: string
   description?: string | null
   sort_order?: number
+  /** Code grup induk yang aktif (opsional). */
+  parent?: string
 }
 
 /** Hanya group manual. description '' = dikosongkan; status deprecated = hapus. */
@@ -468,6 +478,8 @@ export interface UpdatePermissionGroupRequest {
   name?: string
   description?: string
   sort_order?: number
+  /** Code grup induk; '' = pindah ke root. */
+  parent?: string
   status?: 'active' | 'deprecated'
 }
 

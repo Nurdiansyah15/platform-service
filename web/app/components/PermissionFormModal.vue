@@ -31,9 +31,9 @@ watch(open, (v) => {
 
 const groupItems = computed(() => [
   { label: 'Tanpa grup', value: undefined as string | undefined },
-  ...props.groups
-    .filter(g => g.status === 'active' || g.code === props.permission?.group?.code)
-    .map(g => ({ label: g.name, value: g.code as string | undefined, description: g.description ?? undefined })),
+  ...orderGroupTree(props.groups)
+    .filter(({ group: g }) => g.status === 'active' || g.code === props.permission?.group?.code)
+    .map(({ group: g, path }) => ({ label: path, value: g.code as string | undefined, description: g.description ?? undefined })),
 ])
 
 function validate(s: typeof state): FormError[] {

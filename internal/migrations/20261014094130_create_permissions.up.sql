@@ -8,9 +8,12 @@
 -- Scope tidak disimpan di permission: role menentukan scope tiap permission
 -- (role_permissions.scope_type), assignment menyimpan nilainya (user_role_assignments.scope_values).
 
+-- parent_id: group bertingkat (mis. modul → menu → submenu), maksimal 3 tingkat dan tanpa
+-- siklus (divalidasi domain). Permission boleh dipasang di group tingkat mana pun.
 CREATE TABLE permission_groups (
     id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     solution_id UUID         NOT NULL REFERENCES solutions (id),
+    parent_id   UUID         NULL,
     code        VARCHAR(100) NOT NULL,
     name        VARCHAR(255) NOT NULL,
     description TEXT         NULL,
@@ -23,8 +26,12 @@ CREATE TABLE permission_groups (
     CONSTRAINT uq_permission_groups_solution_code UNIQUE (solution_id, code),
     CONSTRAINT uq_permission_groups_id_solution UNIQUE (id, solution_id),
     CONSTRAINT ck_permission_groups_status CHECK (status IN ('active', 'deprecated')),
-    CONSTRAINT ck_permission_groups_source CHECK (source IN ('sync', 'manual'))
+    CONSTRAINT ck_permission_groups_source CHECK (source IN ('sync', 'manual')),
+    CONSTRAINT ck_permission_groups_parent_not_self CHECK (parent_id IS NULL OR parent_id <> id),
+    CONSTRAINT fk_permission_groups_parent FOREIGN KEY (parent_id, solution_id) REFERENCES permission_groups (id, solution_id)
 );
+
+CREATE INDEX idx_permission_groups_parent ON permission_groups (parent_id);
 
 CREATE TRIGGER trg_permission_groups_updated_at
     BEFORE UPDATE ON permission_groups

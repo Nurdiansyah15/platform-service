@@ -3,6 +3,7 @@ package permission
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	"platform-service/internal/app/dto"
@@ -64,6 +65,9 @@ func (uc *PermissionUseCase) Sync(ctx context.Context, actor *principal.Principa
 		if err != nil {
 			return nil, mapPermissionDomainError(err)
 		}
+		if d, err = d.WithParent(g.Parent); err != nil {
+			return nil, mapPermissionDomainError(err)
+		}
 		groups = append(groups, d)
 	}
 	catalog := make([]entity.Definition, 0, len(req.Permissions))
@@ -78,6 +82,9 @@ func (uc *PermissionUseCase) Sync(ctx context.Context, actor *principal.Principa
 		catalog = append(catalog, d)
 	}
 	if err := service.ValidateCatalogRefs(catalog, groups); err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	if err := service.ValidateGroupDefinitions(groups); err != nil {
 		return nil, mapPermissionDomainError(err)
 	}
 
@@ -179,9 +186,18 @@ func (uc *PermissionUseCase) syncGroups(ctx context.Context, solutionID string, 
 		return nil, dto.SyncCounts{}, err
 	}
 	ids := make(map[string]string, len(existing)+plan.Created)
+	all := append([]*entity.Group{}, existing...)
 	for _, g := range existing {
 		ids[g.Code.Value()] = g.ID
 	}
+	for _, g := range plan.Changed {
+		if _, ok := ids[g.Code.Value()]; !ok {
+			all = append(all, g)
+		}
+	}
+	// Induk disimpan sebelum anaknya (FK parent_id).
+	depth := func(g *entity.Group) int { return len(service.GroupPath(all, g.ID)) }
+	sort.SliceStable(plan.Changed, func(i, j int) bool { return depth(plan.Changed[i]) < depth(plan.Changed[j]) })
 	for _, g := range plan.Changed {
 		if err := uc.deps.Groups.Save(ctx, g); err != nil {
 			return nil, dto.SyncCounts{}, err
@@ -213,7 +229,7 @@ func (uc *PermissionUseCase) ListGroups(ctx context.Context, actor *principal.Pr
 		if req.Status != nil && g.Status.String() != *req.Status {
 			continue
 		}
-		out = append(out, *toGroupResponse(g))
+		out = append(out, *toGroupResponse(g, groups))
 	}
 	return out, nil
 }
@@ -395,7 +411,14 @@ func (uc *PermissionUseCase) CreateGroup(ctx context.Context, solutionID string,
 	if err != nil {
 		return nil, mapPermissionDomainError(err)
 	}
-	g := entity.NewManualGroup(solutionID, d, uc.now())
+	if d, err = d.WithParent(req.Parent); err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	now := uc.now()
+	g := entity.NewManualGroup(solutionID, d, now)
+	if _, err := service.PlaceGroup(existing, g, d.ParentCode, now); err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
 	if err := uc.deps.Groups.Save(ctx, g); err != nil {
 		var de *domainerr.DomainError
 		if errors.As(err, &de) && de.Code == constant.CodeGroupDuplicate {
@@ -403,7 +426,7 @@ func (uc *PermissionUseCase) CreateGroup(ctx context.Context, solutionID string,
 		}
 		return nil, mapPermissionDomainError(err)
 	}
-	return toGroupResponse(g), nil
+	return toGroupResponse(g, append(existing, g)), nil
 }
 
 // GetGroup menampilkan satu permission group. Solution inactive disembunyikan dari non-admin.
@@ -420,7 +443,11 @@ func (uc *PermissionUseCase) GetGroup(ctx context.Context, actor *principal.Prin
 		}
 		return nil, mapPermissionDomainError(err)
 	}
-	return toGroupResponse(g), nil
+	groups, err := uc.deps.Groups.ListBySolution(ctx, g.SolutionID)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
+	return toGroupResponse(g, groups), nil
 }
 
 // UpdateGroup mengubah group manual (nama, deskripsi, urutan, status). Group hasil sync
@@ -450,8 +477,21 @@ func (uc *PermissionUseCase) UpdateGroup(ctx context.Context, groupID string, re
 	if err != nil {
 		return nil, mapPermissionDomainError(err)
 	}
+	groups, err := uc.deps.Groups.ListBySolution(ctx, g.SolutionID)
+	if err != nil {
+		return nil, mapPermissionDomainError(err)
+	}
 	now := uc.now()
-	changed := g.Edit(d, now)
+	changed := false
+	if req.Parent != nil {
+		if d, err = d.WithParent(req.Parent); err != nil {
+			return nil, mapPermissionDomainError(err)
+		}
+		if changed, err = service.PlaceGroup(groups, g, d.ParentCode, now); err != nil {
+			return nil, mapPermissionDomainError(err)
+		}
+	}
+	changed = g.Edit(d, now) || changed
 	if req.Status != nil {
 		st, err := valueobject.NewPermissionStatus(*req.Status)
 		if err != nil {
@@ -464,7 +504,7 @@ func (uc *PermissionUseCase) UpdateGroup(ctx context.Context, groupID string, re
 			return nil, mapPermissionDomainError(err)
 		}
 	}
-	return toGroupResponse(g), nil
+	return toGroupResponse(g, groups), nil
 }
 
 // CreateScopeType membuat scope type custom manual. Code yang sudah dipakai (manual atau

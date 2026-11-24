@@ -21,6 +21,7 @@ import (
 	orgrepo "platform-service/internal/domain/organization/repository"
 	orgservice "platform-service/internal/domain/organization/service"
 	permrepo "platform-service/internal/domain/permission/repository"
+	permservice "platform-service/internal/domain/permission/service"
 	roleconstant "platform-service/internal/domain/role/constant"
 	rolerepo "platform-service/internal/domain/role/repository"
 	solutionrepo "platform-service/internal/domain/solution/repository"
@@ -381,7 +382,13 @@ func (uc *AuthzUseCase) permissionCatalog(ctx context.Context, solutionID string
 	}
 	groupByID := make(map[string]*dto.PermissionGroupRef, len(groups))
 	for _, g := range groups {
-		groupByID[g.ID] = &dto.PermissionGroupRef{Code: g.Code.Value(), Name: g.Name, SortOrder: g.SortOrder}
+		path := permservice.GroupPath(groups, g.ID)
+		ref := &dto.PermissionGroupRef{Code: g.Code.Value(), Name: g.Name, SortOrder: g.SortOrder,
+			Parents: make([]dto.PermissionGroupAncestor, 0, len(path))}
+		for _, a := range path[:max(len(path)-1, 0)] {
+			ref.Parents = append(ref.Parents, dto.PermissionGroupAncestor{Code: a.Code.Value(), Name: a.Name, SortOrder: a.SortOrder})
+		}
+		groupByID[g.ID] = ref
 	}
 	out := make(map[string]permissionInfo, len(perms))
 	for _, p := range perms {

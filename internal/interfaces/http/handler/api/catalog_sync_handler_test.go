@@ -596,6 +596,8 @@ type groupBody struct {
 	SortOrder   int     `json:"sort_order"`
 	Status      string  `json:"status"`
 	Source      string  `json:"source"`
+	ParentID    *string `json:"parent_id"`
+	Parent      *string `json:"parent"`
 }
 
 func mustCreateGroup(t *testing.T, solutionID string, body map[string]any) groupBody {
@@ -731,6 +733,167 @@ func TestPermissionGroup_Update_Success(t *testing.T) {
 	var list []groupBody
 	testhelper.DecodeBody(t, w, &list)
 	assert.Empty(t, list)
+}
+
+// ── Hierarki permission group ───────────────────────────────────────────────
+
+func grp(code, name, parent string) map[string]any {
+	g := map[string]any{"code": code, "name": name}
+	if parent != "" {
+		g["parent"] = parent
+	}
+	return g
+}
+
+func listGroups(t *testing.T, solutionID string) map[string]groupBody {
+	t.Helper()
+	w := testSrv.GET(permissionGroupsPath(solutionID), userHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got []groupBody
+	testhelper.DecodeBody(t, w, &got)
+	out := map[string]groupBody{}
+	for _, g := range got {
+		out[g.Code] = g
+	}
+	return out
+}
+
+type permissionWithParents struct {
+	Code  string `json:"code"`
+	Group *struct {
+		Code    string `json:"code"`
+		Parents []struct {
+			Code string `json:"code"`
+			Name string `json:"name"`
+		} `json:"parents"`
+	} `json:"group"`
+}
+
+func TestCatalogSync_GroupHierarchy_Success(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	// Anak boleh ditulis sebelum induknya.
+	mustSync(t, solID, adminHeader(), map[string]any{
+		"version": "v1",
+		"groups":  []any{grp("contract", "Kontrak", "employee"), grp("hr", "Kepegawaian", ""), grp("employee", "Data Karyawan", "hr")},
+		"permissions": []any{
+			map[string]any{"code": "contract.read", "name": "Lihat kontrak", "group": "contract"},
+			map[string]any{"code": "employee.read", "name": "Lihat karyawan", "group": "employee"},
+			map[string]any{"code": "other.read", "name": "Lain"},
+		},
+	})
+	groups := listGroups(t, solID)
+	assert.Nil(t, groups["hr"].Parent)
+	require.NotNil(t, groups["employee"].Parent)
+	assert.Equal(t, "hr", *groups["employee"].Parent)
+	assert.Equal(t, groups["hr"].ID, *groups["employee"].ParentID)
+	assert.Equal(t, "employee", *groups["contract"].Parent)
+
+	// Leluhur group ikut di respons permission; filter group mencakup turunannya.
+	w := testSrv.GET(permissionsPath(solID)+"?group=hr&sort_by=code", userHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var perms []permissionWithParents
+	testhelper.DecodeBody(t, w, &perms)
+	require.Len(t, perms, 2)
+	assert.Equal(t, "contract.read", perms[0].Code)
+	require.NotNil(t, perms[0].Group)
+	require.Len(t, perms[0].Group.Parents, 2)
+	assert.Equal(t, "hr", perms[0].Group.Parents[0].Code)
+	assert.Equal(t, "employee", perms[0].Group.Parents[1].Code)
+	assert.Equal(t, "Kepegawaian", perms[0].Group.Parents[0].Name)
+	require.Len(t, perms[1].Group.Parents, 1)
+
+	// Sync ulang: contract pindah langsung ke hr, employee jadi root.
+	mustSync(t, solID, adminHeader(), map[string]any{
+		"version": "v2",
+		"groups":  []any{grp("hr", "Kepegawaian", ""), grp("employee", "Data Karyawan", ""), grp("contract", "Kontrak", "hr")},
+		"permissions": []any{
+			map[string]any{"code": "contract.read", "name": "Lihat kontrak", "group": "contract"},
+			map[string]any{"code": "employee.read", "name": "Lihat karyawan", "group": "employee"},
+		},
+	})
+	groups = listGroups(t, solID)
+	assert.Nil(t, groups["employee"].Parent)
+	assert.Equal(t, "hr", *groups["contract"].Parent)
+}
+
+func TestCatalogSync_GroupHierarchy_InvalidPayload(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	tests := map[string][]any{
+		"induk tidak di katalog": {grp("a", "A", "x")},
+		"induk diri sendiri":     {grp("a", "A", "a")},
+		"siklus":                 {grp("a", "A", "b"), grp("b", "B", "a")},
+		"4 tingkat":              {grp("a", "A", ""), grp("b", "B", "a"), grp("c", "C", "b"), grp("d", "D", "c")},
+		"code induk invalid":     {grp("a", "A", "Bukan Code")},
+	}
+	for name, groups := range tests {
+		t.Run(name, func(t *testing.T) {
+			w := testSrv.PUT(syncPath(solID), map[string]any{"version": "v1", "groups": groups, "permissions": []any{}}, adminHeader())
+			assert.Equal(t, 422, w.Code, w.Body.String())
+		})
+	}
+}
+
+func TestPermissionGroup_Create_WithParent(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	mustSync(t, solID, adminHeader(), map[string]any{
+		"version": "v1", "groups": []any{grp("hr", "HR", ""), grp("employee", "Karyawan", "hr")}, "permissions": []any{},
+	})
+	// Group manual boleh di bawah group sync.
+	got := mustCreateGroup(t, solID, map[string]any{"code": "salary", "name": "Gaji", "parent": "employee"})
+	require.NotNil(t, got.Parent)
+	assert.Equal(t, "employee", *got.Parent)
+
+	old := mustCreateGroup(t, solID, map[string]any{"code": "old", "name": "Lama"})
+	require.Equal(t, 200, testSrv.PATCH(permissionGroupPath(old.ID), map[string]any{"status": "deprecated"}, adminHeader()).Code)
+
+	tests := map[string]string{
+		"induk tidak ada":  "nope",
+		"induk deprecated": "old",
+		"4 tingkat":        "salary",
+	}
+	for name, parent := range tests {
+		t.Run(name, func(t *testing.T) {
+			w := testSrv.POST(permissionGroupsPath(solID), map[string]any{
+				"code": testhelper.UniqueCode("g"), "name": "X", "parent": parent,
+			}, adminHeader())
+			assert.Equal(t, 422, w.Code, w.Body.String())
+		})
+	}
+
+	// Sync yang membuat group manual jadi tingkat 4 ditolak.
+	w := testSrv.PUT(syncPath(solID), map[string]any{
+		"version": "v2", "groups": []any{grp("root", "Root", ""), grp("hr", "HR", "root"), grp("employee", "Karyawan", "hr")},
+		"permissions": []any{},
+	}, adminHeader())
+	assert.Equal(t, 422, w.Code, w.Body.String())
+}
+
+func TestPermissionGroup_Update_Parent(t *testing.T) {
+	solID := mustCreateSolution(t, testhelper.UniqueCode("cs"))
+	a := mustCreateGroup(t, solID, map[string]any{"code": "a", "name": "A"})
+	b := mustCreateGroup(t, solID, map[string]any{"code": "b", "name": "B", "parent": "a"})
+
+	// a di bawah b → siklus.
+	w := testSrv.PATCH(permissionGroupPath(a.ID), map[string]any{"parent": "b"}, adminHeader())
+	assert.Equal(t, 422, w.Code, w.Body.String())
+
+	// Pindah ke root.
+	w = testSrv.PATCH(permissionGroupPath(b.ID), map[string]any{"parent": ""}, adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var got groupBody
+	testhelper.DecodeBody(t, w, &got)
+	assert.Nil(t, got.Parent)
+	assert.Nil(t, got.ParentID)
+
+	// Tanpa field parent → induk tidak berubah.
+	w = testSrv.PATCH(permissionGroupPath(a.ID), map[string]any{"parent": "b"}, adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	w = testSrv.PATCH(permissionGroupPath(a.ID), map[string]any{"name": "A2"}, adminHeader())
+	require.Equal(t, 200, w.Code, w.Body.String())
+	testhelper.DecodeBody(t, w, &got)
+	require.NotNil(t, got.Parent)
+	assert.Equal(t, "b", *got.Parent)
+	assert.Equal(t, "A2", got.Name)
 }
 
 // ── Scope type manual (CRUD platform) ────────────────────────────────────────

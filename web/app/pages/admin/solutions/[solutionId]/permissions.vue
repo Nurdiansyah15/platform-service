@@ -153,10 +153,11 @@ async function loadGroups() {
   }
 }
 watch(() => ctx.solutionId.value, loadGroups, { immediate: true })
+const orderedGroups = computed(() => orderGroupTree(groups.value))
 
 const groupOptions = computed(() => [
   { label: 'Semua grup', value: undefined as string | undefined },
-  ...groups.value.map(g => ({ label: g.name, value: g.code as string | undefined })),
+  ...orderedGroups.value.map(({ group: g, path }) => ({ label: path, value: g.code as string | undefined })),
   { label: 'Tanpa grup', value: '-' as string | undefined },
 ])
 const customScopes = computed(() => scopeTypes.items.value.filter(s => !s.builtin))
@@ -242,10 +243,13 @@ const columns: TableColumn<PermissionResponse>[] = [
           <UButton icon="i-lucide-plus" size="sm" variant="soft" @click="openGroupForm(null)">Tambah grup</UButton>
         </template>
         <ul v-if="groups.length" class="divide-y divide-default text-sm">
-          <li v-for="g in groups" :key="g.code" class="flex items-start justify-between gap-3 py-2">
-            <div class="min-w-0">
-              <p class="text-highlighted">{{ g.name }} <span class="font-mono text-xs text-muted">{{ g.code }}</span></p>
-              <p v-if="g.description" class="text-xs text-muted">{{ g.description }}</p>
+          <li v-for="{ group: g, depth } in orderedGroups" :key="g.code" class="flex items-start justify-between gap-3 py-2">
+            <div class="flex min-w-0 items-start gap-1.5" :style="{ paddingLeft: `${depth * 1.25}rem` }">
+              <UIcon v-if="depth" name="i-lucide-corner-down-right" class="mt-0.5 size-3.5 shrink-0 text-dimmed" />
+              <div class="min-w-0">
+                <p class="text-highlighted">{{ g.name }} <span class="font-mono text-xs text-muted">{{ g.code }}</span></p>
+                <p v-if="g.description" class="text-xs text-muted">{{ g.description }}</p>
+              </div>
             </div>
             <div class="flex shrink-0 items-center gap-2">
               <UBadge :label="g.source === 'manual' ? 'Manual' : 'Sync'" :color="g.source === 'manual' ? 'primary' : 'neutral'" variant="subtle" size="sm" />
@@ -293,6 +297,7 @@ const columns: TableColumn<PermissionResponse>[] = [
       v-model:open="showGroupForm"
       :solution-id="ctx.solutionId.value"
       :group="editingGroup"
+      :groups="groups"
       @saved="onGroupSaved"
     />
   </SolutionPage>

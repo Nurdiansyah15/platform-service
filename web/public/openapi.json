@@ -8764,6 +8764,11 @@
                     "type": "string",
                     "maxLength": 255
                 },
+                "parent": {
+                    "description": "Parent — code group induk yang aktif di solution yang sama (opsional; maksimal 3 tingkat).",
+                    "type": "string",
+                    "maxLength": 100
+                },
                 "sort_order": {
                     "description": "SortOrder — urutan tampil (opsional; default setelah group terakhir).",
                     "type": "integer",
@@ -9388,6 +9393,20 @@
                 }
             }
         },
+        "dto.PermissionGroupAncestor": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "sort_order": {
+                    "type": "integer"
+                }
+            }
+        },
         "dto.PermissionGroupDefinition": {
             "type": "object",
             "required": [
@@ -9405,6 +9424,11 @@
                 "name": {
                     "type": "string",
                     "maxLength": 255
+                },
+                "parent": {
+                    "description": "Parent — code group induk di `groups` yang sama (opsional; maksimal 3 tingkat).",
+                    "type": "string",
+                    "maxLength": 100
                 }
             }
         },
@@ -9416,6 +9440,13 @@
                 },
                 "name": {
                     "type": "string"
+                },
+                "parents": {
+                    "description": "Parents — leluhur group dari root sampai induk langsung (kosong = group root).",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.PermissionGroupAncestor"
+                    }
                 },
                 "sort_order": {
                     "type": "integer"
@@ -9435,6 +9466,13 @@
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "parent": {
+                    "type": "string"
+                },
+                "parent_id": {
+                    "description": "ParentID \u0026 Parent — group induk (nil = root).",
                     "type": "string"
                 },
                 "sort_order": {
@@ -10383,6 +10421,11 @@
                 "name": {
                     "type": "string",
                     "maxLength": 255
+                },
+                "parent": {
+                    "description": "Parent — code group induk; \"\" = pindah ke root.",
+                    "type": "string",
+                    "maxLength": 100
                 },
                 "sort_order": {
                     "type": "integer",

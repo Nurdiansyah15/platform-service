@@ -420,6 +420,7 @@ Pola sama: usecase + handler + handler test wajib.
 - [x] Scope custom per solution & permission group (2026-11-24, direvisi): scope di `role_permissions.scope_type` (company | branch | scope type custom), nilai di `user_role_assignments.scope_values` (JSONB); permission tanpa scope; sync katalog menerima `scope_types` (parent `company`/`branch`) dan `groups`; check menerima `parent_id`
   - [x] `GET /solutions/{solutionId}/permission-groups`
   - [x] `POST /solutions/{solutionId}/permission-groups`, `GET/PATCH /permission-groups/{groupId}` — grup `manual` (platform admin), aturan sama dengan permission manual (kolom `source`, sync bentrok 409, grup sync read-only, hapus = deprecated)
+  - [x] Hierarki permission group (2026-11-24): `permission_groups.parent_id` (maks 3 level, tanpa siklus); sync `groups[].parent`, CRUD manual `parent`; respons permission memuat `group.parents`; filter `group` mencakup subgrup. Satu permission tetap satu grup.
   - [x] `GET /solutions/{solutionId}/scope-types` (company & branch built-in + custom)
   - [x] `POST /solutions/{solutionId}/scope-types`, `GET/PATCH /scope-types/{scopeTypeId}` — scope type `manual` (platform admin), aturan sama dengan permission/grup manual
   - Test: `catalog_sync_handler_test.go` (grup/scope type, payload lama, validasi, CRUD manual), `authz_handler_test.go` (role campuran company+custom, nilai scope wajib/berlebih, hierarki custom, role diubah setelah assign, batas role.assign cabang), `permission_evaluator_test.go`, `catalog_sync_test.go`, `role/service` ResolvePermissions

@@ -36,6 +36,11 @@ const (
 	CodeGroupSourceConflict domainerr.Code = "DOMAIN_PERMISSION_GROUP_SOURCE_CONFLICT"
 	CodeGroupSyncManaged    domainerr.Code = "DOMAIN_PERMISSION_GROUP_SYNC_MANAGED"
 
+	// Hierarki group (parent).
+	CodeGroupParentUnknown domainerr.Code = "DOMAIN_PERMISSION_GROUP_PARENT_UNKNOWN"
+	CodeGroupParentInvalid domainerr.Code = "DOMAIN_PERMISSION_GROUP_PARENT_INVALID"
+	CodeGroupTooDeep       domainerr.Code = "DOMAIN_PERMISSION_GROUP_TOO_DEEP"
+
 	// Scope type manual (dibuat platform admin) vs scope type hasil sync.
 	CodeScopeTypeCodeTaken      domainerr.Code = "DOMAIN_PERMISSION_SCOPE_TYPE_CODE_TAKEN"
 	CodeScopeTypeSourceConflict domainerr.Code = "DOMAIN_PERMISSION_SCOPE_TYPE_SOURCE_CONFLICT"
@@ -48,6 +53,8 @@ const (
 	CatalogVersionMaxLength = 50
 	GroupCodeMaxLength      = 100
 	ScopeTypeCodeMaxLength  = 30
+	// GroupMaxDepth — jumlah tingkat maksimal hierarki group (root = tingkat 1).
+	GroupMaxDepth = 3
 )
 
 // Scope type built-in yang selalu tersedia di setiap solution (tidak disimpan di tabel).

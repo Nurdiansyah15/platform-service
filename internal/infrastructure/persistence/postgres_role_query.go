@@ -85,7 +85,8 @@ func (r *PostgresRoleQuery) ListRoles(ctx context.Context, q port.RoleListReadQu
 
 func (r *PostgresRoleQuery) ListRolePermissions(ctx context.Context, roleID string) ([]port.RolePermissionReadItem, error) {
 	rows, err := execFromContext(ctx, r.db).QueryContext(ctx, `
-		SELECT p.id, p.code, p.name, p.description, p.status, rp.scope_type, g.code, g.name, g.sort_order
+		SELECT p.id, p.code, p.name, p.description, p.status, rp.scope_type, g.code, g.name, g.sort_order,
+			`+groupParentsSQL+`
 		FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
 		LEFT JOIN permission_groups g ON g.id = p.group_id
 		WHERE rp.role_id = $1 ORDER BY p.code`, roleID)
@@ -100,10 +101,13 @@ func (r *PostgresRoleQuery) ListRolePermissions(ctx context.Context, roleID stri
 			group nullableGroupRef
 		)
 		if err := rows.Scan(&it.ID, &it.Code, &it.Name, &it.Description, &it.Status, &it.ScopeType,
-			&group.code, &group.name, &group.sortOrder); err != nil {
+			&group.code, &group.name, &group.sortOrder, &group.parents); err != nil {
 			return nil, domainerr.Wrap(constant.CodeRoleQueryFailed, err)
 		}
-		it.Group = group.ref()
+		var err error
+		if it.Group, err = group.ref(); err != nil {
+			return nil, domainerr.Wrap(constant.CodeRoleQueryFailed, err)
+		}
 		items = append(items, it)
 	}
 	if err := rows.Err(); err != nil {

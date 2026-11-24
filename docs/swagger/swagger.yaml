@@ -534,6 +534,11 @@ definitions:
       name:
         maxLength: 255
         type: string
+      parent:
+        description: Parent — code group induk yang aktif di solution yang sama (opsional;
+          maksimal 3 tingkat).
+        maxLength: 100
+        type: string
       sort_order:
         description: SortOrder — urutan tampil (opsional; default setelah group terakhir).
         maximum: 100000
@@ -979,6 +984,15 @@ definitions:
     - code
     - name
     type: object
+  dto.PermissionGroupAncestor:
+    properties:
+      code:
+        type: string
+      name:
+        type: string
+      sort_order:
+        type: integer
+    type: object
   dto.PermissionGroupDefinition:
     properties:
       code:
@@ -988,6 +1002,11 @@ definitions:
         type: string
       name:
         maxLength: 255
+        type: string
+      parent:
+        description: Parent — code group induk di `groups` yang sama (opsional; maksimal
+          3 tingkat).
+        maxLength: 100
         type: string
     required:
     - code
@@ -999,6 +1018,12 @@ definitions:
         type: string
       name:
         type: string
+      parents:
+        description: Parents — leluhur group dari root sampai induk langsung (kosong
+          = group root).
+        items:
+          $ref: '#/definitions/dto.PermissionGroupAncestor'
+        type: array
       sort_order:
         type: integer
     type: object
@@ -1011,6 +1036,11 @@ definitions:
       id:
         type: string
       name:
+        type: string
+      parent:
+        type: string
+      parent_id:
+        description: ParentID & Parent — group induk (nil = root).
         type: string
       sort_order:
         type: integer
@@ -1666,6 +1696,10 @@ definitions:
         type: string
       name:
         maxLength: 255
+        type: string
+      parent:
+        description: Parent — code group induk; "" = pindah ke root.
+        maxLength: 100
         type: string
       sort_order:
         maximum: 100000

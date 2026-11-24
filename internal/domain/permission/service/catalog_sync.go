@@ -108,7 +108,9 @@ func PlanCatalogSync(solutionID string, existing []*entity.Permission, catalog [
 
 // PlanGroupSync merencanakan sync permission group. Code ganda → CodeGroupDuplicate. Hanya
 // group ber-source sync yang dikelola; katalog yang memuat code group manual ditolak
-// (CodeGroupSourceConflict).
+// (CodeGroupSourceConflict). ParentCode tiap definisi (harus ada di katalog yang sama, lihat
+// ValidateGroupDefinitions) di-resolve ke ParentID; hierarki akhir (termasuk group manual
+// yang menempel di group sync) harus lolos ValidateGroupTree.
 func PlanGroupSync(solutionID string, existing []*entity.Group, catalog []entity.GroupDefinition, now time.Time) (*SyncPlan[*entity.Group], error) {
 	manual := map[string]bool{}
 	synced := make([]*entity.Group, 0, len(existing))
@@ -124,11 +126,117 @@ func PlanGroupSync(solutionID string, existing []*entity.Group, catalog []entity
 			return nil, domainerr.New(constant.CodeGroupSourceConflict)
 		}
 	}
-	return planSync(synced, catalog,
+	if err := ValidateGroupDefinitions(catalog); err != nil {
+		return nil, err
+	}
+	plan, err := planSync(synced, catalog,
 		func(g *entity.Group) string { return g.Code.Value() },
 		func(d entity.GroupDefinition) string { return d.Code.Value() },
 		func(d entity.GroupDefinition) *entity.Group { return entity.NewGroup(solutionID, d, now) },
 		constant.CodeGroupDuplicate, now)
+	if err != nil {
+		return nil, err
+	}
+
+	// Gabungan akhir: group tersimpan (di-mutasi in place) + group baru.
+	all := append([]*entity.Group{}, existing...)
+	inChanged := make(map[*entity.Group]bool, len(plan.Changed))
+	for _, g := range plan.Changed {
+		inChanged[g] = true
+	}
+	existingSet := make(map[*entity.Group]bool, len(existing))
+	for _, g := range existing {
+		existingSet[g] = true
+	}
+	for _, g := range plan.Changed {
+		if !existingSet[g] {
+			all = append(all, g)
+		}
+	}
+	byCode := make(map[string]*entity.Group, len(all))
+	for _, g := range all {
+		byCode[g.Code.Value()] = g
+	}
+	for _, d := range catalog {
+		g := byCode[d.Code.Value()]
+		var parentID *string
+		if d.ParentCode != "" {
+			id := byCode[d.ParentCode].ID
+			parentID = &id
+		}
+		if !g.SetParent(parentID, now) || inChanged[g] {
+			continue
+		}
+		// Hanya induk yang berubah: sebelumnya dihitung unchanged.
+		inChanged[g] = true
+		plan.Changed = append(plan.Changed, g)
+		plan.Unchanged--
+		plan.Updated++
+	}
+	if err := ValidateGroupTree(all); err != nil {
+		return nil, err
+	}
+	return plan, nil
+}
+
+// ValidateGroupDefinitions memastikan parent setiap group katalog merujuk group lain di
+// katalog yang sama (CodeGroupParentUnknown). Siklus & kedalaman dicek ValidateGroupTree.
+func ValidateGroupDefinitions(groups []entity.GroupDefinition) error {
+	codes := make(map[string]bool, len(groups))
+	for _, g := range groups {
+		codes[g.Code.Value()] = true
+	}
+	for _, g := range groups {
+		if g.ParentCode != "" && !codes[g.ParentCode] {
+			return domainerr.New(constant.CodeGroupParentUnknown)
+		}
+	}
+	return nil
+}
+
+// ValidateGroupTree memeriksa hierarki seluruh group satu solution: setiap parent harus ada
+// (CodeGroupParentUnknown), tanpa siklus (CodeGroupParentInvalid), dan kedalaman maksimal
+// constant.GroupMaxDepth tingkat (CodeGroupTooDeep).
+func ValidateGroupTree(groups []*entity.Group) error {
+	byID := make(map[string]*entity.Group, len(groups))
+	for _, g := range groups {
+		byID[g.ID] = g
+	}
+	for _, g := range groups {
+		depth := 1
+		for cur := g; cur.ParentID != nil; depth++ {
+			parent, ok := byID[*cur.ParentID]
+			if !ok {
+				return domainerr.New(constant.CodeGroupParentUnknown)
+			}
+			if parent == g || depth > len(groups) {
+				return domainerr.New(constant.CodeGroupParentInvalid)
+			}
+			cur = parent
+		}
+		if depth > constant.GroupMaxDepth {
+			return domainerr.New(constant.CodeGroupTooDeep)
+		}
+	}
+	return nil
+}
+
+// GroupPath mengembalikan rantai group dari root sampai group id (inklusif). Kosong bila id
+// tidak ditemukan. Aman terhadap data siklus (berhenti setelah len(groups) langkah).
+func GroupPath(groups []*entity.Group, id string) []*entity.Group {
+	byID := make(map[string]*entity.Group, len(groups))
+	for _, g := range groups {
+		byID[g.ID] = g
+	}
+	var path []*entity.Group
+	for cur, ok := byID[id]; ok && len(path) <= len(groups); {
+		path = append([]*entity.Group{cur}, path...)
+		if cur.ParentID == nil {
+			break
+		}
+		cur, ok = byID[*cur.ParentID]
+	}
+	return path
 }
 
 // PlanScopeTypeSync merencanakan sync scope type custom. Code ganda → CodeScopeTypeDuplicate.
@@ -187,4 +295,47 @@ func ResolveManualRefs(d entity.Definition, groups []*entity.Group) (entity.Defi
 		}
 	}
 	return entity.Definition{}, domainerr.New(constant.CodeGroupUnknown)
+}
+
+// PlaceGroup memasang group manual g di bawah group ber-code parentCode ("" = root), lalu
+// memvalidasi hierarki seluruh group solution (all = group tersimpan; g boleh belum ada di
+// all). Induk harus group lain di solution yang sama (CodeGroupParentUnknown / Invalid) dan
+// aktif — kecuali sudah menjadi induk g sebelumnya. Mengembalikan apakah induk berubah.
+func PlaceGroup(all []*entity.Group, g *entity.Group, parentCode string, now time.Time) (bool, error) {
+	var parentID *string
+	if parentCode != "" {
+		if parentCode == g.Code.Value() {
+			return false, domainerr.New(constant.CodeGroupParentInvalid)
+		}
+		var parent *entity.Group
+		for _, c := range all {
+			if c.Code.Value() == parentCode {
+				parent = c
+				break
+			}
+		}
+		if parent == nil {
+			return false, domainerr.New(constant.CodeGroupParentUnknown)
+		}
+		kept := g.ParentID != nil && *g.ParentID == parent.ID
+		if !parent.IsActive() && !kept {
+			return false, domainerr.New(constant.CodeGroupParentInvalid)
+		}
+		parentID = &parent.ID
+	}
+	prevParent, prevUpdated := g.ParentID, g.UpdatedAt
+	changed := g.SetParent(parentID, now)
+
+	tree := make([]*entity.Group, 0, len(all)+1)
+	tree = append(tree, g)
+	for _, c := range all {
+		if c.ID != g.ID {
+			tree = append(tree, c)
+		}
+	}
+	if err := ValidateGroupTree(tree); err != nil {
+		g.ParentID, g.UpdatedAt = prevParent, prevUpdated // gagal → g tidak berubah
+		return false, err
+	}
+	return changed, nil
 }
