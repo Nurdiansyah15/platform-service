@@ -87,6 +87,19 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # On-demand untuk target make dev-test*, dev-swagger, dev-migrate-create.
+  # Socket Docker host di-mount agar testcontainers bisa membuat container
+  # postgres (sibling); cache build Go disimpan di volume agar test berikutnya cepat.
+  toolbox:
+    <<: *dev
+    restart: "no"
+    profiles: ["tools"]
+    environment: {}
+    volumes:
+      - .:/app
+      - "${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock"
+      - go_build_cache:/root/.cache/go-build
+
   app:
     <<: *dev
     command: ["go", "run", "./cmd/app"]
@@ -113,7 +126,7 @@ services:
     environment: *web-env
     volumes:
       - ./web:/app
-    command: ["sh", "-c", "test -x node_modules/.bin/nuxt || (echo 'node_modules belum ada. Jalankan: make web-install'; exit 1); exec bun --bun nuxt dev --host 0.0.0.0"]
+    command: ["sh", "-c", "test -x node_modules/.bin/nuxt || (echo 'node_modules belum ada. Jalankan: make dev-web-install'; exit 1); exec bun --bun nuxt dev --host 0.0.0.0"]
     ports:
       - "${WEB_PORT:-3000}:3000"
     depends_on:
@@ -123,3 +136,4 @@ services:
 volumes:
   postgres_data:
   keystore_data:
+  go_build_cache:

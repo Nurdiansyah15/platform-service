@@ -2,7 +2,7 @@
 import { ApiReference } from '@scalar/api-reference'
 import scalarCss from '@scalar/api-reference/style.css?raw'
 
-// Referensi lengkap dari OpenAPI (docs/swagger → public/openapi.json lewat `make swagger`).
+// Referensi lengkap dari OpenAPI (docs/swagger → public/openapi.json lewat `make dev-swagger`).
 definePageMeta({ layout: false })
 // CSS Scalar dipasang sebagai <style> milik halaman ini saja (dilepas saat halaman ditinggalkan).
 // Wajib `?raw`: import CSS biasa maupun `?url` dimasukkan Nuxt dev ke <link> global di semua

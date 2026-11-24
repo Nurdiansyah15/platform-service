@@ -4,7 +4,7 @@ Panduan ini dibaca otomatis oleh Claude Code setiap sesi. Isinya arsitektur, kon
 
 - Spec domain & API: `docs/central-saas-platform-spec.md`
 - Roadmap fase: `docs/PHASES.md`
-- Panduan integrasi solution (publik di console `/docs`): `web/content/docs/*.md`; API reference dari `web/public/openapi.json` (disalin `make swagger`). Mengubah perilaku endpoint yang dipakai solution (auth, company/member/branch, role, permission, authz) → perbarui halaman docs terkait di perubahan yang sama.
+- Panduan integrasi solution (publik di console `/docs`): `web/content/docs/*.md`; API reference dari `web/public/openapi.json` (disalin `make dev-swagger`). Mengubah perilaku endpoint yang dipakai solution (auth, company/member/branch, role, permission, authz) → perbarui halaman docs terkait di perubahan yang sama.
 
 ---
 
@@ -27,7 +27,7 @@ Domain model berisi rule bisnis inti. Usecase mengatur alur. Infrastruktur hanya
 
 - Go 1.25, Gin, `database/sql` + `pgx/v5/stdlib` (SQL ditulis manual, tanpa ORM), golang-migrate (file di-embed), go-playground/validator (tag `binding`), golang-jwt/v5 (RS256), testify, testcontainers-go.
 - PostgreSQL 16 (minimal 15 untuk `UNIQUE NULLS NOT DISTINCT`).
-- `web/`: Nuxt 4 SPA (`ssr: false`), Nuxt UI v4 + Pinia, bun; dev via service `web` di compose (`make dev-up`) atau `make web-dev`.
+- `web/`: Nuxt 4 SPA (`ssr: false`), Nuxt UI v4 + Pinia, bun; dev via service `web` di compose (`make dev-up`) atau `make dev-web-serve`.
   - UI berbahasa Indonesia. Status → label/warna hanya lewat `utils/status.ts` (`StatusBadge`). Konfirmasi aksi pakai `useConfirm()` (bukan `window.confirm`); aksi permanen pakai `typeToConfirm`. Form pakai `UForm` + `validate`, error field API lewat `useApiError().fieldErrors`.
 
 ```
@@ -70,7 +70,7 @@ HTTP Handler -> Usecase -> Domain (Repository Interface / Entity / Domain Servic
 
 Langkah membuat endpoint baru:
 
-1. Migrasi (`make migrate-create NAME=...`) bila ada tabel/kolom baru.
+1. Migrasi (`make dev-migrate-create NAME=...`) bila ada tabel/kolom baru.
 2. Domain: entity/VO + error code di `domain/<ctx>/constant` + interface repository.
 3. Persistence: implementasi repository (dan query model bila perlu).
 4. Usecase: tambahkan method baru di `<Ctx>UseCase` pada `usecase/<ctx>/<ctx>_usecase.go` (tambah dependency di `<Ctx>Deps` bila perlu).
@@ -365,9 +365,9 @@ go test ./internal/interfaces/http/handler/api/... -count=1 -timeout 300s
 go test ./internal/interfaces/http/handler/api/ -run "TestCompany" -v -timeout 120s
 go test ./... -count=1
 # atau via Makefile
-make test-handler RUN=TestCompany
-make test            # semua
-make lint            # golangci-lint v2 via Docker
+make dev-test-handler RUN=TestCompany
+make dev-test        # semua (di container toolbox)
+make dev-lint        # golangci-lint v2 via Docker
 ```
 Docker harus jalan (testcontainers).
 
@@ -381,12 +381,12 @@ Docker harus jalan (testcontainers).
 ## 10. Penamaan File Migrasi (Wajib Timestamp)
 
 ```bash
-make migrate-create NAME=create_companies
+make dev-migrate-create NAME=create_companies
 # internal/migrations/20261014120000_create_companies.up.sql
 # internal/migrations/20261014120000_create_companies.down.sql
 ```
 
-- Jangan buat file migrasi manual dengan nomor urut; selalu pakai `make migrate-create`.
+- Jangan buat file migrasi manual dengan nomor urut; selalu pakai `make dev-migrate-create`.
 - `NAME` pakai `snake_case` deskriptif.
 - Setiap `up` wajib punya `down` yang benar-benar membalikkan perubahan.
 - Seluruh kolom enum diberi `CHECK (kolom IN (...))` sesuai spec §2.0; index sesuai spec §2.11.

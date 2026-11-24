@@ -5,6 +5,9 @@ FROM golang:1.25-alpine
 
 RUN apk add --no-cache git tzdata
 
+# swag untuk `make dev-swagger`.
+RUN go install github.com/swaggo/swag/cmd/swag@v1.16.4
+
 WORKDIR /app
 
 COPY go.mod go.sum ./

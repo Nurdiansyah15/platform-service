@@ -1,6 +1,6 @@
 // Package migrations menyimpan file migrasi SQL yang di-embed ke binary
 // (dipakai cmd/migrate dan testhelper). Buat file baru dengan
-// `make migrate-create NAME=...` — jangan menulis nomor versi manual.
+// `make dev-migrate-create NAME=...` — jangan menulis nomor versi manual.
 package migrations
 
 import "embed"
